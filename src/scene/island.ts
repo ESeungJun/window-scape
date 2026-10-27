@@ -187,7 +187,7 @@ export class Island implements Stage {
     for (const f of this.falls) f.update(dt, t, bright);
 
     this.hub.rotation.z -= dt * (0.35 + env.wind * 2.8);
-    this.sway.update(t, env);
+    this.sway.update(dt, env);
     this.flowers.scale.y = Math.max(0.001, 1 - env.snowCover);
     this.flowers.visible = env.snowCover < 0.95;
     this.group.position.y = islandBob(t);

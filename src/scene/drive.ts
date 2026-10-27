@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import type { Env } from './env';
 import { jitter, smoothstep, type Rng } from '../util';
 import {
-  Field, MATS, Sway, alongCurve, distantMountains, house, lampPost, mesh, ribbon, rollingHills, scatterTrees, std,
-  terrain, type Stage,
+  Field, MATS, Sway, alongCurve, distantMountains, house, instanced, lampPost, mesh, ribbon, rollingHills, scatterTrees, std,
+  terrain, vehicle, type Stage,
 } from './kit';
 
 /**
@@ -48,8 +48,6 @@ function roadCurve(): THREE.CatmullRomCurve3 {
 const ASPHALT = std('#4a4d55', { flatShading: false, roughness: 0.85 });
 const SHOULDER = std('#bfae8a');
 const PAINT = std('#f4f0e2');
-const GLASS = std('#2b3a4a', { roughness: 0.3, metalness: 0.2 });
-const TIRE = std('#222326');
 const RAIL = std('#e2e4e8', { metalness: 0.4, roughness: 0.5 });
 const SAND = std('#e8d6a8');
 const SEA = std('#2f86b8', { flatShading: false, roughness: 0.12, metalness: 0.15 });
@@ -57,40 +55,7 @@ const FOAM = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, 
 const SEA_ROCK = std('#7d7a76');
 const WHITE = std('#f4f2ec');
 const STRIPE = std('#c8463a');
-const HEAD = std('#fff6d8', { emissive: '#fff3c4', emissiveIntensity: 0.4 });
-const TAIL = std('#7a1e1e', { emissive: '#ff3b2f', emissiveIntensity: 0.2 });
 const BEAM_LAMP = std('#fff3c4', { emissive: '#fff0b0', emissiveIntensity: 0.3 });
-
-/** 앞이 +x 인 작은 차. tall 이면 캠핑 밴 */
-function vehicle(color: string, tall: boolean): { group: THREE.Group; wheels: THREE.Mesh[] } {
-  const g = new THREE.Group();
-  const paint = std(color, { roughness: 0.5 });
-  const bodyH = tall ? 0.2 : 0.15;
-  g.add(mesh(new THREE.BoxGeometry(0.66, bodyH, 0.32).translate(0, 0.09 + bodyH / 2, 0), paint));
-  if (tall) {
-    g.add(mesh(new THREE.BoxGeometry(0.5, 0.2, 0.31).translate(-0.06, 0.39, 0), std('#f4f1e6')));
-    g.add(mesh(new THREE.BoxGeometry(0.12, 0.13, 0.32).translate(0.21, 0.37, 0), GLASS));
-  } else {
-    g.add(mesh(new THREE.BoxGeometry(0.34, 0.14, 0.28).translate(-0.04, 0.31, 0), GLASS));
-    g.add(mesh(new THREE.BoxGeometry(0.3, 0.02, 0.29).translate(-0.04, 0.39, 0), paint));
-  }
-  for (const z of [-0.1, 0.1]) {
-    g.add(mesh(new THREE.BoxGeometry(0.02, 0.05, 0.06).translate(0.335, 0.17, z), HEAD, false));
-    g.add(mesh(new THREE.BoxGeometry(0.02, 0.05, 0.06).translate(-0.335, 0.17, z), TAIL, false));
-  }
-  const wheels: THREE.Mesh[] = [];
-  const wheelGeo = new THREE.CylinderGeometry(0.075, 0.075, 0.06, 10).rotateX(Math.PI / 2);
-  for (const x of [-0.2, 0.2]) {
-    for (const z of [-0.16, 0.16]) {
-      const w = mesh(wheelGeo, TIRE);
-      w.position.set(x, 0.075, z);
-      g.add(w);
-      wheels.push(w);
-    }
-  }
-  g.scale.setScalar(1.3);
-  return { group: g, wheels };
-}
 
 interface Car {
   group: THREE.Group;
@@ -110,11 +75,11 @@ export class Drive implements Stage {
   private readonly roadLength: number;
   private readonly cars: Car[] = [];
   private readonly sway = new Sway();
-  private readonly lampLights: THREE.PointLight[] = [];
   private readonly foam: THREE.Mesh;
   private readonly beam: THREE.Group;
   private readonly boat: THREE.Group;
   private readonly side = new THREE.Vector3();
+  private boatX = -40;
 
   constructor(rng: Rng) {
     const g = this.group;
@@ -142,20 +107,20 @@ export class Drive implements Stage {
     // 도로: 갓길 → 아스팔트 → 가운데 점선
     g.add(mesh(ribbon(this.road, ROAD_WIDTH + 0.3, 500, null, 0.02), SHOULDER, false));
     g.add(mesh(ribbon(this.road, ROAD_WIDTH, 500, null, 0.035), ASPHALT, false));
-    const dashGeo = new THREE.BoxGeometry(0.24, 0.01, 0.045);
     const dashes = Math.floor(this.roadLength / 0.55);
-    for (let i = 0; i < dashes; i++) {
-      const d = mesh(dashGeo, PAINT, false);
-      alongCurve(d, this.road, i / dashes, 0.045);
-      g.add(d);
-    }
+    const dashSpots = Array.from({ length: dashes }, (_, i) => {
+      const o = new THREE.Object3D();
+      alongCurve(o, this.road, i / dashes, 0.045);
+      return o;
+    });
+    g.add(instanced(new THREE.BoxGeometry(0.24, 0.01, 0.045), PAINT, dashSpots, false));
     field.blockCurve(this.road, ROAD_WIDTH * 0.5 + 0.8, 400);
 
     // 바다 쪽 가드레일, 육지 쪽 가로등
-    const postGeo = new THREE.BoxGeometry(0.05, 0.24, 0.05).translate(0, 0.12, 0);
-    const railGeo = new THREE.BoxGeometry(0.03, 0.06, 0.6);
     const posts = 260;
     const out = new THREE.Vector3();
+    const postSpots: THREE.Object3D[] = [];
+    const railSpots: THREE.Object3D[] = [];
     for (let i = 0; i < posts; i++) {
       const u = i / posts;
       const p = this.road.getPointAt(u);
@@ -164,13 +129,13 @@ export class Drive implements Stage {
       if (out.z < 0) out.negate();
       const x = p.x + out.x * (ROAD_WIDTH / 2 + 0.3);
       const z = p.z + out.z * (ROAD_WIDTH / 2 + 0.3);
-      const post = mesh(postGeo, RAIL);
+      const post = new THREE.Object3D();
       post.position.set(x, p.y, z);
-      g.add(post);
-      const rail = mesh(railGeo, RAIL, false);
+      postSpots.push(post);
+      const rail = new THREE.Object3D();
       rail.position.set(x, p.y + 0.2, z);
       rail.rotation.y = Math.atan2(tan.x, tan.z);
-      g.add(rail);
+      railSpots.push(rail);
       if (i % 14 === 7) {
         const lamp = lampPost();
         const lx = p.x - out.x * (ROAD_WIDTH / 2 + 0.25);
@@ -178,12 +143,10 @@ export class Drive implements Stage {
         lamp.position.set(lx, p.y, lz);
         lamp.scale.setScalar(1.3);
         g.add(lamp);
-        const light = new THREE.PointLight('#ffcf80', 0, 4.5, 2);
-        light.position.set(lx, p.y + 1.25, lz);
-        g.add(light);
-        this.lampLights.push(light);
       }
     }
+    g.add(instanced(new THREE.BoxGeometry(0.05, 0.24, 0.05).translate(0, 0.12, 0), RAIL, postSpots));
+    g.add(instanced(new THREE.BoxGeometry(0.03, 0.06, 0.6), RAIL, railSpots, false));
 
     // 바위섬 위 등대: 밤에는 불빛이 돈다
     const lhx = -13, lhz = roadZ(-13) + beachFrom(-13) + BEACH + 7;
@@ -246,6 +209,7 @@ export class Drive implements Stage {
     ];
     for (const [color, tall, u, dir] of fleet) {
       const v = vehicle(color, tall);
+      v.group.scale.setScalar(1.3);
       const light = new THREE.SpotLight('#fff1cc', 0, 5, 0.55, 0.6, 1.5);
       light.position.set(0.33, 0.2, 0);
       light.target.position.set(1.5, -0.1, 0);
@@ -256,9 +220,6 @@ export class Drive implements Stage {
   }
 
   update(dt: number, t: number, env: Env): void {
-    for (const l of this.lampLights) l.intensity = env.nightLights * 4;
-    HEAD.emissiveIntensity = 0.4 + env.nightLights * 2.5;
-    TAIL.emissiveIntensity = 0.2 + env.nightLights * 1.5;
     BEAM_LAMP.emissiveIntensity = 0.3 + env.nightLights * 3;
     ((this.beam.children[0] as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = env.nightLights * 0.18;
     this.beam.rotation.y += dt * 0.8;
@@ -267,7 +228,10 @@ export class Drive implements Stage {
     this.foam.position.z = Math.sin(t * 0.9) * 0.25;
     FOAM.opacity = 0.35 + Math.sin(t * 0.9 + 1) * 0.2 + env.wind * 0.15;
 
-    this.boat.position.x = ((t * 0.4 * (1 + env.wind)) % 80) - 40;
+    // 바람이 셀수록 빨리 간다. 위치는 dt 로 누적해야 바람이 바뀌어도 튀지 않는다
+    this.boatX += dt * 0.4 * (1 + env.wind);
+    if (this.boatX > 40) this.boatX -= 80;
+    this.boat.position.x = this.boatX;
     this.boat.rotation.z = Math.sin(t * 1.2) * (0.03 + env.wind * 0.05);
 
     // 비·눈이 오면 조금 천천히 달린다. 길 끝(안개 너머)에 닿으면 반대쪽 끝에서 다시 나온다
@@ -276,9 +240,10 @@ export class Drive implements Stage {
       const v = c.speed * slow;
       c.u = (((c.u + (c.dir * dt * v) / this.roadLength) % 1) + 1) % 1;
       alongCurve(c.group, this.road, c.u, 0.04 + Math.abs(Math.sin(t * 9 + c.u * 40)) * 0.006);
-      // 오른쪽 차선으로 비키고, 반대 방향 차는 뒤돌아 선다
+      // 진행 방향의 오른쪽 차선으로 비키고, 반대 방향 차는 뒤돌아 선다
+      // (접선 (x,z) 의 오른쪽은 (-z, x). 반대 방향 차는 dir 로 뒤집는다)
       const tan = this.road.getTangentAt(c.u);
-      this.side.set(-tan.z, 0, tan.x).normalize().multiplyScalar(-LANE * c.dir);
+      this.side.set(-tan.z, 0, tan.x).normalize().multiplyScalar(LANE * c.dir);
       c.group.position.add(this.side);
       if (c.dir === -1) {
         c.group.rotation.y += Math.PI;
@@ -287,6 +252,10 @@ export class Drive implements Stage {
       for (const w of c.wheels) w.rotation.z -= (dt * v) / (0.075 * 1.3);
       c.light.intensity = env.nightLights * 8;
     }
-    this.sway.update(t, env);
+    this.sway.update(dt, env);
+  }
+
+  groundHeight(x: number, z: number): number {
+    return height(x, z);
   }
 }

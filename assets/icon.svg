@@ -1,25 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3d84d8"/>
-      <stop offset="1" stop-color="#cfe7ff"/>
+      <stop offset="0" stop-color="#5b9be0"/>
+      <stop offset="1" stop-color="#cfe6fb"/>
     </linearGradient>
-    <linearGradient id="fall" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#bfeeff"/>
-      <stop offset="1" stop-color="#bfeeff" stop-opacity="0"/>
-    </linearGradient>
+    <clipPath id="pane"><rect x="232" y="212" width="560" height="600" rx="56"/></clipPath>
   </defs>
-  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#sky)"/>
-  <ellipse cx="300" cy="300" rx="90" ry="44" fill="#fff" opacity=".9"/>
-  <ellipse cx="370" cy="280" rx="70" ry="50" fill="#fff" opacity=".9"/>
-  <path d="M232 520 L792 520 L640 640 L560 860 L470 700 L330 620 Z" fill="#8a5a3a"/>
-  <path d="M330 620 L470 700 L560 860 L512 640 Z" fill="#6e5d58"/>
-  <path d="M212 500 Q512 430 812 500 L792 540 Q512 600 232 540 Z" fill="#59a843"/>
-  <path d="M430 300 L470 300 L476 470 L424 470 Z" fill="#f3e7d3"/>
-  <path d="M408 312 L450 250 L492 312 Z" fill="#c0503c"/>
-  <path d="M450 330 L560 260 M450 330 L340 260 M450 330 L540 420 M450 330 L360 410" stroke="#efe6d6" stroke-width="22" stroke-linecap="round"/>
-  <path d="M600 470 L630 360 L660 470 Z" fill="#2f6443"/>
-  <path d="M650 480 L690 340 L730 480 Z" fill="#2a6440"/>
-  <path d="M300 480 a42 42 0 1 1 84 0 Z" fill="#e8902f"/>
-  <rect x="690" y="530" width="44" height="330" fill="url(#fall)"/>
+  <!-- 바탕: 따뜻한 벽 -->
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="#f3e6d3"/>
+  <!-- 창 너머 풍경 -->
+  <g clip-path="url(#pane)">
+    <rect x="232" y="212" width="560" height="600" fill="url(#sky)"/>
+    <circle cx="650" cy="350" r="62" fill="#ffd27a"/>
+    <ellipse cx="380" cy="360" rx="78" ry="34" fill="#ffffff" opacity=".95"/>
+    <ellipse cx="440" cy="340" rx="58" ry="40" fill="#ffffff" opacity=".95"/>
+    <path d="M232 640 Q360 540 500 610 T792 580 L792 812 L232 812 Z" fill="#7cc25a"/>
+    <path d="M232 700 Q420 630 600 690 T792 680 L792 812 L232 812 Z" fill="#59a843"/>
+    <path d="M610 640 L640 560 L670 640 Z" fill="#2f6443"/>
+    <path d="M650 650 L685 548 L720 650 Z" fill="#2a6440"/>
+  </g>
+  <!-- 창틀과 십자 살 -->
+  <rect x="232" y="212" width="560" height="600" rx="56" fill="none" stroke="#ffffff" stroke-width="40"/>
+  <path d="M512 212 V812 M232 512 H792" stroke="#ffffff" stroke-width="30"/>
+  <!-- 창턱 -->
+  <rect x="200" y="806" width="624" height="46" rx="20" fill="#d9c3a3"/>
 </svg>

@@ -61,7 +61,7 @@ export function shapeRim(geo: THREE.BufferGeometry, noise: number): THREE.Buffer
   return geo;
 }
 
-export function buildRockBase(radius = R): THREE.Mesh {
+function buildRockBase(radius = R): THREE.Mesh {
   const h = 8;
   const top = -0.95;
   const geo = new THREE.ConeGeometry(radius * 0.93, h, 36, 9);
@@ -137,7 +137,7 @@ export interface Fall {
   reach: number;
 }
 
-export function fallPoint(f: Fall, s: number, out: THREE.Vector3): THREE.Vector3 {
+function fallPoint(f: Fall, s: number, out: THREE.Vector3): THREE.Vector3 {
   return out
     .copy(f.origin)
     .addScaledVector(f.outward, f.reach * (1 - Math.exp(-s * 6)))
@@ -145,7 +145,7 @@ export function fallPoint(f: Fall, s: number, out: THREE.Vector3): THREE.Vector3
 }
 
 /** 가장자리에서 바깥으로 튀어나갔다가 아래로 떨어지는 폭포 면 */
-export function fallSheet(f: Fall): THREE.BufferGeometry {
+function fallSheet(f: Fall): THREE.BufferGeometry {
   const segs = 56;
   const side = new THREE.Vector3(-f.outward.z, 0, f.outward.x);
   const pos: number[] = [];
@@ -172,15 +172,15 @@ export function fallSheet(f: Fall): THREE.BufferGeometry {
 
 // ── 소품 ──────────────────────────────────────────────
 
-export const TRUNK_GEO = new THREE.CylinderGeometry(0.07, 0.11, 0.5, 5).translate(0, 0.25, 0);
-export const PINE_GEOS = [
+const TRUNK_GEO = new THREE.CylinderGeometry(0.07, 0.11, 0.5, 5).translate(0, 0.25, 0);
+const PINE_GEOS = [
   [0.55, 0.75, 0.55],
   [0.44, 0.65, 0.9],
   [0.3, 0.55, 1.2],
 ].map(([r, h, y]) => new THREE.ConeGeometry(r, h, 7).translate(0, y, 0));
-export const CROWN_GEOS = [0, 1, 2].map((i) => jitter(new THREE.IcosahedronGeometry(0.5, 0), 0.18, i * 3.1).translate(0, 0.95, 0));
+const CROWN_GEOS = [0, 1, 2].map((i) => jitter(new THREE.IcosahedronGeometry(0.5, 0), 0.18, i * 3.1).translate(0, 0.95, 0));
 
-export function pineTree(): THREE.Group {
+function pineTree(): THREE.Group {
   const g = new THREE.Group();
   g.add(mesh(TRUNK_GEO, MATS.trunk));
   for (const geo of PINE_GEOS) g.add(mesh(geo, MATS.pine));
@@ -251,7 +251,7 @@ export function sheep(): THREE.Group {
   return g;
 }
 
-export function miniIsland(rng: Rng, size: number): THREE.Group {
+function miniIsland(rng: Rng, size: number): THREE.Group {
   const g = new THREE.Group();
   g.add(mesh(jitter(new THREE.CylinderGeometry(size, size * 0.92, 0.22, 9), 0.06, size), MATS.grass));
   const rock = new THREE.ConeGeometry(size * 0.92, size * 2.4, 9, 3);
@@ -270,7 +270,7 @@ export function miniIsland(rng: Rng, size: number): THREE.Group {
 
 // ── 테마 공통 ─────────────────────────────────────────
 
-/** 테마 하나 = 떠 있는 섬 위의 장면 하나. 하늘·구름·날씨·조명은 World 가 공통으로 맡는다. */
+/** 테마 하나 = 풍경 하나(떠 있는 섬 또는 지평선까지 이어진 땅). 하늘·구름·날씨·조명은 World 가 공통으로 맡는다. */
 export interface Stage {
   readonly group: THREE.Group;
   /** floating: 구름바다 위에 뜬 섬 / ground: 지평선까지 이어진 땅 */
@@ -279,6 +279,8 @@ export interface Stage {
   readonly view: { target: THREE.Vector3; distance: number };
   /** 카메라가 따라갈 점(움직이는 주인공이 있는 테마만) */
   focus?(out: THREE.Vector3): THREE.Vector3;
+  /** 그 위치의 땅 높이(땅 테마). 카메라가 언덕 속으로 들어가지 않게 쓴다 */
+  groundHeight?(x: number, z: number): number;
   update(dt: number, t: number, env: Env): void;
 }
 
@@ -293,6 +295,8 @@ export function updateSharedMaterials(env: Env): void {
   MATS.pine.color.copy(env.pine);
   MATS.window.emissiveIntensity = env.nightLights * 2.6;
   MATS.lamp.emissiveIntensity = env.nightLights * 3;
+  HEADLIGHT.emissiveIntensity = 0.4 + env.nightLights * 2.5;
+  TAILLIGHT.emissiveIntensity = 0.2 + env.nightLights * 1.5;
 }
 
 /** 물·물보라 밝기: 밤에는 어둡게 */
@@ -339,23 +343,95 @@ export class Field {
 }
 
 /** 바람에 흔들리는 물체들 */
+/**
+ * 바람에 흔들리는 물체들. 흔들림 위상은 dt 로 누적한다.
+ * (시간 t 에 바람 세기를 곱하면 바람이 바뀌는 순간 위상이 크게 튄다)
+ */
 export class Sway {
   private readonly items: { obj: THREE.Object3D; phase: number }[] = [];
+  private readonly batches: TreeBatch[] = [];
+  private fast = 0;
+  private slow = 0;
 
   add(obj: THREE.Object3D, rng: Rng): void {
     this.items.push({ obj, phase: rng() * 10 });
   }
 
-  update(t: number, env: Env): void {
+  addBatch(batch: TreeBatch): void {
+    this.batches.push(batch);
+  }
+
+  update(dt: number, env: Env): void {
+    this.fast += dt * (1.2 + env.wind * 1.5);
+    this.slow += dt * 0.9;
     const amount = 0.015 + env.wind * 0.06;
     for (const s of this.items) {
-      s.obj.rotation.z = Math.sin(t * (1.2 + env.wind * 1.5) + s.phase) * amount;
-      s.obj.rotation.x = Math.cos(t * 0.9 + s.phase) * amount * 0.5;
+      s.obj.rotation.z = Math.sin(this.fast + s.phase) * amount;
+      s.obj.rotation.x = Math.cos(this.slow + s.phase) * amount * 0.5;
+    }
+    for (const b of this.batches) b.update(this.fast, this.slow, amount);
+  }
+}
+
+/** 나무 종류별 부품(지오메트리·재질). 부품 위치는 지오메트리에 들어 있어 나무 하나 = 행렬 하나 */
+function treeParts(kind: number): [THREE.BufferGeometry, THREE.Material][] {
+  if (kind === 0) return [[TRUNK_GEO, MATS.trunk], ...PINE_GEOS.map((g): [THREE.BufferGeometry, THREE.Material] => [g, MATS.pine])];
+  const variant = (kind - 1) % 3;
+  return [[TRUNK_GEO, MATS.trunk], [CROWN_GEOS[variant], kind <= 3 ? MATS.foliageA : MATS.foliageB]];
+}
+
+/**
+ * 많은 나무를 종류별 InstancedMesh 로 묶어 그린다(메시 수천 개 → 수십 개).
+ * 흔들림은 프레임마다 나무별 행렬을 다시 계산한다.
+ */
+export class TreeBatch {
+  readonly group = new THREE.Group();
+  private readonly trees: { kind: number; index: number; pos: THREE.Vector3; rotY: number; scale: number; phase: number }[] = [];
+  private readonly meshes = new Map<number, THREE.InstancedMesh[]>();
+  private readonly m = new THREE.Matrix4();
+  private readonly q = new THREE.Quaternion();
+  private readonly e = new THREE.Euler();
+  private readonly s = new THREE.Vector3();
+
+  /** kind 0: 침엽수, 1~3: 둥근 나무(잎 A, 모양 3가지), 4~6: 둥근 나무(잎 B) */
+  add(kind: number, x: number, y: number, z: number, rotY: number, scale: number, phase: number): void {
+    const index = this.trees.filter((t) => t.kind === kind).length;
+    this.trees.push({ kind, index, pos: new THREE.Vector3(x, y, z), rotY, scale, phase });
+  }
+
+  /** 다 모은 뒤 한 번 호출해 InstancedMesh 를 만든다 */
+  build(): this {
+    const counts = new Map<number, number>();
+    for (const t of this.trees) counts.set(t.kind, (counts.get(t.kind) ?? 0) + 1);
+    for (const [kind, count] of counts) {
+      const list = treeParts(kind).map(([geo, mat]) => {
+        const im = new THREE.InstancedMesh(geo, mat, count);
+        im.castShadow = true;
+        im.receiveShadow = true;
+        this.group.add(im);
+        return im;
+      });
+      this.meshes.set(kind, list);
+    }
+    this.update(0, 0, 0);
+    // 흔들림은 아주 작아 경계 구는 처음 한 번만 계산한다
+    for (const list of this.meshes.values()) for (const im of list) im.computeBoundingSphere();
+    return this;
+  }
+
+  update(fast: number, slow: number, amount: number): void {
+    for (const t of this.trees) {
+      this.e.set(Math.cos(slow + t.phase) * amount * 0.5, t.rotY, Math.sin(fast + t.phase) * amount);
+      this.m.compose(t.pos, this.q.setFromEuler(this.e), this.s.setScalar(t.scale));
+      for (const im of this.meshes.get(t.kind)!) im.setMatrixAt(t.index, this.m);
+    }
+    for (const list of this.meshes.values()) {
+      for (const im of list) im.instanceMatrix.needsUpdate = true;
     }
   }
 }
 
-export interface TreeOptions {
+interface TreeOptions {
   count: number;
   /** 후보 위치를 고르는 함수(땅 테마용). 없으면 섬 안쪽 inner~outer */
   area?: (rng: Rng) => [number, number];
@@ -371,22 +447,19 @@ export interface TreeOptions {
 /** 빈 자리에 나무를 흩뿌린다 */
 export function scatterTrees(group: THREE.Group, rng: Rng, field: Field, sway: Sway, o: TreeOptions): void {
   const [smin, smax] = o.scale ?? [0.75, 1.35];
+  const batch = new TreeBatch();
   let placed = 0;
   for (let i = 0; i < o.count * 25 && placed < o.count; i++) {
     const [x, z] = o.area ? o.area(rng) : field.pick(rng, o.inner ?? 0.3, o.outer ?? 0.86);
     if (!field.free(x, z, o.gap ?? 0.3)) continue;
-    const tree = rng() < (o.pineRatio ?? 0.5)
-      ? pineTree()
-      : roundTree(Math.floor(rng() * 3), rng() < 0.55 ? MATS.foliageA : MATS.foliageB);
+    const kind = rng() < (o.pineRatio ?? 0.5) ? 0 : 1 + Math.floor(rng() * 3) + (rng() < 0.55 ? 0 : 3);
     const s = smin + rng() * (smax - smin);
-    tree.scale.setScalar(s);
-    tree.position.set(x, o.heightAt ? o.heightAt(x, z) - 0.05 : TOP, z);
-    tree.rotation.y = rng() * Math.PI * 2;
-    group.add(tree);
-    sway.add(tree, rng);
+    batch.add(kind, x, o.heightAt ? o.heightAt(x, z) - 0.05 : TOP, z, rng() * Math.PI * 2, s, rng() * 10);
     field.block(x, z, 0.35 * s + 0.1);
     placed++;
   }
+  group.add(batch.build().group);
+  sway.addBatch(batch);
 }
 
 /** 가장자리에 늘어진 덩굴. skip 각도 근처(폭포 등)는 비운다 */
@@ -504,9 +577,6 @@ export class Floaters {
 
 // ── 땅 테마 공통 ───────────────────────────────────────
 
-/** 땅 테마의 기본 카메라 */
-export const GROUND_VIEW = { target: new THREE.Vector3(0, 0.6, 0), distance: 21 };
-
 /** 부드럽게 굽이치는 언덕 높이 */
 export function rollingHills(x: number, z: number, amp = 1): number {
   return amp * (
@@ -566,4 +636,55 @@ export function alongCurve(obj: THREE.Object3D, curve: THREE.Curve<THREE.Vector3
   obj.rotation.order = 'YZX';
   obj.rotation.y = Math.atan2(-tan.z, tan.x);
   obj.rotation.z = Math.atan2(tan.y, Math.hypot(tan.x, tan.z));
+}
+
+// ── 자동차(드라이브·도시 공용) ───────────────────────────
+
+const CAR_GLASS = std('#2b3a4a', { roughness: 0.3, metalness: 0.2 });
+const CAR_TIRE = std('#222326');
+/** 전조등·미등. 밤 밝기는 updateSharedMaterials 가 맞춘다 */
+export const HEADLIGHT = std('#fff6d8', { emissive: '#fff3c4', emissiveIntensity: 0.4 });
+export const TAILLIGHT = std('#7a1e1e', { emissive: '#ff3b2f', emissiveIntensity: 0.2 });
+
+/** 앞이 +x 인 작은 차. tall 이면 캠핑 밴·버스 */
+export function vehicle(color: THREE.ColorRepresentation, tall: boolean): { group: THREE.Group; wheels: THREE.Mesh[] } {
+  const g = new THREE.Group();
+  const paint = std(color, { roughness: 0.5 });
+  const bodyH = tall ? 0.2 : 0.15;
+  g.add(mesh(new THREE.BoxGeometry(0.66, bodyH, 0.32).translate(0, 0.09 + bodyH / 2, 0), paint));
+  if (tall) {
+    g.add(mesh(new THREE.BoxGeometry(0.5, 0.2, 0.31).translate(-0.06, 0.39, 0), std('#f4f1e6')));
+    g.add(mesh(new THREE.BoxGeometry(0.12, 0.13, 0.32).translate(0.21, 0.37, 0), CAR_GLASS));
+  } else {
+    g.add(mesh(new THREE.BoxGeometry(0.34, 0.14, 0.28).translate(-0.04, 0.31, 0), CAR_GLASS));
+    g.add(mesh(new THREE.BoxGeometry(0.3, 0.02, 0.29).translate(-0.04, 0.39, 0), paint));
+  }
+  for (const z of [-0.1, 0.1]) {
+    g.add(mesh(new THREE.BoxGeometry(0.02, 0.05, 0.06).translate(0.335, 0.17, z), HEADLIGHT, false));
+    g.add(mesh(new THREE.BoxGeometry(0.02, 0.05, 0.06).translate(-0.335, 0.17, z), TAILLIGHT, false));
+  }
+  const wheels: THREE.Mesh[] = [];
+  const wheelGeo = new THREE.CylinderGeometry(0.075, 0.075, 0.06, 10).rotateX(Math.PI / 2);
+  for (const x of [-0.2, 0.2]) {
+    for (const z of [-0.16, 0.16]) {
+      const w = mesh(wheelGeo, CAR_TIRE);
+      w.position.set(x, 0.075, z);
+      g.add(w);
+      wheels.push(w);
+    }
+  }
+  return { group: g, wheels };
+}
+
+/** 같은 부품을 여러 곳에 놓을 때 InstancedMesh 하나로 묶는다 */
+export function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, placements: THREE.Object3D[], cast = true): THREE.InstancedMesh {
+  const im = new THREE.InstancedMesh(geo, mat, placements.length);
+  placements.forEach((p, i) => {
+    p.updateMatrix();
+    im.setMatrixAt(i, p.matrix);
+  });
+  im.castShadow = cast;
+  im.receiveShadow = true;
+  im.computeBoundingSphere();
+  return im;
 }

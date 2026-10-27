@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Env } from './env';
 import type { Rng } from '../util';
 import {
-  MATS, Sway, TOP, lampPost, mesh, rimFactor, roundTree, rollingHills, shapeRim, std, terrain, type Stage,
+  MATS, Sway, TOP, lampPost, mesh, rimFactor, roundTree, rollingHills, shapeRim, std, terrain, vehicle, type Stage,
 } from './kit';
 
 /**
@@ -15,6 +15,21 @@ const BLOCK = 1.75;
 const PITCH = 2.25;
 const CELL = 0.3; // 창문 한 칸(월드 단위)
 const TEX_CELLS = 4;
+
+/** 건너편 강가 언덕 높이 */
+function shoreHeight(x: number, z: number): number {
+  const r = Math.hypot(x, z);
+  return r < 20 ? -2 : -0.5 + Math.min(1, (r - 20) / 5) * (1.4 + rollingHills(x, z, 1.2));
+}
+
+/** 시드 난수로 섞기(Fisher–Yates). sort 비교 함수는 엔진마다 결과가 달라 배치가 어긋난다 */
+function shuffle<T>(arr: T[], rng: Rng): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
 const PASTELS = ['#f6c1c7', '#bfe3d5', '#f9e2a7', '#cdbfe8', '#f8cfae', '#bcd9f2', '#f3efe6'];
 const ROOFS = ['#d9826b', '#6fb3a8', '#5d6f9e', '#c9a56a'];
@@ -93,10 +108,7 @@ export class City implements Stage {
     const water = mesh(new THREE.PlaneGeometry(240, 240).rotateX(-Math.PI / 2), std('#5fa8cf', { flatShading: false, roughness: 0.15, metalness: 0.1 }), false);
     water.position.y = -0.2;
     g.add(water);
-    g.add(terrain((x, z) => {
-      const r = Math.hypot(x, z);
-      return r < 20 ? -2 : -0.5 + Math.min(1, (r - 20) / 5) * (1.4 + rollingHills(x, z, 1.2));
-    }));
+    g.add(terrain(shoreHeight));
 
     const { map, glow } = windowTextures(rng);
     for (const c of PASTELS) {
@@ -166,20 +178,13 @@ export class City implements Stage {
       }
       return path;
     };
-    const glass = std('#3c4f63');
     for (const [half, count, speed] of [[PITCH * 0.5, 2, 0.7], [PITCH * 1.5, 4, 0.9]] as const) {
       const path = loop(half);
       const length = path.getLength();
       for (let k = 0; k < count; k++) {
         const bus = k === 0 && half > PITCH;
-        const car = new THREE.Group();
-        if (bus) {
-          car.add(mesh(new THREE.BoxGeometry(0.62, 0.22, 0.2).translate(0, 0.14, 0), std('#f0b44c')));
-          car.add(mesh(new THREE.BoxGeometry(0.58, 0.06, 0.205).translate(0, 0.19, 0), glass, false));
-        } else {
-          car.add(mesh(new THREE.BoxGeometry(0.32, 0.1, 0.17).translate(0, 0.08, 0), std(PASTELS[(k * 2 + 1) % PASTELS.length])));
-          car.add(mesh(new THREE.BoxGeometry(0.18, 0.08, 0.15).translate(-0.02, 0.17, 0), glass));
-        }
+        const car = vehicle(bus ? '#f0b44c' : PASTELS[(k * 2 + 1) % PASTELS.length], bus).group;
+        car.scale.setScalar(bus ? 0.62 : 0.5);
         g.add(car);
         this.cars.push({ obj: car, path, u: k / count + rng() * 0.05, speed, length });
       }
@@ -198,7 +203,7 @@ export class City implements Stage {
   private houses(cx: number, cz: number, rng: Rng, pick: <T>(a: T[]) => T, roofs: THREE.Material[]): void {
     const n = 2 + Math.floor(rng() * 3);
     const lot = (BLOCK - 0.2) / 2;
-    const spots = [[-1, -1], [1, -1], [-1, 1], [1, 1]].sort(() => rng() - 0.5).slice(0, n);
+    const spots = shuffle([[-1, -1], [1, -1], [-1, 1], [1, 1]], rng).slice(0, n);
     for (const [sx, sz] of spots) {
       const x = cx + sx * lot * 0.5, z = cz + sz * lot * 0.5;
       const w = lot * (0.8 + rng() * 0.15), d = lot * (0.8 + rng() * 0.15);
@@ -277,6 +282,10 @@ export class City implements Stage {
       car.obj.position.copy(p);
       car.obj.rotation.y = Math.atan2(-tan.z, tan.x);
     }
-    this.sway.update(t, env);
+    this.sway.update(dt, env);
+  }
+
+  groundHeight(x: number, z: number): number {
+    return Math.max(shoreHeight(x, z), Math.hypot(x, z) < CITY_R + 0.5 ? TOP : -0.2);
   }
 }
