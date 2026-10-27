@@ -1953,6 +1953,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-contacts"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b034b578389f89a85c055eacc8d8b368be5f04a6c1b07f672bf3aec21d0ef621"
+dependencies = [
+ "objc2",
+ "objc2-foundation",
+]
+
+[[package]]
 name = "objc2-core-data"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2002,7 +2012,10 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca347214e24bc973fc025fd0d36ebb179ff30536ed1f80252706db19ee452009"
 dependencies = [
+ "block2",
+ "dispatch2",
  "objc2",
+ "objc2-contacts",
  "objc2-foundation",
 ]
 
@@ -2854,6 +2867,8 @@ checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
 name = "sky-island-weather"
 version = "0.1.0"
 dependencies = [
+ "objc2",
+ "objc2-core-location",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",

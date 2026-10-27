@@ -23,7 +23,21 @@ npm run tauri build -- --bundles app   # src-tauri/target/release/bundle/macos/�
 
 - 위쪽 띠를 끌면 창이 옮겨지고, 오른쪽 아래 모서리를 끌면 크기가 바뀐다. 위치·크기는 다음 실행 때도 유지된다.
 - 메뉴 막대 아이콘: 바탕화면에 고정(다른 창 아래) / 항상 위에 표시 / 우상단·좌상단으로 옮기기 / 로그인 시 자동 실행 / 종료.
+- 배치(바탕화면 고정·항상 위)도 기억한다. 현재 위치 버튼은 macOS 위치 서비스를 쓴다(처음 한 번 권한 요청).
 - 창 크기에 따라 정보량이 바뀐다(작으면 섬과 기온, 크면 웹과 같은 화면). 배터리를 아끼려고 30fps 로 그린다.
+
+### 배포 (서명 + 공증된 DMG)
+
+`v*` 태그를 푸시하면 GitHub Actions(`.github/workflows/release.yml`)가 유니버설 앱을 Developer ID 로 서명하고
+Apple 공증을 받아 DMG 를 릴리스에 올린다. 저장소 Secrets 가 필요하다(droidlens 와 같은 이름·형식).
+
+| Secret | 내용 |
+|---|---|
+| `MAC_CERT_P12` | Developer ID Application 인증서 .p12 (base64) |
+| `MAC_CERT_PASSWORD` | .p12 비밀번호 |
+| `APPLE_API_KEY_P8` | App Store Connect API 키 .p8 파일 내용 |
+| `APPLE_API_KEY_ID` | API 키 ID |
+| `APPLE_API_ISSUER` | API Issuer ID |
 
 ## 웹 옵션
 

@@ -1,0 +1,79 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      # 서명 인증서·공증 키는 이 단계에만 넘긴다
+      - name: Build (서명 + 공증)
+        env:
+          MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [ -z "$MAC_CERT_P12" ] || [ -z "$APPLE_API_KEY_P8" ]; then
+            echo "::error::macOS 서명용 Secrets 가 없습니다"; exit 1
+          fi
+          # 인증서는 직접 만든 임시 키체인에 넣는다 (macOS 26 러너에서 검증된 방식, droidlens 와 동일)
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          kc_pass=$(openssl rand -hex 24)
+          export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8" # Tauri 는 공증 키를 파일 경로로 받는다
+          trap 'security delete-keychain "$keychain" 2>/dev/null; rm -f "$RUNNER_TEMP/cert.p12" "$APPLE_API_KEY_PATH"' EXIT
+          printf '%s' "$MAC_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          printf '%s\n' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY_PATH"
+          security create-keychain -p "$kc_pass" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$kc_pass" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MAC_CERT_PASSWORD" -f pkcs12 -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kc_pass" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          APPLE_SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application[^"]*"' | head -1 | tr -d '"')
+          if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "::error::Developer ID Application 인증서를 찾지 못했습니다"; exit 1
+          fi
+          export APPLE_SIGNING_IDENTITY
+          npm run tauri build -- --target universal-apple-darwin --bundles app,dmg
+      - name: 서명·공증 확인
+        run: |
+          app=$(ls -d src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app | head -1)
+          codesign --verify --deep --strict "$app"
+          codesign -d --entitlements - "$app" | grep -q personal-information.location
+          xcrun stapler validate "$app"
+          spctl --assess --type execute -vv "$app"
+      - name: 파일 이름 정리
+        run: |
+          mkdir -p out
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg "out/sky-island-weather-$version-mac-universal.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          if-no-files-found: error
+          path: out/*.dmg
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" out/*.dmg --title "$GITHUB_REF_NAME" --generate-notes

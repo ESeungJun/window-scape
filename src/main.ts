@@ -8,7 +8,7 @@ import { badgeText, renderHourly, renderNow, renderWeek } from './ui/forecast';
 import { setupSearch } from './ui/search';
 import { renderSettings, type Frame, type ViewOptions } from './ui/settings';
 import { Ambience } from './ui/sound';
-import { isDesktopApp, setupWidget } from './widget';
+import { isDesktopApp, nativeLocation, setupWidget } from './widget';
 
 const SEOUL: Place = { name: '서울', lat: 37.5665, lon: 126.978 };
 const PLACE_KEY = 'sky-isle:place';
@@ -268,19 +268,28 @@ document.addEventListener('keydown', (e) => {
 
 setupSearch($<HTMLInputElement>('search'), $<HTMLUListElement>('results'), choosePlace);
 
-$('locate').addEventListener('click', () => {
-  if (!navigator.geolocation) return toast('이 브라우저는 위치 정보를 지원하지 않아요.');
+/** 브라우저는 Geolocation API, 데스크톱 앱은 macOS 위치 API. 실패하면 오류 코드(1~3)를 던진다. */
+function locate(): Promise<{ lat: number; lon: number }> {
+  if (isDesktopApp) return nativeLocation();
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(2);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      (err) => reject(err.code),
+      { timeout: 10000, maximumAge: 10 * 60 * 1000 },
+    );
+  });
+}
+
+$('locate').addEventListener('click', async () => {
   const seq = ++choiceSeq;
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      if (seq !== choiceSeq) return; // 기다리는 사이 다른 도시를 골랐다
-      loadPlace({ name: '현재 위치', lat: coarse(pos.coords.latitude), lon: coarse(pos.coords.longitude), current: true });
-    },
-    (err) => {
-      if (seq === choiceSeq) toast(GEO_ERRORS[err.code] ?? '현재 위치를 가져오지 못했어요.');
-    },
-    { timeout: 10000, maximumAge: 10 * 60 * 1000 },
-  );
+  try {
+    const { lat, lon } = await locate();
+    if (seq !== choiceSeq) return; // 기다리는 사이 다른 도시를 골랐다
+    loadPlace({ name: '현재 위치', lat: coarse(lat), lon: coarse(lon), current: true });
+  } catch (code) {
+    if (seq === choiceSeq) toast(GEO_ERRORS[code as number] ?? '현재 위치를 가져오지 못했어요.');
+  }
 });
 
 const soundBtn = $('sound');
