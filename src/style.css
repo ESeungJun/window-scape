@@ -218,7 +218,8 @@ body.is-dark .card { background: rgba(14, 24, 52, 0.45); border-color: rgba(255,
 .chip:hover { background: rgba(31, 77, 99, 0.16); }
 .chip[aria-pressed='true'] { background: var(--accent); color: #fff; }
 
-.chart { width: 100%; height: auto; margin: 4px 0 6px; }
+/* 그래프는 패널 너비를 따라 비율대로 커지지 않게 높이를 묶는다(가운데 정렬로 비율 유지) */
+.chart { display: block; width: 100%; height: clamp(76px, 18vh, 124px); margin: 4px 0 6px; }
 .chart__area { fill: rgba(31, 77, 99, 0.1); stroke: none; }
 .chart__line { stroke: var(--accent); stroke-width: 2; }
 .chart__dot { fill: var(--accent); stroke: none; }
@@ -395,6 +396,8 @@ body.widget .sound { display: none; }
   body.widget .search > svg { display: none; }
   body.widget .icon-btn { width: 30px; height: 30px; }
   body.widget .panel { top: 44px; left: 10px; right: 10px; bottom: 10px; width: auto; max-height: none; }
+  body.widget .chart { height: clamp(64px, 22vh, 96px); }
+  body.widget .hour { padding: 5px 2px; font-size: 12px; }
   body.widget .week { left: 10px; right: 10px; bottom: 10px; width: auto; transform: none; padding: 6px 6px 4px; }
   body.widget .week__credit { margin-top: 2px; font-size: 9px; text-align: right; }
 }
