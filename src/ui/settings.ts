@@ -1,9 +1,11 @@
 import type { Condition, Season, TimeOfDay } from '../data/weather';
 import type { Quality } from '../scene/world';
+import { THEMES, type Theme } from '../scene/themes';
 
 export type Frame = 'full' | 'showcase';
 
 export interface ViewOptions {
+  theme: Theme;
   time: TimeOfDay | 'live';
   cond: Condition | 'live';
   season: Season | 'live';
@@ -15,6 +17,7 @@ type Group<K extends keyof ViewOptions> = { key: K; title: string; items: [ViewO
 type AnyGroup = { [K in keyof ViewOptions]: Group<K> }[keyof ViewOptions];
 
 const GROUPS: AnyGroup[] = [
+  { key: 'theme', title: '테마', items: THEMES },
   { key: 'time', title: '시간대', items: [['live', '실시간'], ['morning', '아침'], ['day', '낮'], ['evening', '저녁'], ['night', '밤']] },
   {
     key: 'cond',

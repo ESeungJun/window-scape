@@ -3,6 +3,7 @@ import {
   coarse, conditionFromCode, fetchForecast, localEpochMinutes, localMonth, seasonAt, timeOfDayAt,
   type Condition, type Forecast, type Place, type TimeOfDay,
 } from './data/weather';
+import { isTheme, type Theme } from './scene/themes';
 import { World } from './scene/world';
 import { badgeText, renderHourly, renderNow, renderWeek } from './ui/forecast';
 import { setupSearch } from './ui/search';
@@ -12,6 +13,7 @@ import { isDesktopApp, nativeLocation, setupWidget } from './widget';
 
 const SEOUL: Place = { name: '서울', lat: 37.5665, lon: 126.978 };
 const PLACE_KEY = 'sky-isle:place';
+const THEME_KEY = 'sky-isle:theme';
 const REFRESH_MS = 15 * 60 * 1000;
 const GEO_ERRORS: Record<number, string> = {
   1: '위치 권한이 없어서 현재 위치를 가져오지 못했어요.',
@@ -35,6 +37,7 @@ const state = {
   offline: false,
   dayIndex: 0,
   view: {
+    theme: loadSavedTheme(),
     time: 'live',
     cond: 'live',
     season: 'live',
@@ -71,6 +74,24 @@ function loadSavedPlace(): Place | undefined {
     // 저장소를 못 쓰거나 값이 깨졌으면 기본 도시로 시작한다
   }
   return undefined;
+}
+
+function loadSavedTheme(): Theme {
+  try {
+    const t = localStorage.getItem(THEME_KEY);
+    if (isTheme(t)) return t;
+  } catch {
+    // 저장소를 못 쓰면 기본 테마
+  }
+  return 'island';
+}
+
+function saveTheme(t: Theme) {
+  try {
+    localStorage.setItem(THEME_KEY, t);
+  } catch {
+    // 무시: 다음 방문 때 기본 테마로 시작할 뿐이다
+  }
 }
 
 function savePlace(p: Place) {
@@ -231,10 +252,15 @@ function applyFrame(frame: Frame) {
 syncSettings = renderSettings($('settingsBody'), state.view, (next) => {
   if (next.quality !== state.view.quality) world.setQuality(next.quality);
   if (next.frame !== state.view.frame) applyFrame(next.frame);
+  if (next.theme !== state.view.theme) {
+    world.setTheme(next.theme);
+    saveTheme(next.theme);
+  }
   state.view = next;
   refresh();
 });
 applyFrame(state.view.frame);
+world.setTheme(state.view.theme);
 
 $('settingsBtn').addEventListener('click', () => {
   if (settingsPanel.hidden) openPanel(settingsPanel);
@@ -262,6 +288,7 @@ document.addEventListener('keydown', (e) => {
   } else if (!isDesktopApp && !typing && !e.metaKey && !e.ctrlKey && (e.key === 'f' || e.key === 'F')) {
     state.view = { ...state.view, frame: state.view.frame === 'showcase' ? 'full' : 'showcase' };
     applyFrame(state.view.frame);
+world.setTheme(state.view.theme);
     syncSettings(state.view);
   }
 });

@@ -22,6 +22,8 @@ export class Clouds {
   readonly group = new THREE.Group();
   private readonly sky: SkyCloud[] = [];
   private readonly sea = new THREE.Group();
+  /** 섬 주변을 도는 구름 묶음. 땅 테마에서는 높이 띄운다 */
+  private readonly skyLayer = new THREE.Group();
   private readonly seaMat = new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 1 });
   private readonly skyMat = new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 1 });
 
@@ -40,7 +42,7 @@ export class Clouds {
         cloud.add(m);
       }
       cloud.position.y = 6 + rng() * 7;
-      this.group.add(cloud);
+      this.skyLayer.add(cloud);
       this.sky.push({
         obj: cloud,
         threshold: (i + 0.5) / count,
@@ -61,7 +63,14 @@ export class Clouds {
       m.receiveShadow = true;
       this.sea.add(m);
     }
-    this.group.add(this.sea);
+    this.group.add(this.sea, this.skyLayer);
+  }
+
+  /** 섬 아래 구름바다. 땅에 붙은 테마에서는 숨긴다 */
+  setSea(visible: boolean): void {
+    this.sea.visible = visible;
+    // 땅 테마에서는 언덕에 걸리지 않게 하늘 구름을 띄운다
+    this.skyLayer.position.y = visible ? 0 : 5;
   }
 
   update(dt: number, env: Env): void {
