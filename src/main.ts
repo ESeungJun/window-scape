@@ -8,6 +8,7 @@ import { badgeText, renderHourly, renderNow, renderWeek } from './ui/forecast';
 import { setupSearch } from './ui/search';
 import { renderSettings, type Frame, type ViewOptions } from './ui/settings';
 import { Ambience } from './ui/sound';
+import { isDesktopApp, setupWidget } from './widget';
 
 const SEOUL: Place = { name: '서울', lat: 37.5665, lon: 126.978 };
 const PLACE_KEY = 'sky-isle:place';
@@ -22,6 +23,10 @@ const $ = <T extends Element = HTMLElement>(id: string) => document.querySelecto
 
 const world = new World($('scene'));
 const ambience = new Ambience();
+if (isDesktopApp) {
+  setupWidget(document.querySelector<HTMLElement>('.app')!);
+  world.setFrameCap(30);
+}
 
 const state = {
   /** 지금 화면에 보이는 예보의 장소. 불러오기에 성공했을 때만 바뀐다. */
@@ -254,7 +259,7 @@ document.addEventListener('keydown', (e) => {
     closeHourly();
     syncSettingsButton();
     refresh();
-  } else if (!typing && !e.metaKey && !e.ctrlKey && (e.key === 'f' || e.key === 'F')) {
+  } else if (!isDesktopApp && !typing && !e.metaKey && !e.ctrlKey && (e.key === 'f' || e.key === 'F')) {
     state.view = { ...state.view, frame: state.view.frame === 'showcase' ? 'full' : 'showcase' };
     applyFrame(state.view.frame);
     syncSettings(state.view);

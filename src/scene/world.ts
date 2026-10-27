@@ -35,6 +35,7 @@ export class World {
   private time = 0;
   private idleTimer = 0;
   private quality: Quality = 'auto';
+  private minFrameTime = 0;
 
   constructor(private readonly container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -132,8 +133,15 @@ export class World {
     this.camera.updateProjectionMatrix();
   }
 
+  /** 초당 최대 프레임. 하루 종일 떠 있는 위젯은 30 으로 낮춰 배터리를 아낀다. 0 이면 제한 없음. */
+  setFrameCap(fps: number): void {
+    this.minFrameTime = fps > 0 ? 1 / fps : 0;
+  }
+
   private frame(): void {
     const now = performance.now() / 1000;
+    // 약간의 여유를 둬 60Hz 화면에서 30fps 가 정확히 두 프레임마다 그려지게 한다
+    if (now - this.last < this.minFrameTime - 0.004) return;
     const dt = Math.min(now - this.last, 0.1);
     this.last = now;
     this.time += dt;
