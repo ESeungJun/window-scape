@@ -46,7 +46,7 @@ export class World {
   private readonly shadowCenter = new THREE.Vector3();
   private static readonly ORIGIN = new THREE.Vector3();
 
-  constructor(private readonly container: HTMLElement, theme: Theme = 'island') {
+  constructor(private readonly container: HTMLElement, theme: Theme = 'poke-center') {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -68,7 +68,7 @@ export class World {
       clearTimeout(this.idleTimer);
     });
     this.controls.addEventListener('end', () => {
-      this.idleTimer = window.setTimeout(() => (this.controls.autoRotate = true), AUTO_ROTATE_DELAY_MS);
+      this.idleTimer = window.setTimeout(() => (this.controls.autoRotate = this.stage.view.lock === undefined), AUTO_ROTATE_DELAY_MS);
     });
 
     this.sun.shadow.camera.left = -10;
@@ -121,10 +121,12 @@ export class World {
   private applyStageView(): void {
     const floating = this.stage.kind === 'floating';
     this.clouds.setSea(floating);
-    this.floaters.group.visible = floating;
+    // 정해진 각도로 보는 디오라마는 가까이서 보고, 주변의 작은 섬은 치운다
+    const framed = this.stage.view.lock !== undefined;
+    this.floaters.group.visible = floating && !framed;
     const c = this.controls;
-    c.minDistance = floating ? 14 : 7;
-    c.maxDistance = floating ? 45 : 40;
+    c.minDistance = framed ? this.stage.view.distance * 0.6 : floating ? 14 : 7;
+    c.maxDistance = framed ? this.stage.view.distance * 1.6 : floating ? 45 : 40;
     // 땅 테마는 땅 밑을 보지 않게 수평선 위로만
     c.maxPolarAngle = Math.PI * (floating ? 0.64 : 0.47);
     const half = floating ? 10 : 16;
@@ -134,8 +136,14 @@ export class World {
     sc.updateProjectionMatrix();
 
     // 지금 보는 방향은 유지하고, 테마의 기준점과 거리로 옮긴다
-    const dir = this.camera.position.clone().sub(c.target);
-    dir.y = Math.max(dir.y, dir.length() * (floating ? 0.2 : 0.3));
+    const view = this.stage.view;
+    const dir = view.dir ? view.dir.clone() : this.camera.position.clone().sub(c.target);
+    // 정해진 각도가 있는 장면(구운 디오라마)은 그 둘레로만 돌린다
+    const az = Math.atan2(dir.x, dir.z);
+    c.minAzimuthAngle = view.lock !== undefined ? az - view.lock : -Infinity;
+    c.maxAzimuthAngle = view.lock !== undefined ? az + view.lock : Infinity;
+    c.autoRotate = view.lock === undefined;
+    dir.y = Math.max(dir.y, dir.length() * (this.stage.view.minUp ?? (floating ? 0.2 : 0.3)));
     dir.normalize();
     const narrow = this.container.clientWidth < this.container.clientHeight;
     // 움직이는 주인공이 있으면 처음부터 그쪽을 비춘다
