@@ -27,6 +27,21 @@ function card(label: string, value: string, sub?: string): HTMLElement {
   return c;
 }
 
+// 위(북쪽)를 가리키는 화살표. 정적 문자열이라 innerHTML 로 넣어도 안전하다
+const ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V4M6 10l6-6 6 6"/></svg>';
+
+/** 바람 카드: 풍속 옆에 바람이 불어 가는 방향을 가리키는 화살표 */
+function windCard(kmh: number, fromDeg: number): HTMLElement {
+  const c = card('바람', `${round(kmh)} km/h`, `${WIND_DIRS[Math.round(fromDeg / 45) % 8]}풍`);
+  const arrow = el('span', 'card__arrow');
+  arrow.innerHTML = ARROW;
+  // 불어오는 방위의 반대쪽으로 분다. CSP 때문에 style 속성 대신 CSSOM 으로 돌린다
+  arrow.style.transform = `rotate(${(fromDeg + 180) % 360}deg)`;
+  arrow.title = `${WIND_DIRS[Math.round(fromDeg / 45) % 8]}쪽에서 불어오는 바람`;
+  c.querySelector('.card__value')!.append(arrow);
+  return c;
+}
+
 export interface NowElements {
   badge: HTMLElement;
   place: HTMLElement;
@@ -54,7 +69,7 @@ export function renderNow(e: NowElements, f: Forecast, dayIndex: number, placeNa
     e.cond.textContent = CONDITION_LABEL[cond];
     e.condIcon.innerHTML = weatherIcon(cond, night);
     e.cards.replaceChildren(
-      card('바람', `${round(c.wind)} km/h`, `${WIND_DIRS[Math.round(c.windDir / 45) % 8]}풍`),
+      windCard(c.wind, c.windDir),
       card('강수', `${c.precipitation} mm`, '지난 1시간'),
       card('습도', `${c.humidity}%`),
     );
@@ -63,7 +78,7 @@ export function renderNow(e: NowElements, f: Forecast, dayIndex: number, placeNa
     const cond = conditionFromCode(day.code);
     e.cond.textContent = CONDITION_LABEL[cond];
     e.condIcon.innerHTML = weatherIcon(cond);
-    e.cards.replaceChildren(card('강수', `${day.precipitation} mm`, '하루 합계'));
+    e.cards.replaceChildren(windCard(day.wind, day.windDir), card('강수', `${day.precipitation} mm`, '하루 합계'));
   }
 }
 

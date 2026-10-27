@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { Condition, Season, TimeOfDay } from '../data/weather';
 import { mulberry32, lerp } from '../util';
 import { Clouds } from './clouds';
-import { composeEnv, copyEnv, createEnv, lerpEnv, type Env } from './env';
+import { composeEnv, copyEnv, createEnv, lerpEnv, type Env, type LiveWeather } from './env';
 import { Floaters, updateSharedMaterials, type Stage } from './kit';
 import { createStage, type Theme } from './themes';
 import { Precipitation } from './precipitation';
@@ -103,8 +103,8 @@ export class World {
   }
 
   /** 목표 연출을 바꾼다. 실제 값은 프레임마다 서서히 따라간다. */
-  setSelection(time: TimeOfDay, cond: Condition, season: Season, minTemp?: number): void {
-    composeEnv(time, cond, season, this.target, minTemp);
+  setSelection(time: TimeOfDay, cond: Condition, season: Season, live?: LiveWeather): void {
+    composeEnv(time, cond, season, this.target, live);
   }
 
   /** 섬 위 장면을 바꾼다. 하늘·구름·날씨는 그대로 이어진다. */
