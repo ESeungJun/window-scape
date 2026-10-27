@@ -7,6 +7,14 @@ export function setupSearch(input: HTMLInputElement, list: HTMLUListElement, onP
   let timer = 0;
   let controller: AbortController | undefined;
   let results: Place[] = [];
+  let resultsFor = ''; // results 를 만든 검색어
+
+  // 대기 중인 디바운스와 진행 중인 요청을 함께 끊어, 늦게 온 응답이 닫힌 목록을 다시 열지 않게 한다
+  const cancel = () => {
+    clearTimeout(timer);
+    controller?.abort();
+    controller = undefined;
+  };
 
   const close = () => {
     list.hidden = true;
@@ -14,6 +22,9 @@ export function setupSearch(input: HTMLInputElement, list: HTMLUListElement, onP
   };
 
   const pick = (p: Place) => {
+    cancel();
+    results = [];
+    resultsFor = '';
     input.value = '';
     close();
     input.blur();
@@ -47,30 +58,43 @@ export function setupSearch(input: HTMLInputElement, list: HTMLUListElement, onP
   };
 
   input.addEventListener('input', () => {
-    clearTimeout(timer);
+    cancel();
     const q = input.value.trim();
     if (q.length < 2) {
       results = [];
+      resultsFor = '';
       close();
       return;
     }
     timer = window.setTimeout(async () => {
-      controller?.abort();
-      controller = new AbortController();
+      const ctrl = new AbortController();
+      controller = ctrl;
       try {
-        results = await searchPlaces(q, controller.signal);
+        const found = await searchPlaces(q, ctrl.signal);
+        if (ctrl.signal.aborted) return;
+        results = found;
+        resultsFor = q;
         render(results.length ? undefined : '검색 결과가 없어요');
       } catch (e) {
         if ((e as Error).name === 'AbortError') return;
         results = [];
+        resultsFor = '';
         render('검색하지 못했어요. 잠시 후 다시 시도해 주세요');
       }
     }, DEBOUNCE_MS);
   });
 
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && results[0]) pick(results[0]);
-    if (e.key === 'Escape') close();
+    if (e.isComposing) return; // 한글 조합 중 Enter
+    // 지금 입력과 같은 검색어로 받은 결과일 때만 Enter 로 고른다
+    if (e.key === 'Enter' && results[0] && resultsFor === input.value.trim()) pick(results[0]);
+    if (e.key === 'Escape') {
+      cancel();
+      close();
+    }
   });
-  input.addEventListener('blur', close);
+  input.addEventListener('blur', () => {
+    cancel();
+    close();
+  });
 }

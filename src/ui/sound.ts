@@ -10,7 +10,7 @@ export class Ambience {
   private rain?: GainNode;
   private wind?: GainNode;
 
-  get playing(): boolean {
+  private get playing(): boolean {
     return this.ctx?.state === 'running';
   }
 

@@ -14,6 +14,8 @@ const RAINBOW_FRAGMENT = /* glsl */ `
     float t = (length(vPos) - 22.0) / 3.0;
     float a = sin(clamp(t, 0.0, 1.0) * 3.14159) * opacity * 0.4 * smoothstep(0.0, 6.0, vPos.y);
     gl_FragColor = vec4(hue(t * 0.78), a);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 
@@ -29,6 +31,7 @@ export class Precipitation {
   private readonly bolt: THREE.Line;
   private readonly rainbow: THREE.Mesh;
   private readonly rainbowMat: THREE.ShaderMaterial;
+  private readonly tmp = new THREE.Vector3();
   private strikeT = 99;
   private nextStrike = 3;
 
@@ -146,7 +149,7 @@ export class Precipitation {
     this.rainbowMat.uniforms.opacity.value = env.rainbow;
     this.rainbow.visible = env.rainbow > 0.01;
     if (this.rainbow.visible) {
-      const dir = new THREE.Vector3(camera.position.x, 0, camera.position.z).normalize();
+      const dir = this.tmp.set(camera.position.x, 0, camera.position.z).normalize();
       this.rainbow.position.set(-dir.x * 34, -7, -dir.z * 34);
       this.rainbow.lookAt(camera.position.x, -7, camera.position.z);
     }

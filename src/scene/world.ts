@@ -15,9 +15,9 @@ const AUTO_ROTATE_DELAY_MS = 6000;
 
 /** 렌더러·카메라·조명과 장면 구성 요소를 묶고 매 프레임 연출 값을 반영한다. */
 export class World {
-  readonly env: Env = createEnv();
   onFrame?: (env: Env) => void;
 
+  private readonly env: Env = createEnv();
   private readonly target: Env = createEnv();
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -34,11 +34,12 @@ export class World {
   private last = performance.now() / 1000;
   private time = 0;
   private idleTimer = 0;
+  private quality: Quality = 'auto';
 
   constructor(private readonly container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     container.appendChild(this.renderer.domElement);
 
     const narrow = container.clientWidth < container.clientHeight;
@@ -78,19 +79,30 @@ export class World {
 
     composeEnv('day', 'partly', 'autumn', this.target);
     copyEnv(this.env, this.target);
-    this.setQuality('auto');
+    this.applyQuality();
 
-    new ResizeObserver(() => this.resize()).observe(container);
+    // 창 크기·회전이 바뀌면 화질 '자동' 판정도 다시 한다
+    new ResizeObserver(() => {
+      this.applyQuality();
+      this.resize();
+    }).observe(container);
     this.resize();
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
   /** 목표 연출을 바꾼다. 실제 값은 프레임마다 서서히 따라간다. */
-  setSelection(time: TimeOfDay, cond: Condition, season: Season): void {
-    composeEnv(time, cond, season, this.target);
+  setSelection(time: TimeOfDay, cond: Condition, season: Season, minTemp?: number): void {
+    composeEnv(time, cond, season, this.target, minTemp);
   }
 
   setQuality(q: Quality): void {
+    this.quality = q;
+    this.applyQuality();
+    this.resize();
+  }
+
+  private applyQuality(): void {
+    const q = this.quality;
     const level = q === 'auto' ? (window.innerWidth < 800 || window.devicePixelRatio < 1.5 ? 'medium' : 'high') : q;
     const ratio = level === 'low' ? 1 : level === 'medium' ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2);
     const shadows = level !== 'low';
@@ -104,12 +116,11 @@ export class World {
       });
     }
     this.sun.castShadow = shadows;
-    if (this.sun.shadow.mapSize.x !== size) {
+    if (!shadows || this.sun.shadow.mapSize.x !== size) {
       this.sun.shadow.map?.dispose();
       this.sun.shadow.map = null;
       this.sun.shadow.mapSize.set(size, size);
     }
-    this.resize();
   }
 
   private resize(): void {
