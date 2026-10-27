@@ -1,6 +1,6 @@
 [package]
 name = "window-scape"
-version = "0.2.1"
+version = "0.2.2"
 description = "창밖날씨 데스크톱 위젯"
 authors = ["Haul"]
 edition = "2024"
