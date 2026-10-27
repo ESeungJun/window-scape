@@ -4,7 +4,8 @@ import type { Condition, Season, TimeOfDay } from '../data/weather';
 import { mulberry32, lerp } from '../util';
 import { Clouds } from './clouds';
 import { composeEnv, copyEnv, createEnv, lerpEnv, type Env } from './env';
-import { Island } from './island';
+import { Floaters, updateSharedMaterials, type Stage } from './kit';
+import { createStage, type Theme } from './themes';
 import { Precipitation } from './precipitation';
 import { SkyDome } from './sky';
 
@@ -28,7 +29,10 @@ export class World {
   private readonly fog = new THREE.Fog('#ffffff', 45, 150);
   private readonly sky = new SkyDome();
   private readonly clouds: Clouds;
-  private readonly island: Island;
+  private readonly floaters: Floaters;
+  /** 한 번 만든 테마는 보관해 두고 다시 고를 때 재사용한다 */
+  private readonly stages = new Map<Theme, Stage>();
+  private stage: Stage;
   private readonly precip: Precipitation;
   private readonly sunDir = new THREE.Vector3();
   private last = performance.now() / 1000;
@@ -36,6 +40,8 @@ export class World {
   private idleTimer = 0;
   private quality: Quality = 'auto';
   private minFrameTime = 0;
+  private readonly focusPoint = new THREE.Vector3();
+  private readonly focusDelta = new THREE.Vector3();
 
   constructor(private readonly container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -72,12 +78,14 @@ export class World {
     this.sun.shadow.normalBias = 0.03;
 
     const rng = mulberry32(7);
-    this.island = new Island(rng);
+    this.floaters = new Floaters(rng);
+    this.stage = this.stageFor('island');
     this.clouds = new Clouds(rng);
     this.precip = new Precipitation(rng);
     this.scene.fog = this.fog;
-    this.scene.add(this.sun, this.sun.target, this.hemi, this.sky.group, this.island.group, this.clouds.group, this.precip.group);
+    this.scene.add(this.sun, this.sun.target, this.hemi, this.sky.group, this.stage.group, this.floaters.group, this.clouds.group, this.precip.group);
 
+    this.applyStageView();
     composeEnv('day', 'partly', 'autumn', this.target);
     copyEnv(this.env, this.target);
     this.applyQuality();
@@ -94,6 +102,51 @@ export class World {
   /** 목표 연출을 바꾼다. 실제 값은 프레임마다 서서히 따라간다. */
   setSelection(time: TimeOfDay, cond: Condition, season: Season, minTemp?: number): void {
     composeEnv(time, cond, season, this.target, minTemp);
+  }
+
+  /** 섬 위 장면을 바꾼다. 하늘·구름·날씨는 그대로 이어진다. */
+  setTheme(theme: Theme): void {
+    const next = this.stageFor(theme);
+    if (next === this.stage) return;
+    this.scene.remove(this.stage.group);
+    this.stage = next;
+    this.scene.add(next.group);
+    this.applyStageView();
+  }
+
+  /** 테마 종류에 맞춰 구름바다·떠다니는 섬·카메라 범위·그림자 범위를 바꾼다 */
+  private applyStageView(): void {
+    const floating = this.stage.kind === 'floating';
+    this.clouds.setSea(floating);
+    this.floaters.group.visible = floating;
+    const c = this.controls;
+    c.minDistance = floating ? 14 : 7;
+    c.maxDistance = floating ? 45 : 40;
+    // 땅 테마는 땅 밑을 보지 않게 수평선 위로만
+    c.maxPolarAngle = Math.PI * (floating ? 0.64 : 0.47);
+    const half = floating ? 10 : 16;
+    const sc = this.sun.shadow.camera;
+    sc.left = sc.bottom = -half;
+    sc.right = sc.top = half;
+    sc.updateProjectionMatrix();
+
+    // 지금 보는 방향은 유지하고, 테마의 기준점과 거리로 옮긴다
+    const dir = this.camera.position.clone().sub(c.target);
+    dir.y = Math.max(dir.y, dir.length() * (floating ? 0.2 : 0.3));
+    dir.normalize();
+    const narrow = this.container.clientWidth < this.container.clientHeight;
+    c.target.copy(this.stage.view.target);
+    this.camera.position.copy(c.target).addScaledVector(dir, this.stage.view.distance * (narrow ? 1.45 : 1));
+    c.update();
+  }
+
+  private stageFor(theme: Theme): Stage {
+    let stage = this.stages.get(theme);
+    if (!stage) {
+      stage = createStage(theme);
+      this.stages.set(theme, stage);
+    }
+    return stage;
   }
 
   setQuality(q: Quality): void {
@@ -153,19 +206,32 @@ export class World {
 
     const el = env.sunElevation;
     this.sunDir.set(Math.cos(el) * Math.cos(SUN_AZIMUTH), Math.sin(el), Math.cos(el) * Math.sin(SUN_AZIMUTH));
-    this.sun.position.copy(this.sunDir).multiplyScalar(30);
+    // 그림자는 카메라가 보는 곳 둘레에 맞춘다
+    this.sun.target.position.copy(this.controls.target);
+    this.sun.position.copy(this.controls.target).addScaledVector(this.sunDir, 30);
     this.sun.color.copy(env.sunColor);
     this.sun.intensity = env.sunIntensity;
     this.hemi.color.copy(env.hemiSky);
     this.hemi.intensity = env.hemiIntensity + flash * 2.5;
 
     this.fog.color.copy(env.skyBottom);
-    this.fog.near = lerp(45, 6, env.fog);
-    this.fog.far = lerp(150, 34, env.fog);
+    // 땅 테마는 지평선이 하늘에 녹아들도록 안개를 가깝게 둔다
+    const floating = this.stage.kind === 'floating';
+    this.fog.near = lerp(floating ? 45 : 24, 6, env.fog);
+    this.fog.far = lerp(floating ? 150 : 72, floating ? 34 : 30, env.fog);
 
     this.sky.update(env, this.sunDir, flash);
     this.clouds.update(dt, env);
-    this.island.update(dt, this.time, env);
+    updateSharedMaterials(env);
+    this.stage.update(dt, this.time, env);
+    this.floaters.update(dt, this.time);
+    // 움직이는 주인공이 있으면 카메라가 부드럽게 따라간다(보는 각도는 유지)
+    if (this.stage.focus) {
+      this.stage.focus(this.focusPoint);
+      this.focusDelta.subVectors(this.focusPoint, this.controls.target).multiplyScalar(1 - Math.exp(-dt * 1.2));
+      this.controls.target.add(this.focusDelta);
+      this.camera.position.add(this.focusDelta);
+    }
     this.controls.update(dt);
     this.renderer.render(this.scene, this.camera);
     this.onFrame?.(env);
