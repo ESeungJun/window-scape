@@ -225,7 +225,8 @@ export class Forest implements Stage {
       pos.needsUpdate = true;
     }
     CAP_GLOW.emissiveIntensity = env.nightLights * 1.8;
-    FLOOR.color.copy(MATS.grass.color).multiplyScalar(0.62);
+    // 이끼색은 잔디보다 어둡게, 눈이 덮이면 거의 흰색이 되도록 덜 어둡게
+    FLOOR.color.copy(MATS.grass.color).multiplyScalar(0.62 + 0.33 * env.snowCover);
 
     // 햇살 줄기: 맑은 낮일수록 진하게
     this.rayMat.opacity = Math.max(0, (env.sunIntensity / 3.2) * (1 - env.overcast) - env.nightLights) * 0.07;
