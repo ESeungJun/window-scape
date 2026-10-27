@@ -88,8 +88,12 @@ export class Precipitation {
     this.group.add(this.rain, this.snow, this.bolt, this.rainbow);
   }
 
-  update(dt: number, t: number, env: Env, camera: THREE.Camera): void {
+  /**
+   * @param center 비·눈을 내릴 영역의 가운데(땅 테마는 카메라가 보는 곳). 떠 있는 섬은 원점.
+   */
+  update(dt: number, t: number, env: Env, camera: THREE.Camera, center: THREE.Vector3): void {
     const rng = this.rng;
+    this.group.position.set(center.x, 0, center.z);
 
     // 비: 바람이 셀수록 비스듬히 떨어진다
     const rainCount = Math.floor((this.rainDrops.length / 3) * Math.min(1, env.rain));

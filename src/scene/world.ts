@@ -42,8 +42,10 @@ export class World {
   private minFrameTime = 0;
   private readonly focusPoint = new THREE.Vector3();
   private readonly focusDelta = new THREE.Vector3();
+  private readonly shadowCenter = new THREE.Vector3();
+  private static readonly ORIGIN = new THREE.Vector3();
 
-  constructor(private readonly container: HTMLElement) {
+  constructor(private readonly container: HTMLElement, theme: Theme = 'island') {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -79,7 +81,7 @@ export class World {
 
     const rng = mulberry32(7);
     this.floaters = new Floaters(rng);
-    this.stage = this.stageFor('island');
+    this.stage = this.stageFor(theme);
     this.clouds = new Clouds(rng);
     this.precip = new Precipitation(rng);
     this.scene.fog = this.fog;
@@ -135,7 +137,9 @@ export class World {
     dir.y = Math.max(dir.y, dir.length() * (floating ? 0.2 : 0.3));
     dir.normalize();
     const narrow = this.container.clientWidth < this.container.clientHeight;
-    c.target.copy(this.stage.view.target);
+    // 움직이는 주인공이 있으면 처음부터 그쪽을 비춘다
+    if (this.stage.focus) this.stage.focus(c.target);
+    else c.target.copy(this.stage.view.target);
     this.camera.position.copy(c.target).addScaledVector(dir, this.stage.view.distance * (narrow ? 1.45 : 1));
     c.update();
   }
@@ -201,14 +205,17 @@ export class World {
 
     const env = this.env;
     lerpEnv(env, this.target, 1 - Math.exp(-dt * 1.6));
-    this.precip.update(dt, this.time, env, this.camera);
+    const floating = this.stage.kind === 'floating';
+    this.precip.update(dt, this.time, env, this.camera, floating ? World.ORIGIN : this.controls.target);
     const flash = this.precip.flash;
 
     const el = env.sunElevation;
     this.sunDir.set(Math.cos(el) * Math.cos(SUN_AZIMUTH), Math.sin(el), Math.cos(el) * Math.sin(SUN_AZIMUTH));
-    // 그림자는 카메라가 보는 곳 둘레에 맞춘다
-    this.sun.target.position.copy(this.controls.target);
-    this.sun.position.copy(this.controls.target).addScaledVector(this.sunDir, 30);
+    // 그림자는 카메라가 보는 곳 둘레에 맞춘다. 1 단위 격자에 붙여 따라갈 때 그림자 경계가 일렁이지 않게 한다
+    const tg = this.controls.target;
+    this.shadowCenter.set(Math.round(tg.x), Math.round(tg.y), Math.round(tg.z));
+    this.sun.target.position.copy(this.shadowCenter);
+    this.sun.position.copy(this.shadowCenter).addScaledVector(this.sunDir, 30);
     this.sun.color.copy(env.sunColor);
     this.sun.intensity = env.sunIntensity;
     this.hemi.color.copy(env.hemiSky);
@@ -216,7 +223,6 @@ export class World {
 
     this.fog.color.copy(env.skyBottom);
     // 땅 테마는 지평선이 하늘에 녹아들도록 안개를 가깝게 둔다
-    const floating = this.stage.kind === 'floating';
     this.fog.near = lerp(floating ? 45 : 24, 6, env.fog);
     this.fog.far = lerp(floating ? 150 : 72, floating ? 34 : 30, env.fog);
 
@@ -233,6 +239,12 @@ export class World {
       this.camera.position.add(this.focusDelta);
     }
     this.controls.update(dt);
+    // 땅 테마: 카메라가 언덕 속으로 들어가지 않게 땅 위로 밀어 올린다
+    if (this.stage.groundHeight) {
+      const p = this.camera.position;
+      const floor = this.stage.groundHeight(p.x, p.z) + 0.8;
+      if (p.y < floor) p.y = floor;
+    }
     this.renderer.render(this.scene, this.camera);
     this.onFrame?.(env);
   }

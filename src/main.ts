@@ -23,7 +23,8 @@ const GEO_ERRORS: Record<number, string> = {
 
 const $ = <T extends Element = HTMLElement>(id: string) => document.querySelector<T>(`#${id}`)!;
 
-const world = new World($('scene'));
+// 저장된 테마로 바로 시작한다(하늘섬을 먼저 만들었다 바꾸지 않게)
+const world = new World($('scene'), loadSavedTheme());
 const ambience = new Ambience();
 if (isDesktopApp) {
   setupWidget(document.querySelector<HTMLElement>('.app')!);
@@ -260,7 +261,6 @@ syncSettings = renderSettings($('settingsBody'), state.view, (next) => {
   refresh();
 });
 applyFrame(state.view.frame);
-world.setTheme(state.view.theme);
 
 $('settingsBtn').addEventListener('click', () => {
   if (settingsPanel.hidden) openPanel(settingsPanel);
@@ -288,7 +288,6 @@ document.addEventListener('keydown', (e) => {
   } else if (!isDesktopApp && !typing && !e.metaKey && !e.ctrlKey && (e.key === 'f' || e.key === 'F')) {
     state.view = { ...state.view, frame: state.view.frame === 'showcase' ? 'full' : 'showcase' };
     applyFrame(state.view.frame);
-world.setTheme(state.view.theme);
     syncSettings(state.view);
   }
 });

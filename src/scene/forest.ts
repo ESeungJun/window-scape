@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Env } from './env';
 import { jitter, smoothstep, softSprite, type Rng } from '../util';
 import {
@@ -21,18 +22,20 @@ const DEER_DARK = std('#5a3a22');
 /** 숲 바닥: 계절 잔디색보다 짙은 이끼색 */
 const FLOOR = std('#4f7a3a');
 
+// 버섯 부품은 모두 같은 지오메트리를 쓰고 크기만 바꾼다
+const STEM_GEO = new THREE.CylinderGeometry(0.025, 0.035, 0.12, 6).translate(0, 0.06, 0);
+const CAP_GEO = new THREE.SphereGeometry(0.08, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.7, 1).translate(0, 0.12, 0);
+const SPOTS_GEO = mergeGeometries(
+  [0, 1.7, 3.4, 5.1].map((a) => new THREE.IcosahedronGeometry(0.012, 0).translate(Math.cos(a) * 0.045, 0.16, Math.sin(a) * 0.045)),
+)!;
+
 function mushroom(rng: Rng, glow: boolean): THREE.Group {
   const g = new THREE.Group();
-  const h = 0.08 + rng() * 0.08;
-  g.add(mesh(new THREE.CylinderGeometry(0.025, 0.035, h, 6).translate(0, h / 2, 0), STEM, false));
-  const cap = new THREE.SphereGeometry(0.08, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.7, 1).translate(0, h, 0);
-  g.add(mesh(cap, glow ? CAP_GLOW : CAP_RED, false));
-  if (!glow) {
-    for (let i = 0; i < 4; i++) {
-      const a = rng() * Math.PI * 2;
-      g.add(mesh(new THREE.IcosahedronGeometry(0.012, 0).translate(Math.cos(a) * 0.045, h + 0.04, Math.sin(a) * 0.045), STEM, false));
-    }
-  }
+  g.add(mesh(STEM_GEO, STEM, false));
+  g.add(mesh(CAP_GEO, glow ? CAP_GLOW : CAP_RED, false));
+  if (!glow) g.add(mesh(SPOTS_GEO, STEM, false));
+  g.scale.set(1, 0.7 + rng() * 0.6, 1);
+  g.rotation.y = rng() * Math.PI * 2;
   return g;
 }
 
@@ -75,6 +78,7 @@ export class Forest implements Stage {
   readonly kind = 'ground' as const;
   readonly view = { target: new THREE.Vector3(0, 1.2, 0), distance: 18 };
   private readonly sway = new Sway();
+  private readonly heightAt: (x: number, z: number) => number;
   private readonly stream: THREE.ShaderMaterial;
   private readonly neck: THREE.Group;
   private readonly flies: THREE.Points;
@@ -100,6 +104,7 @@ export class Forest implements Stage {
       }
       return THREE.MathUtils.lerp(by - 0.15, baseHeight(x, z), smoothstep(0.35, 1.5, Math.sqrt(best)));
     };
+    this.heightAt = height;
     g.add(terrain(height, FLOOR));
     g.add(distantMountains(rng, 48));
 
@@ -226,6 +231,10 @@ export class Forest implements Stage {
     this.rayMat.opacity = Math.max(0, (env.sunIntensity / 3.2) * (1 - env.overcast) - env.nightLights) * 0.07;
     for (const r of this.rays) r.visible = this.rayMat.opacity > 0.003;
 
-    this.sway.update(t, env);
+    this.sway.update(dt, env);
+  }
+
+  groundHeight(x: number, z: number): number {
+    return this.heightAt(x, z);
   }
 }

@@ -29,7 +29,7 @@ const TUFT = std('#5f8f3e');
 const tuftBase = new THREE.Color();
 
 /** 부드럽게 굽이치는 초원 언덕. 연못 자리는 파낸다 */
-function height(x: number, z: number): number {
+function baseHeight(x: number, z: number): number {
   const r = Math.hypot(x, z);
   let h = rollingHills(x, z, 1.1) + smoothstep(14, 34, r) * 2.5;
   const pr = Math.hypot(x - POND.x, z - POND.y);
@@ -39,16 +39,36 @@ function height(x: number, z: number): number {
 }
 
 /** 초원을 크게 한 바퀴 도는 구불구불한 산책길 */
-function walkPath(): THREE.CatmullRomCurve3 {
+const PATH = (() => {
   const pts: THREE.Vector3[] = [];
   const n = 26;
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
     const r = 9 + 2.6 * Math.sin(2 * a + 1) + 1.6 * Math.sin(5 * a + 0.3);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
-    pts.push(new THREE.Vector3(x, height(x, z), z));
+    pts.push(new THREE.Vector3(x, baseHeight(x, z), z));
   }
   return new THREE.CatmullRomCurve3(pts, true, 'centripetal');
+})();
+const PATH_SAMPLES = PATH.getSpacedPoints(400);
+
+/** 가장 가까운 산책길 점까지 거리와 그 점의 높이 */
+function nearestPath(x: number, z: number): { d: number; y: number } {
+  let best = Infinity, y = 0;
+  for (const p of PATH_SAMPLES) {
+    const d = (p.x - x) ** 2 + (p.z - z) ** 2;
+    if (d < best) { best = d; y = p.y; }
+  }
+  return { d: Math.sqrt(best), y };
+}
+
+/** 땅 높이: 산책길 둘레는 길 높이에 맞춰 평평하게 다듬어 길 띠가 묻히거나 뜨지 않게 한다 */
+function height(x: number, z: number): number {
+  const h = baseHeight(x, z);
+  const r = Math.hypot(x, z);
+  if (r < 4 || r > 15) return h;
+  const near = nearestPath(x, z);
+  return near.d < 1.9 ? THREE.MathUtils.lerp(near.y - 0.05, h, smoothstep(0.7, 1.9, near.d)) : h;
 }
 
 interface Leg {
@@ -93,14 +113,15 @@ export class MovingCastle implements Stage {
   private readonly smokeMat: THREE.PointsMaterial;
   private readonly puffs: { chimney: number; age: number; life: number; dx: number; dz: number }[] = [];
   private readonly smokeOrigins: THREE.Vector3[] = [];
-  private readonly path = walkPath();
+  private readonly path = PATH;
+  private flagPhase = 0;
   private readonly pathLength: number;
   private u = 0;
   private stride = 0;
   private readonly tmp = new THREE.Vector3();
   private readonly flowerSets: THREE.InstancedMesh[] = [];
 
-  /** 카메라가 따라갈 점(섬 좌표) */
+  /** 카메라가 따라갈 점(장면 좌표) */
   focus(out: THREE.Vector3): THREE.Vector3 {
     return out.copy(this.castle.position).setY(this.castle.position.y + 1.2);
   }
@@ -113,7 +134,7 @@ export class MovingCastle implements Stage {
     this.pathLength = this.path.getLength();
 
     // 걷는 길: 풀이 눌려 흙이 드러난 띠(땅 굴곡을 따른다)
-    g.add(mesh(ribbon(this.path, 0.9, 260, null, 0.03), std('#a8966a'), false));
+    g.add(mesh(ribbon(this.path, 0.9, 400, null, 0.03), std('#a8966a'), false));
     field.blockCurve(this.path, 1.1, 160);
 
     // 연못과 둘레 바위
@@ -141,7 +162,11 @@ export class MovingCastle implements Stage {
     const tuftGeo = new THREE.ConeGeometry(0.045, 0.22, 3).translate(0, 0.09, 0);
     const tufts = new THREE.InstancedMesh(tuftGeo, TUFT, 2600);
     for (let i = 0; i < tufts.count; i++) {
-      const [x, z] = ringArea(0, 24)(rng);
+      // 산책길과 연못 위는 비운다
+      let x = 0, z = 0;
+      do {
+        [x, z] = ringArea(0, 24)(rng);
+      } while (Math.hypot(x - POND.x, z - POND.y) < POND_R + 0.3 || nearestPath(x, z).d < 0.8);
       pos.set(x, height(x, z), z);
       q.setFromEuler(new THREE.Euler((rng() - 0.5) * 0.4, rng() * 3, (rng() - 0.5) * 0.4));
       sc.setScalar(0.6 + rng() * 0.6);
@@ -169,6 +194,7 @@ export class MovingCastle implements Stage {
 
     this.buildCastle(rng);
     g.add(this.castle);
+    this.place(); // 처음부터 길 위에 서 있어야 카메라가 바로 성을 비춘다
 
     // 연기
     const count = 120;
@@ -244,17 +270,14 @@ export class MovingCastle implements Stage {
     this.castle.scale.setScalar(1.5);
   }
 
-  update(dt: number, t: number, env: Env): void {
+  update(dt: number, _t: number, env: Env): void {
     EYE.emissiveIntensity = 0.3 + env.nightLights * 2.2;
 
     // 산책길을 따라 걷는다. 몸은 늘 곧게 서 있고 방향만 길을 따른다
     const speed = WALK_SPEED * (1 - 0.3 * Math.max(env.rain, env.snow));
     this.u = (this.u + (dt * speed) / this.pathLength) % 1;
     this.stride += dt * speed * 7.5;
-    const p = this.path.getPointAt(this.u);
-    const tan = this.path.getTangentAt(this.u);
-    this.castle.position.set(p.x, height(p.x, p.z), p.z);
-    this.castle.rotation.y = Math.atan2(-tan.z, tan.x);
+    this.place();
 
     // 풀포기 색은 계절 잔디보다 조금 진하게, 눈이 오면 꽃은 숨는다
     TUFT.color.copy(tuftBase.copy(MATS.grass.color).multiplyScalar(0.9));
@@ -271,12 +294,13 @@ export class MovingCastle implements Stage {
     this.body.rotation.x = Math.sin(this.stride) * 0.03;
     this.body.rotation.z = Math.cos(this.stride * 0.5) * 0.02;
 
+    // 깃발 위상은 dt 로 누적해야 바람이 바뀌는 순간 마구 펄럭이지 않는다
+    this.flagPhase += dt * (3 + env.wind * 5);
     for (const [i, f] of this.flags.entries()) {
-      f.rotation.y = Math.sin(t * (3 + env.wind * 5) + i) * (0.3 + env.wind * 0.4);
+      f.rotation.y = Math.sin(this.flagPhase + i) * (0.3 + env.wind * 0.4);
     }
 
-    // 연기: 굴뚝 끝(섬 좌표)에서 피어올라 바람 방향으로 흐른다
-    this.castle.updateMatrixWorld(true);
+    // 연기: 굴뚝 끝(장면 좌표)에서 피어올라 바람 방향으로 흐른다
     this.group.updateMatrixWorld(true);
     this.chimneys.forEach((c, i) => {
       this.group.worldToLocal(c.getWorldPosition(this.smokeOrigins[i]));
@@ -294,6 +318,18 @@ export class MovingCastle implements Stage {
     pos.needsUpdate = true;
     this.smokeMat.opacity = 0.45 * (1 - env.rain * 0.5);
 
-    this.sway.update(t, env);
+    this.sway.update(dt, env);
+  }
+
+  /** 산책길 위 현재 위치에 성을 세운다. 몸은 늘 곧게 서 있고 방향만 길을 따른다 */
+  private place(): void {
+    const p = this.path.getPointAt(this.u);
+    const tan = this.path.getTangentAt(this.u);
+    this.castle.position.set(p.x, height(p.x, p.z), p.z);
+    this.castle.rotation.y = Math.atan2(-tan.z, tan.x);
+  }
+
+  groundHeight(x: number, z: number): number {
+    return height(x, z);
   }
 }
