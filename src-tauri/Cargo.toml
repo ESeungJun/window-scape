@@ -1,6 +1,6 @@
 [package]
 name = "sky-island-weather"
-version = "0.1.0"
+version = "0.1.1"
 description = "하늘섬 날씨 데스크톱 위젯"
 authors = ["Haul"]
 edition = "2024"

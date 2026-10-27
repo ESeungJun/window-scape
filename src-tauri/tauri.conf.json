@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "하늘섬 날씨",
   "mainBinaryName": "sky-island-weather",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "dev.haul.skyisle",
   "build": {
     "frontendDist": "../dist",
