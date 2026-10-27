@@ -36,10 +36,15 @@ export interface NowElements {
   cards: HTMLElement;
 }
 
-export function renderNow(e: NowElements, f: Forecast, dayIndex: number, placeName: string, preview: boolean): void {
+/** 배지 문구. 미리보기·연결 끊김 상태는 호출하는 쪽이 넘긴 값을 우선한다. */
+export function badgeText(f: Forecast, dayIndex: number): string {
+  return dayIndex === 0 ? '지금 날씨' : longDate(f.daily[dayIndex].date);
+}
+
+export function renderNow(e: NowElements, f: Forecast, dayIndex: number, placeName: string, badge: string): void {
   const day = f.daily[dayIndex];
   e.place.textContent = placeName;
-  e.badge.textContent = preview ? '미리보기' : dayIndex === 0 ? '지금 날씨' : longDate(day.date);
+  e.badge.textContent = badge;
   e.range.textContent = `최고 ${round(day.max)}° · 최저 ${round(day.min)}°`;
   if (dayIndex === 0) {
     const c = f.current;
@@ -57,13 +62,23 @@ export function renderNow(e: NowElements, f: Forecast, dayIndex: number, placeNa
   }
 }
 
+const renderedWeek = new WeakMap<HTMLElement, Forecast>();
+
+/** 같은 예보면 버튼을 다시 만들지 않고 눌림 상태만 바꾼다(키보드 포커스 유지). */
 export function renderWeek(root: HTMLElement, f: Forecast, selected: number, onSelect: (i: number) => void): void {
+  if (renderedWeek.get(root) !== f) {
+    renderedWeek.set(root, f);
+    buildWeek(root, f, onSelect);
+  }
+  root.querySelectorAll('.day').forEach((b, i) => b.setAttribute('aria-pressed', String(i === selected)));
+}
+
+function buildWeek(root: HTMLElement, f: Forecast, onSelect: (i: number) => void): void {
   root.replaceChildren(
     ...f.daily.map((d, i) => {
       const li = el('li');
       const b = el('button', 'day');
       b.type = 'button';
-      b.setAttribute('aria-pressed', String(i === selected));
       b.setAttribute('aria-label', `${i === 0 ? '오늘' : longDate(d.date)} ${CONDITION_LABEL[conditionFromCode(d.code)]}, 최고 ${round(d.max)}도 최저 ${round(d.min)}도`);
       const icon = el('span', 'day__icon');
       icon.innerHTML = weatherIcon(conditionFromCode(d.code));

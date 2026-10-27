@@ -9,7 +9,12 @@ export interface Place {
   detail?: string;
   lat: number;
   lon: number;
+  /** 기기 위치로 정한 장소. 정밀 위치가 남지 않도록 저장하지 않는다. */
+  current?: boolean;
 }
+
+/** 날씨 조회에는 약 1km 정밀도(소수 2자리)면 충분하다. 정밀 좌표를 외부로 보내지 않는다. */
+export const coarse = (deg: number) => Math.round(deg * 100) / 100;
 
 export interface DailyForecast {
   date: string; // YYYY-MM-DD (현지)
@@ -47,8 +52,8 @@ const GEOCODING_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 
 export async function fetchForecast(place: Place, signal?: AbortSignal): Promise<Forecast> {
   const params = new URLSearchParams({
-    latitude: String(place.lat),
-    longitude: String(place.lon),
+    latitude: String(coarse(place.lat)),
+    longitude: String(coarse(place.lon)),
     current: 'temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m',
     hourly: 'temperature_2m,weather_code,precipitation_probability',
     daily: 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum',
@@ -127,31 +132,39 @@ export const CONDITION_LABEL: Record<Condition, string> = {
   rainbow: '무지개',
 };
 
-/** 그 지역의 현재 시각(자정부터 분) */
-export function localMinutes(utcOffsetSeconds: number, now = Date.now()): number {
-  const sec = Math.floor(now / 1000) + utcOffsetSeconds;
-  return (((sec % 86400) + 86400) % 86400) / 60;
+/**
+ * 그 지역 벽시계 기준의 '현지 epoch 분'. API 의 현지 시각 문자열("YYYY-MM-DDTHH:MM")을
+ * UTC 로 읽은 값과 같은 축이라 날짜를 넘는 일출·일몰도 그대로 비교할 수 있다.
+ */
+export function localEpochMinutes(utcOffsetSeconds: number, now = Date.now()): number {
+  return now / 60000 + utcOffsetSeconds / 60;
 }
 
 export function localMonth(utcOffsetSeconds: number, now = Date.now()): number {
   return new Date(now + utcOffsetSeconds * 1000).getUTCMonth();
 }
 
-const minutesOf = (iso: string) => {
-  const [h, m] = iso.slice(11, 16).split(':').map(Number);
-  return h * 60 + m;
-};
+const epochMinutesOf = (iso?: string) => (iso ? Date.parse(`${iso}:00Z`) / 60000 : NaN);
 
-export function timeOfDayAt(minutes: number, sunrise?: string, sunset?: string): TimeOfDay {
-  const rise = sunrise ? minutesOf(sunrise) : 6 * 60;
-  const set = sunset ? minutesOf(sunset) : 18 * 60;
-  if (minutes < rise - 30 || minutes > set + 45) return 'night';
-  if (minutes < rise + 120) return 'morning';
-  if (minutes > set - 90) return 'evening';
+export function timeOfDayAt(now: number, sunrise?: string, sunset?: string): TimeOfDay {
+  const dayStart = Math.floor(now / 1440) * 1440;
+  let rise = epochMinutesOf(sunrise);
+  let set = epochMinutesOf(sunset);
+  if (!Number.isFinite(rise) || !Number.isFinite(set)) {
+    rise = dayStart + 6 * 60;
+    set = dayStart + 18 * 60;
+  }
+  if (set - rise >= 1439) return 'day'; // 백야: 하루 종일 해가 지지 않는다
+  if (set <= rise) return 'night'; // 극야: 해가 뜨지 않는다
+  if (now < rise - 30 || now > set + 45) return 'night';
+  if (now < rise + 120) return 'morning';
+  if (now > set - 90) return 'evening';
   return 'day';
 }
 
+/** 열대(위도 23.5° 이내)는 계절 변화가 거의 없어 여름으로 본다. */
 export function seasonAt(month0: number, lat: number): Season {
+  if (Math.abs(lat) < 23.5) return 'summer';
   const m = lat < 0 ? (month0 + 6) % 12 : month0;
   if (m >= 2 && m <= 4) return 'spring';
   if (m >= 5 && m <= 7) return 'summer';

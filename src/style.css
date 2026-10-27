@@ -32,6 +32,23 @@ html, body {
 button { font: inherit; color: inherit; cursor: pointer; }
 svg { stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
+/* 장면과 UI 를 담는 틀. transform 이 있어 안쪽 position: fixed 요소들이 이 틀을 기준으로 놓인다. */
+.app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  transform: translateZ(0);
+  transition: inset 0.7s cubic-bezier(0.2, 0.8, 0.2, 1), border-radius 0.7s, box-shadow 0.7s;
+}
+
+/* 쇼케이스: 베이지 배경 위 둥근 창에 화면을 담는다(F 키 또는 ?showcase) */
+body.showcase { background: #ddd3c9; }
+body.showcase .app {
+  inset: clamp(16px, 6vh, 64px) clamp(16px, 6vw, 120px);
+  border-radius: 22px;
+  box-shadow: 0 30px 80px rgba(60, 45, 30, 0.28), 0 6px 18px rgba(60, 45, 30, 0.12);
+}
+
 .scene { position: fixed; inset: 0; }
 .scene canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
@@ -307,4 +324,5 @@ body.is-dark .card { background: rgba(14, 24, 52, 0.45); border-color: rgba(255,
 
 @media (prefers-reduced-motion: reduce) {
   .panel { animation: none; }
+  .app { transition: none; }
 }

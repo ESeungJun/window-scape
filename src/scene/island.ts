@@ -8,8 +8,7 @@ import { fallMaterial, riverMaterial } from './water';
  * 가장자리에서 구름바다로 떨어지는 폭포, 마을과 나무로 이뤄진다.
  * 모양은 전부 코드로 만든다. 나중에 Blender 모델(.glb)로 바꾸려면 이 파일만 교체하면 된다.
  */
-export const ISLAND_RADIUS = 6;
-const R = ISLAND_RADIUS;
+const R = 6;
 const TOP = 0.25;
 const HILL = new THREE.Vector2(-2.2, -1.4);
 const HILL_R = 2.2;
@@ -17,7 +16,7 @@ const FALL_ANGLE = 0.42;
 const SPRING_FALL_ANGLE = 2.25;
 
 /** 섬 가장자리의 반지름 배율. 원이 아니라 울퉁불퉁한 윤곽을 만든다. */
-export function rimFactor(a: number): number {
+function rimFactor(a: number): number {
   return 1 + 0.1 * Math.sin(3 * a + 0.7) + 0.06 * Math.sin(5 * a + 2.1) + 0.04 * Math.sin(7 * a + 4);
 }
 
@@ -214,11 +213,11 @@ function house(w: number, d: number, h: number, roofMat: THREE.Material): THREE.
   g.add(mesh(roof, roofMat));
   g.add(mesh(new THREE.BoxGeometry(0.18, 0.5, 0.18).translate(w * 0.25, h + r * 0.55, -d * 0.15), MATS.stone));
   g.add(mesh(new THREE.BoxGeometry(0.28, 0.48, 0.05).translate(0, 0.24, d / 2 + 0.02), MATS.darkWood));
-  const win = new THREE.BoxGeometry(0.22, 0.22, 0.05);
+  const win = () => new THREE.BoxGeometry(0.22, 0.22, 0.05);
   for (const x of [-w * 0.3, w * 0.3]) {
-    g.add(mesh(win.clone().translate(x, h * 0.58, d / 2 + 0.02), MATS.window, false));
+    g.add(mesh(win().translate(x, h * 0.58, d / 2 + 0.02), MATS.window, false));
   }
-  g.add(mesh(win.clone().rotateY(Math.PI / 2).translate(w / 2 + 0.02, h * 0.58, 0), MATS.window, false));
+  g.add(mesh(win().rotateY(Math.PI / 2).translate(w / 2 + 0.02, h * 0.58, 0), MATS.window, false));
   return g;
 }
 
@@ -291,6 +290,8 @@ export class Island {
   private readonly mistMat: THREE.PointsMaterial;
   private readonly mistState: { s: number; a: number; b: number; speed: number }[] = [];
   private readonly mainFall: Fall;
+  private readonly mistSide = new THREE.Vector3();
+  private readonly tmp = new THREE.Vector3();
 
   constructor(rng: Rng) {
     const g = this.group;
@@ -548,16 +549,17 @@ export class Island {
 
     // 물보라: 폭포를 따라 내려가며 바깥으로 퍼진다
     const pos = this.mist.geometry.getAttribute('position') as THREE.BufferAttribute;
-    const side = new THREE.Vector3(-this.mainFall.outward.z, 0, this.mainFall.outward.x);
-    const p = new THREE.Vector3();
-    this.mistState.forEach((m, i) => {
+    const side = this.mistSide.set(-this.mainFall.outward.z, 0, this.mainFall.outward.x);
+    const p = this.tmp;
+    for (let i = 0; i < this.mistState.length; i++) {
+      const m = this.mistState[i];
       m.s += dt * m.speed;
       if (m.s > 1) m.s -= 1;
       fallPoint(this.mainFall, m.s, p)
         .addScaledVector(side, m.a * this.mainFall.width * (1 + m.s * 2.5))
         .addScaledVector(this.mainFall.outward, 0.15 + m.b * 0.5 + m.s * 1.2);
       pos.setXYZ(i, p.x, p.y, p.z);
-    });
+    }
     pos.needsUpdate = true;
   }
 }

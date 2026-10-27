@@ -1,5 +1,6 @@
 import { Color } from 'three';
 import type { Condition, Season, TimeOfDay } from '../data/weather';
+import { smoothstep } from '../util';
 
 /**
  * 장면 전체가 읽는 연출 값. 시간대·날씨·계절 프리셋을 합쳐 목표값을 만들고,
@@ -70,7 +71,11 @@ const tmp = new Color();
 
 const luminance = (c: Color) => c.r * 0.3 + c.g * 0.59 + c.b * 0.11;
 
-export function composeEnv(time: TimeOfDay, cond: Condition, season: Season, out: Env): Env {
+/**
+ * @param minTemp 실제 최저 기온(°C). 주어지면 겨울 눈 덮임을 기온으로 정한다(6°C 이상이면 눈 없음).
+ *                미리보기로 계절을 고른 경우에는 넘기지 않아 프리셋 그대로 보여준다.
+ */
+export function composeEnv(time: TimeOfDay, cond: Condition, season: Season, out: Env, minTemp?: number): Env {
   const T = TIME[time];
   const W = WEATHER[cond];
   const S = SEASON[season];
@@ -103,7 +108,8 @@ export function composeEnv(time: TimeOfDay, cond: Condition, season: Season, out
   out.rainbow = time === 'night' ? 0 : W.rainbow;
 
   // 계절 + 눈이 내리면 계절과 상관없이 섬이 하얗게 덮인다
-  const snow = Math.max(S.snow, cond === 'snow' ? 0.8 : 0);
+  const seasonSnow = minTemp === undefined ? S.snow : S.snow * smoothstep(6, 0, minTemp);
+  const snow = Math.max(seasonSnow, cond === 'snow' ? 0.8 : 0);
   out.snowCover = snow;
   out.grass.set(S.grass).lerp(SNOW, snow);
   out.foliageA.set(S.a).lerp(SNOW, snow * 0.85);
