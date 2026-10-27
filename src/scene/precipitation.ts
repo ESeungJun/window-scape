@@ -5,6 +5,8 @@ import { softSprite, type Rng } from '../util';
 const AREA = 17;
 const Y_MIN = -12;
 const Y_MAX = 18;
+/** 영역 밖으로 나간 입자를 반대편으로 */
+const wrap = (v: number) => (v > AREA ? v - AREA * 2 : v < -AREA ? v + AREA * 2 : v);
 
 const RAINBOW_FRAGMENT = /* glsl */ `
   uniform float opacity;
@@ -100,7 +102,8 @@ export class Precipitation {
     this.rain.visible = rainCount > 0;
     if (rainCount > 0) {
       const vy = -26;
-      const vx = env.wind * 9;
+      const vx = env.windX * env.wind * 9;
+      const vz = env.windZ * env.wind * 9;
       const pos = this.rain.geometry.getAttribute('position') as THREE.BufferAttribute;
       const out = pos.array as Float32Array;
       const d = this.rainDrops;
@@ -108,11 +111,13 @@ export class Precipitation {
         const k = i * 3;
         d[k] += vx * dt;
         d[k + 1] += vy * dt;
+        d[k + 2] += vz * dt;
         if (d[k + 1] < Y_MIN) d[k + 1] += Y_MAX - Y_MIN;
-        if (d[k] > AREA) d[k] -= AREA * 2;
+        d[k] = wrap(d[k]);
+        d[k + 2] = wrap(d[k + 2]);
         const o = i * 6;
         out[o] = d[k]; out[o + 1] = d[k + 1]; out[o + 2] = d[k + 2];
-        out[o + 3] = d[k] - vx * 0.028; out[o + 4] = d[k + 1] - vy * 0.028; out[o + 5] = d[k + 2];
+        out[o + 3] = d[k] - vx * 0.028; out[o + 4] = d[k + 1] - vy * 0.028; out[o + 5] = d[k + 2] - vz * 0.028;
       }
       pos.needsUpdate = true;
       this.rain.geometry.setDrawRange(0, rainCount * 2);
@@ -125,11 +130,12 @@ export class Precipitation {
       const s = this.snowFlakes;
       for (let i = 0; i < snowCount; i++) {
         const k = i * 3;
-        s[k] += (Math.sin(t * 0.8 + i) * 0.4 + env.wind * 2) * dt;
+        s[k] += (Math.sin(t * 0.8 + i) * 0.4 + env.windX * env.wind * 2) * dt;
         s[k + 1] -= (1.1 + (i % 5) * 0.15) * dt;
-        s[k + 2] += Math.cos(t * 0.6 + i * 1.3) * 0.3 * dt;
+        s[k + 2] += (Math.cos(t * 0.6 + i * 1.3) * 0.3 + env.windZ * env.wind * 2) * dt;
         if (s[k + 1] < Y_MIN) s[k + 1] += Y_MAX - Y_MIN;
-        if (s[k] > AREA) s[k] -= AREA * 2;
+        s[k] = wrap(s[k]);
+        s[k + 2] = wrap(s[k + 2]);
       }
       (this.snow.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
       this.snow.geometry.setDrawRange(0, snowCount);

@@ -25,6 +25,7 @@ export interface DailyForecast {
   sunset: string;
   precipitation: number;
   wind: number; // 하루 최대 풍속 km/h
+  windDir: number; // 하루 주된 풍향(불어오는 방위, 도)
 }
 
 export interface HourlyForecast {
@@ -57,7 +58,7 @@ export async function fetchForecast(place: Place, signal?: AbortSignal): Promise
     longitude: String(coarse(place.lon)),
     current: 'temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m',
     hourly: 'temperature_2m,weather_code,precipitation_probability',
-    daily: 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,wind_speed_10m_max',
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_sum,wind_speed_10m_max,wind_direction_10m_dominant',
     timezone: 'auto',
     forecast_days: '7',
   });
@@ -85,6 +86,7 @@ export async function fetchForecast(place: Place, signal?: AbortSignal): Promise
       sunset: d.sunset[i],
       precipitation: d.precipitation_sum[i],
       wind: d.wind_speed_10m_max[i],
+      windDir: d.wind_direction_10m_dominant[i],
     })),
     hourly: h.time.map((time: string, i: number) => ({
       time,

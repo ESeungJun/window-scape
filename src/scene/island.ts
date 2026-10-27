@@ -26,6 +26,7 @@ export class Island implements Stage {
   readonly kind = 'floating' as const;
   readonly view = FLOATING_VIEW;
   private readonly hub: THREE.Group;
+  private readonly mill: THREE.Group;
   private readonly sway = new Sway();
   private readonly river: THREE.ShaderMaterial;
   private readonly falls: Waterfall[] = [];
@@ -85,6 +86,7 @@ export class Island implements Stage {
     const h2 = place(house(1.0, 0.8, 0.9, MATS.roofBlue), -1.6, 2.7, 1.1, 1.15);
     const mill = windmill();
     this.hub = mill.hub;
+    this.mill = mill.group;
     mill.group.position.set(HILL.x, surfaceY(HILL.x, HILL.y) - 0.08, HILL.y);
     mill.group.rotation.y = 0.85;
     g.add(mill.group);
@@ -187,6 +189,12 @@ export class Island implements Stage {
     for (const f of this.falls) f.update(dt, t, bright);
 
     this.hub.rotation.z -= dt * (0.35 + env.wind * 2.8);
+    // 날개(+z 쪽)가 바람이 불어오는 쪽을 보도록 천천히 돌아선다
+    if (Math.hypot(env.windX, env.windZ) > 0.1) {
+      const want = Math.atan2(-env.windX, -env.windZ);
+      const diff = Math.atan2(Math.sin(want - this.mill.rotation.y), Math.cos(want - this.mill.rotation.y));
+      this.mill.rotation.y += diff * Math.min(1, dt * 0.4);
+    }
     this.sway.update(dt, env);
     this.flowers.scale.y = Math.max(0.001, 1 - env.snowCover);
     this.flowers.visible = env.snowCover < 0.95;

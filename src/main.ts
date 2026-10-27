@@ -3,6 +3,7 @@ import {
   coarse, conditionFromCode, fetchForecast, localEpochMinutes, localMonth, seasonAt, timeOfDayAt,
   type Condition, type Forecast, type Place, type TimeOfDay,
 } from './data/weather';
+import type { LiveWeather } from './scene/env';
 import { isTheme, type Theme } from './scene/themes';
 import { World } from './scene/world';
 import { badgeText, renderHourly, renderNow, renderWeek } from './ui/forecast';
@@ -139,8 +140,16 @@ function updateScene() {
   const cond = v.cond === 'live' ? liveCondition(f, time) : v.cond;
   const lat = state.place.lat;
   const season = v.season !== 'live' ? v.season : seasonAt(f ? localMonth(f.utcOffsetSeconds) : new Date().getMonth(), lat);
-  const minTemp = v.season === 'live' && f ? f.daily[state.dayIndex]?.min : undefined;
-  world.setSelection(time, cond, season, minTemp);
+  const live: LiveWeather = {};
+  if (f && v.season === 'live') live.minTemp = f.daily[state.dayIndex]?.min;
+  // 실제 풍속·풍향: 오늘은 지금 값, 다른 요일은 그날 최대 풍속과 주된 풍향.
+  // 날씨를 미리보기로 고르면 풍속은 그 날씨의 기본값을 쓰고 풍향만 실제를 따른다
+  if (f) {
+    const day = f.daily[state.dayIndex];
+    live.windFromDeg = state.dayIndex === 0 ? f.current.windDir : day?.windDir;
+    if (v.cond === 'live') live.windKmh = state.dayIndex === 0 ? f.current.wind : day?.wind;
+  }
+  world.setSelection(time, cond, season, live);
   document.body.classList.toggle('is-dark', time === 'night' || time === 'evening');
   state.night = time === 'night';
 }

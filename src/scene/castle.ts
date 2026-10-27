@@ -312,7 +312,11 @@ export class MovingCastle implements Stage {
       if (p.age > p.life) p.age -= p.life;
       const k = p.age / p.life;
       const o = this.smokeOrigins[p.chimney];
-      this.tmp.set(o.x + p.dx * 0.25 * k + drift * k * 1.2, o.y + k * 1.1, o.z + p.dz * 0.25 * k);
+      this.tmp.set(
+        o.x + p.dx * 0.25 * k + env.windX * drift * k * 1.2,
+        o.y + k * 1.1,
+        o.z + p.dz * 0.25 * k + env.windZ * drift * k * 1.2,
+      );
       pos.setXYZ(i, this.tmp.x, this.tmp.y, this.tmp.z);
     });
     pos.needsUpdate = true;

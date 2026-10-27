@@ -354,6 +354,8 @@ export class Sway {
   private slow = 0;
 
   add(obj: THREE.Object3D, rng: Rng): void {
+    // 기울기(x·z)는 월드 축 기준, y 돌림은 물체 자체 기준이 되도록 Rz·Rx·Ry 순서
+    obj.rotation.order = 'ZXY';
     this.items.push({ obj, phase: rng() * 10 });
   }
 
@@ -365,11 +367,14 @@ export class Sway {
     this.fast += dt * (1.2 + env.wind * 1.5);
     this.slow += dt * 0.9;
     const amount = 0.015 + env.wind * 0.06;
+    // 바람 부는 쪽으로 기운 채 흔들린다
+    const leanZ = -env.windX * env.wind * 0.07;
+    const leanX = env.windZ * env.wind * 0.07;
     for (const s of this.items) {
-      s.obj.rotation.z = Math.sin(this.fast + s.phase) * amount;
-      s.obj.rotation.x = Math.cos(this.slow + s.phase) * amount * 0.5;
+      s.obj.rotation.z = Math.sin(this.fast + s.phase) * amount + leanZ;
+      s.obj.rotation.x = Math.cos(this.slow + s.phase) * amount * 0.5 + leanX;
     }
-    for (const b of this.batches) b.update(this.fast, this.slow, amount);
+    for (const b of this.batches) b.update(this.fast, this.slow, amount, leanX, leanZ);
   }
 }
 
@@ -390,7 +395,7 @@ export class TreeBatch {
   private readonly meshes = new Map<number, THREE.InstancedMesh[]>();
   private readonly m = new THREE.Matrix4();
   private readonly q = new THREE.Quaternion();
-  private readonly e = new THREE.Euler();
+  private readonly e = new THREE.Euler(0, 0, 0, 'ZXY');
   private readonly s = new THREE.Vector3();
 
   /** kind 0: 침엽수, 1~3: 둥근 나무(잎 A, 모양 3가지), 4~6: 둥근 나무(잎 B) */
@@ -419,9 +424,9 @@ export class TreeBatch {
     return this;
   }
 
-  update(fast: number, slow: number, amount: number): void {
+  update(fast: number, slow: number, amount: number, leanX = 0, leanZ = 0): void {
     for (const t of this.trees) {
-      this.e.set(Math.cos(slow + t.phase) * amount * 0.5, t.rotY, Math.sin(fast + t.phase) * amount);
+      this.e.set(Math.cos(slow + t.phase) * amount * 0.5 + leanX, t.rotY, Math.sin(fast + t.phase) * amount + leanZ, 'ZXY');
       this.m.compose(t.pos, this.q.setFromEuler(this.e), this.s.setScalar(t.scale));
       for (const im of this.meshes.get(t.kind)!) im.setMatrixAt(t.index, this.m);
     }

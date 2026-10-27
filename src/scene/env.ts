@@ -10,6 +10,8 @@ const COLOR_KEYS = ['skyTop', 'skyBottom', 'sunColor', 'hemiSky', 'grass', 'foli
 const NUM_KEYS = [
   'sunIntensity', 'sunElevation', 'hemiIntensity', 'nightLights', 'stars',
   'cloudCover', 'cloudDark', 'overcast', 'rain', 'snow', 'fog', 'wind', 'storm', 'rainbow', 'snowCover',
+  // 바람이 불어 가는 방향(단위 벡터, 북쪽 = -z, 동쪽 = +x)
+  'windX', 'windZ',
 ] as const;
 
 type ColorKey = (typeof COLOR_KEYS)[number];
@@ -71,11 +73,18 @@ const tmp = new Color();
 
 const luminance = (c: Color) => c.r * 0.3 + c.g * 0.59 + c.b * 0.11;
 
-/**
- * @param minTemp 실제 최저 기온(°C). 주어지면 겨울 눈 덮임을 기온으로 정한다(6°C 이상이면 눈 없음).
- *                미리보기로 계절을 고른 경우에는 넘기지 않아 프리셋 그대로 보여준다.
- */
-export function composeEnv(time: TimeOfDay, cond: Condition, season: Season, out: Env, minTemp?: number): Env {
+/** 실제 날씨 값. 주어진 것만 프리셋 대신 쓴다(미리보기로 고른 항목은 넘기지 않는다) */
+export interface LiveWeather {
+  /** 최저 기온(°C). 겨울 눈 덮임을 기온으로 정한다(6°C 이상이면 눈 없음) */
+  minTemp?: number;
+  /** 풍속(km/h). 45km/h 이상이면 바람 연출 최대 */
+  windKmh?: number;
+  /** 바람이 불어오는 방위(도, 북쪽 0 · 시계 방향) */
+  windFromDeg?: number;
+}
+
+export function composeEnv(time: TimeOfDay, cond: Condition, season: Season, out: Env, live: LiveWeather = {}): Env {
+  const { minTemp } = live;
   const T = TIME[time];
   const W = WEATHER[cond];
   const S = SEASON[season];
@@ -103,7 +112,12 @@ export function composeEnv(time: TimeOfDay, cond: Condition, season: Season, out
   out.rain = W.rain;
   out.snow = W.snow;
   out.fog = W.fog;
-  out.wind = W.wind;
+  // 실제 풍속이 있으면 그 세기로(날씨 종류가 정한 값보다 약해지지는 않게 절반은 남긴다)
+  out.wind = live.windKmh === undefined ? W.wind : Math.max(W.wind * 0.5, Math.min(1, live.windKmh / 45));
+  // 풍향: 불어오는 방위의 반대쪽으로 분다. 모르면 동쪽(+x)으로
+  const from = ((live.windFromDeg ?? 270) * Math.PI) / 180;
+  out.windX = -Math.sin(from);
+  out.windZ = Math.cos(from);
   out.storm = W.storm;
   out.rainbow = time === 'night' ? 0 : W.rainbow;
 
