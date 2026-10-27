@@ -5,7 +5,7 @@
 <p align="center">바탕화면에 작은 창을 하나 내고, 그 너머 풍경으로 오늘 날씨를 보여주는 macOS 위젯이에요.<br>
 비가 오면 창밖에도 비가 오고, 해가 지면 창밖 마을에도 불이 켜집니다.</p>
 
-<p align="center"><a href="https://github.com/ESeungJun/window-scape/releases/latest"><b>⬇ 최신 버전 내려받기 (macOS)</b></a></p>
+<p align="center"><a href="https://github.com/ESeungJun/window-scape/releases/latest"><b>⬇ 최신 버전 내려받기 (macOS · Windows)</b></a></p>
 
 <p align="center"><a href="README.md">English</a> · <b>한국어</b></p>
 
@@ -70,11 +70,18 @@ Blender랑 Three.js로 만든 작은 섬이 실제 날씨에 맞춰 바뀌는 �
 
 ## 설치
 
-1. [최신 릴리스](https://github.com/ESeungJun/window-scape/releases/latest)에서 `window-scape-…-mac-universal.dmg`를 받아요.
-2. `창밖날씨.app`을 응용 프로그램 폴더로 옮기고 실행하면 끝이에요. Apple 공증을 받아서 경고 없이 바로 열립니다.
-3. 처음엔 화면 오른쪽 위에 뜨고, 메뉴 막대의 창문 아이콘에서 배치를 바꿀 수 있어요.
+[최신 릴리스](https://github.com/ESeungJun/window-scape/releases/latest)에서 내 컴퓨터에 맞는 파일을 받아요.
 
-Apple Silicon과 Intel Mac 둘 다 됩니다. (macOS 11 이상)
+| 컴퓨터 | 파일 |
+| --- | --- |
+| Mac (Apple Silicon, M1 이후) | `window-scape-…-mac-arm64.dmg` |
+| Mac (Intel) | `window-scape-…-mac-x64.dmg` |
+| Windows 10·11 (64비트) | `window-scape-…-windows-x64-setup.exe` |
+
+- Mac - `창밖날씨.app`을 응용 프로그램 폴더로 옮기고 실행하면 끝이에요. Apple 공증을 받아서 경고 없이 바로 열립니다. (macOS 11 이상)
+- Windows - 설치 파일을 실행해요. 코드 서명이 없어 SmartScreen 경고가 뜨면 `추가 정보` → `실행`을 누르면 됩니다.
+
+처음엔 화면 오른쪽 위에 항상 위로 떠 있고, 메뉴 막대(Windows는 작업 표시줄 트레이)의 창문 아이콘에서 배치를 바꿀 수 있어요.
 
 ## 만든 방법
 

@@ -5,7 +5,7 @@
 <p align="center">A little window on your desktop that shows today's weather as a living low-poly landscape.<br>
 When it rains outside, it rains in the window. When the sun sets, the village lights come on.</p>
 
-<p align="center"><a href="https://github.com/ESeungJun/window-scape/releases/latest"><b>⬇ Download the latest release (macOS)</b></a></p>
+<p align="center"><a href="https://github.com/ESeungJun/window-scape/releases/latest"><b>⬇ Download the latest release (macOS · Windows)</b></a></p>
 
 <p align="center"><b>English</b> · <a href="README.ko.md">한국어</a></p>
 
@@ -69,11 +69,18 @@ inspired by the idea of a moving castle, not a copy of any film's design.
 
 ## Install
 
-1. Download `window-scape-…-mac-universal.dmg` from the [latest release](https://github.com/ESeungJun/window-scape/releases/latest).
-2. Move `창밖날씨.app` to Applications and open it. It's signed and notarized by Apple, so it opens without any warning.
-3. It appears in the top-right corner; use the window icon in the menu bar to move it or change how it's layered.
+Grab the file for your computer from the [latest release](https://github.com/ESeungJun/window-scape/releases/latest).
 
-Universal build for Apple Silicon and Intel Macs (macOS 11+).
+| Computer | File |
+| --- | --- |
+| Mac (Apple Silicon, M1 and later) | `window-scape-…-mac-arm64.dmg` |
+| Mac (Intel) | `window-scape-…-mac-x64.dmg` |
+| Windows 10/11 (64-bit) | `window-scape-…-windows-x64-setup.exe` |
+
+- **Mac** — move `창밖날씨.app` to Applications and open it. It's signed and notarized by Apple, so it opens without any warning. (macOS 11+)
+- **Windows** — run the installer. It isn't code-signed yet, so if SmartScreen warns you, click `More info` → `Run anyway`.
+
+It starts in the top-right corner, kept on top of other windows; use the window icon in the menu bar (the system tray on Windows) to move it or change how it's layered.
 
 ## Built with
 
