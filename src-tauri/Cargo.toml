@@ -1,7 +1,7 @@
 [package]
-name = "sky-island-weather"
+name = "window-scape"
 version = "0.1.1"
-description = "하늘섬 날씨 데스크톱 위젯"
+description = "창밖날씨 데스크톱 위젯"
 authors = ["Haul"]
 edition = "2024"
 rust-version = "1.90"
