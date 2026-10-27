@@ -31,9 +31,15 @@ jobs:
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # 자동 업데이트 파일 서명 키(앱에는 공개 키만 들어 있다)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if [ -z "$MAC_CERT_P12" ] || [ -z "$APPLE_API_KEY_P8" ]; then
             echo "::error::macOS 서명용 Secrets 가 없습니다"; exit 1
+          fi
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::업데이트 서명 키 Secret(TAURI_SIGNING_PRIVATE_KEY)이 없습니다"; exit 1
           fi
           # 인증서는 직접 만든 임시 키체인에 넣는다 (macOS 26 러너에서 검증된 방식, droidlens 와 동일)
           keychain="$RUNNER_TEMP/signing.keychain-db"
@@ -62,18 +68,35 @@ jobs:
           codesign -d --entitlements - "$app" | grep -q personal-information.location
           xcrun stapler validate "$app"
           spctl --assess --type execute -vv "$app"
-      - name: 파일 이름 정리
+      - name: 파일 이름 정리와 업데이트 정보(latest.json)
         run: |
           mkdir -p out
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg "out/window-scape-$version-mac-universal.dmg"
+          bundle=src-tauri/target/universal-apple-darwin/release/bundle
+          cp $bundle/dmg/*.dmg "out/window-scape-$version-mac-universal.dmg"
+          # 자동 업데이트용 압축 앱과 서명. 유니버설 앱 하나로 Apple Silicon·Intel 을 모두 맡는다
+          tarball=$(ls $bundle/macos/*.app.tar.gz | head -1)
+          update="window-scape-$version-mac-universal.app.tar.gz"
+          cp "$tarball" "out/$update"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$update"
+          SIG="$(cat "$tarball.sig")" URL="$url" VERSION="$version" node -e '
+            const { SIG, URL, VERSION } = process.env;
+            const target = { signature: SIG, url: URL };
+            console.log(JSON.stringify({
+              version: VERSION,
+              notes: `창밖날씨 ${VERSION}`,
+              pub_date: new Date().toISOString(),
+              platforms: { "darwin-aarch64": target, "darwin-x86_64": target },
+            }, null, 2));
+          ' > out/latest.json
+          cat out/latest.json
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-dmg
+          name: macos-release
           if-no-files-found: error
-          path: out/*.dmg
+          path: out/*
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" out/*.dmg --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" out/* --title "$GITHUB_REF_NAME" --generate-notes

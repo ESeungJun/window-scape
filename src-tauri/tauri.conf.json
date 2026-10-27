@@ -50,6 +50,15 @@
       "entitlements": "./Entitlements.plist",
       "minimumSystemVersion": "11.0",
       "signingIdentity": "-"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJBMDBCQUJCQjEyOTIwNkYKUldSdklDbXh1N29BS3V2ZEZIMlV0MUViaVFTZTkwSXk1WVJQa01NNFhoM1RWLytGbkpUdCs1SGoK",
+      "endpoints": [
+        "https://github.com/ESeungJun/window-scape/releases/latest/download/latest.json"
+      ]
     }
   }
 }

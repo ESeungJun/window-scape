@@ -1,5 +1,6 @@
 //! 창밖날씨 데스크톱 위젯.
 //! 웹 화면을 테두리 없는 투명 창에 띄우고, 메뉴 막대 아이콘으로 배치·자동 실행을 제어한다.
+//! 창 배치는 설정 화면에서도 바꿀 수 있고(get_layer/set_layer), 업데이트는 updater 플러그인이 맡는다.
 
 #[cfg(target_os = "macos")]
 mod location;
@@ -7,7 +8,7 @@ mod location;
 use std::path::PathBuf;
 
 use tauri::{
-  AppHandle, Manager, PhysicalPosition, WebviewWindow,
+  AppHandle, Emitter, Manager, PhysicalPosition, WebviewWindow, Wry,
   menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
   tray::TrayIconBuilder,
 };
@@ -92,6 +93,38 @@ fn snap(window: &WebviewWindow, corner: Corner) {
   let _ = window.set_position(PhysicalPosition::new(x, area.position.y + margin));
 }
 
+/// 메뉴 막대의 배치 체크 항목. 설정 화면에서 바꿔도 체크 표시가 따라오게 보관한다
+struct LayerMenu {
+  desktop: CheckMenuItem<Wry>,
+  top: CheckMenuItem<Wry>,
+}
+
+/// 배치를 바꾸는 유일한 경로: 메뉴 체크·창·저장 파일을 맞추고 설정 화면에 알린다
+fn change_layer(app: &AppHandle, layer: Layer) {
+  if let Some(menu) = app.try_state::<LayerMenu>() {
+    let _ = menu.desktop.set_checked(layer == Layer::Desktop);
+    let _ = menu.top.set_checked(layer == Layer::Top);
+  }
+  if let Some(window) = app.get_webview_window(WINDOW) {
+    layer.apply(&window);
+  }
+  save_layer(app, layer);
+  let _ = app.emit("layer-changed", layer.as_str());
+}
+
+/// 현재 창 배치: "desktop" | "normal" | "top"
+#[tauri::command]
+fn get_layer(app: AppHandle) -> String {
+  load_layer(&app).as_str().to_string()
+}
+
+#[tauri::command]
+fn set_layer(app: AppHandle, layer: String) -> Result<(), String> {
+  let layer = Layer::parse(&layer).ok_or("unknown layer")?;
+  change_layer(&app, layer);
+  Ok(())
+}
+
 fn quit(app: &AppHandle) {
   let _ = app.save_window_state(StateFlags::SIZE | StateFlags::POSITION);
   app.exit(0);
@@ -122,7 +155,9 @@ pub fn run() {
         .build(),
     )
     .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
-    .invoke_handler(tauri::generate_handler![current_location])
+    .plugin(tauri_plugin_updater::Builder::new().build())
+    .plugin(tauri_plugin_process::init())
+    .invoke_handler(tauri::generate_handler![current_location, get_layer, set_layer])
     .setup(|app| {
       // Dock 아이콘 없이 메뉴 막대에만 사는 앱
       #[cfg(target_os = "macos")]
@@ -163,6 +198,8 @@ pub fn run() {
         ],
       )?;
 
+      app.manage(LayerMenu { desktop: desktop.clone(), top: on_top.clone() });
+
       let icon = app.default_window_icon().cloned().expect("앱 아이콘이 없다");
       TrayIconBuilder::with_id("tray")
         .icon(icon)
@@ -172,15 +209,9 @@ pub fn run() {
         .on_menu_event(move |app, event| {
           let Some(window) = app.get_webview_window(WINDOW) else { return };
           // 체크 항목은 클릭 이벤트가 오기 전에 체크 상태가 이미 뒤집혀 있다
-          let set_layer = |layer: Layer| {
-            let _ = desktop.set_checked(layer == Layer::Desktop);
-            let _ = on_top.set_checked(layer == Layer::Top);
-            layer.apply(&window);
-            save_layer(app, layer);
-          };
           match event.id().as_ref() {
-            "desktop" => set_layer(if desktop.is_checked().unwrap_or(false) { Layer::Desktop } else { Layer::Normal }),
-            "top" => set_layer(if on_top.is_checked().unwrap_or(false) { Layer::Top } else { Layer::Normal }),
+            "desktop" => change_layer(app, if desktop.is_checked().unwrap_or(false) { Layer::Desktop } else { Layer::Normal }),
+            "top" => change_layer(app, if on_top.is_checked().unwrap_or(false) { Layer::Top } else { Layer::Normal }),
             "right" => snap(&window, Corner::TopRight),
             "left" => snap(&window, Corner::TopLeft),
             "show" => {

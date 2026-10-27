@@ -1,11 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "위젯 창: 기본 권한 + 창 끌어 옮기기·크기 조절",
-  "windows": ["main"],
+  "description": "위젯 창: 기본 권한 + 창 끌어 옮기기·크기 조절 + 업데이트 확인·설치 후 재시작",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
-    "core:window:allow-start-resize-dragging"
+    "core:window:allow-start-resize-dragging",
+    "updater:default",
+    "process:allow-restart"
   ]
 }
