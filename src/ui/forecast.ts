@@ -79,12 +79,20 @@ function buildWeek(root: HTMLElement, f: Forecast, onSelect: (i: number) => void
       const li = el('li');
       const b = el('button', 'day');
       b.type = 'button';
-      b.setAttribute('aria-label', `${i === 0 ? '오늘' : longDate(d.date)} ${CONDITION_LABEL[conditionFromCode(d.code)]}, 최고 ${round(d.max)}도 최저 ${round(d.min)}도`);
+      b.setAttribute(
+        'aria-label',
+        `${i === 0 ? '오늘' : longDate(d.date)} ${CONDITION_LABEL[conditionFromCode(d.code)]}, 최고 ${round(d.max)}도 최저 ${round(d.min)}도, 바람 최대 시속 ${round(d.wind)}킬로미터`,
+      );
+      // 날짜·아이콘(head)과 기온·바람(body)을 묶어 두고, 폭에 따라 CSS 가 세로/가로 배치를 바꾼다
       const icon = el('span', 'day__icon');
       icon.innerHTML = weatherIcon(conditionFromCode(d.code));
+      const head = el('span', 'day__head');
+      head.append(el('span', 'day__name', i === 0 ? '오늘' : weekday(d.date)), icon);
       const temps = el('span', 'day__temps');
       temps.append(el('b', undefined, `${round(d.max)}°`), el('span', undefined, `${round(d.min)}°`));
-      b.append(el('span', 'day__name', i === 0 ? '오늘' : weekday(d.date)), icon, temps);
+      const body = el('span', 'day__body');
+      body.append(temps, el('span', 'day__wind', `${round(d.wind)}km/h`));
+      b.append(head, body);
       b.addEventListener('click', () => onSelect(i));
       li.append(b);
       return li;
