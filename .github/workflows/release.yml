@@ -66,7 +66,7 @@ jobs:
         run: |
           mkdir -p out
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg "out/sky-island-weather-$version-mac-universal.dmg"
+          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg "out/window-scape-$version-mac-universal.dmg"
       - uses: actions/upload-artifact@v4
         with:
           name: macos-dmg

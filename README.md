@@ -1,6 +1,7 @@
-# 하늘섬 날씨 (SKY ISLE)
+# 창밖날씨 (WINDOW SCAPE)
 
-하늘에 떠 있는 로우폴리 섬으로 실제 날씨를 보여주는 웹 앱. 섬 가장자리에서 폭포가 구름바다로 떨어지고,
+바탕화면에 작은 창을 하나 내고 그 너머 로우폴리 풍경으로 실제 날씨를 보여주는 웹 앱·macOS 위젯.
+테마는 하늘섬·해안도로·파스텔 도시·움직이는 성·숲 다섯 가지이고,
 시간대·날씨·계절에 따라 하늘색, 조명, 비·눈·번개·무지개, 나뭇잎 색이 바뀐다.
 
 ## 실행
@@ -18,7 +19,7 @@ npm run build    # 타입 검사 + 프로덕션 빌드
 ```bash
 # 처음 한 번: Rust 설치 (https://rustup.rs)
 npm run tauri dev                 # 위젯 개발 실행
-npm run tauri build -- --bundles app   # src-tauri/target/release/bundle/macos/하늘섬 날씨.app
+npm run tauri build -- --bundles app   # src-tauri/target/release/bundle/macos/창밖날씨.app
 ```
 
 - 위쪽 띠를 끌면 창이 옮겨지고, 오른쪽 아래 모서리를 끌면 크기가 바뀐다. 위치·크기는 다음 실행 때도 유지된다.

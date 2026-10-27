@@ -1,9 +1,9 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "하늘섬 날씨",
-  "mainBinaryName": "sky-island-weather",
+  "productName": "창밖날씨",
+  "mainBinaryName": "window-scape",
   "version": "0.1.1",
-  "identifier": "dev.haul.skyisle",
+  "identifier": "dev.haul.windowscape",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -15,7 +15,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "하늘섬 날씨",
+        "title": "창밖날씨",
         "width": 440,
         "height": 320,
         "minWidth": 260,

@@ -1,4 +1,4 @@
-//! 하늘섬 날씨 데스크톱 위젯.
+//! 창밖날씨 데스크톱 위젯.
 //! 웹 화면을 테두리 없는 투명 창에 띄우고, 메뉴 막대 아이콘으로 배치·자동 실행을 제어한다.
 
 #[cfg(target_os = "macos")]
@@ -166,7 +166,7 @@ pub fn run() {
       let icon = app.default_window_icon().cloned().expect("앱 아이콘이 없다");
       TrayIconBuilder::with_id("tray")
         .icon(icon)
-        .tooltip("하늘섬 날씨")
+        .tooltip("창밖날씨")
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(move |app, event| {
