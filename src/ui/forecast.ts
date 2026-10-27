@@ -32,6 +32,7 @@ export interface NowElements {
   place: HTMLElement;
   temp: HTMLElement;
   cond: HTMLElement;
+  condIcon: HTMLElement;
   range: HTMLElement;
   cards: HTMLElement;
 }
@@ -41,7 +42,7 @@ export function badgeText(f: Forecast, dayIndex: number): string {
   return dayIndex === 0 ? '지금 날씨' : longDate(f.daily[dayIndex].date);
 }
 
-export function renderNow(e: NowElements, f: Forecast, dayIndex: number, placeName: string, badge: string): void {
+export function renderNow(e: NowElements, f: Forecast, dayIndex: number, placeName: string, badge: string, night: boolean): void {
   const day = f.daily[dayIndex];
   e.place.textContent = placeName;
   e.badge.textContent = badge;
@@ -49,7 +50,9 @@ export function renderNow(e: NowElements, f: Forecast, dayIndex: number, placeNa
   if (dayIndex === 0) {
     const c = f.current;
     e.temp.textContent = String(round(c.temp));
-    e.cond.textContent = CONDITION_LABEL[conditionFromCode(c.code, c.wind)];
+    const cond = conditionFromCode(c.code, c.wind);
+    e.cond.textContent = CONDITION_LABEL[cond];
+    e.condIcon.innerHTML = weatherIcon(cond, night);
     e.cards.replaceChildren(
       card('바람', `${round(c.wind)} km/h`, `${WIND_DIRS[Math.round(c.windDir / 45) % 8]}풍`),
       card('강수', `${c.precipitation} mm`, '지난 1시간'),
@@ -57,7 +60,9 @@ export function renderNow(e: NowElements, f: Forecast, dayIndex: number, placeNa
     );
   } else {
     e.temp.textContent = String(round(day.max));
-    e.cond.textContent = CONDITION_LABEL[conditionFromCode(day.code)];
+    const cond = conditionFromCode(day.code);
+    e.cond.textContent = CONDITION_LABEL[cond];
+    e.condIcon.innerHTML = weatherIcon(cond);
     e.cards.replaceChildren(card('강수', `${day.precipitation} mm`, '하루 합계'));
   }
 }
@@ -145,12 +150,12 @@ export function renderHourly(title: HTMLElement, chart: SVGSVGElement, list: HTM
         const icon = el('span', 'hour__icon');
         const cond = conditionFromCode(h.code);
         icon.innerHTML = weatherIcon(cond, hour < 6 || hour >= 19);
+        li.title = `${hour}시 ${CONDITION_LABEL[cond]}, 강수 확률 ${h.pop}%`;
         li.append(
           el('span', 'hour__time', `${hour}시`),
           icon,
-          el('span', 'hour__cond', CONDITION_LABEL[cond]),
-          el('span', 'hour__pop', `${h.pop}%`),
           el('b', 'hour__temp', `${round(h.temp)}°`),
+          el('span', 'hour__pop', `${h.pop}%`),
         );
         return li;
       }),

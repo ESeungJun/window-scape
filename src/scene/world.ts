@@ -40,6 +40,7 @@ export class World {
   private idleTimer = 0;
   private quality: Quality = 'auto';
   private minFrameTime = 0;
+  private qualityKey = '';
   private readonly focusPoint = new THREE.Vector3();
   private readonly focusDelta = new THREE.Vector3();
   private readonly shadowCenter = new THREE.Vector3();
@@ -165,6 +166,10 @@ export class World {
     const ratio = level === 'low' ? 1 : level === 'medium' ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2);
     const shadows = level !== 'low';
     const size = level === 'high' ? 2048 : 1024;
+    // 창 크기를 바꿀 때마다 불리므로 값이 그대로면 손대지 않는다(픽셀 비율을 다시 넣으면 화면이 지워져 깜빡인다)
+    const key = `${ratio}:${shadows}:${size}`;
+    if (key === this.qualityKey) return;
+    this.qualityKey = key;
     this.renderer.setPixelRatio(ratio);
     if (this.renderer.shadowMap.enabled !== shadows) {
       this.renderer.shadowMap.enabled = shadows;
@@ -188,6 +193,8 @@ export class World {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    // 크기를 바꾸면 캔버스가 비워진다. 다음 프레임(위젯은 30fps)까지 빈 화면이 보이지 않게 바로 다시 그린다
+    this.renderer.render(this.scene, this.camera);
   }
 
   /** 초당 최대 프레임. 하루 종일 떠 있는 위젯은 30 으로 낮춰 배터리를 아낀다. 0 이면 제한 없음. */

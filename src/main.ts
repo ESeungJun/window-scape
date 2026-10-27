@@ -37,6 +37,8 @@ const state = {
   place: loadSavedPlace() ?? SEOUL,
   forecast: undefined as Forecast | undefined,
   offline: false,
+  /** 지금 장면이 밤인지(지금 날씨 아이콘을 달로 그린다) */
+  night: false,
   dayIndex: 0,
   view: {
     theme: loadSavedTheme(),
@@ -49,7 +51,7 @@ const state = {
 };
 
 const now = {
-  badge: $('badge'), place: $('place'), temp: $('temp'), cond: $('cond'), range: $('range'), cards: $('cards'),
+  badge: $('badge'), place: $('place'), temp: $('temp'), cond: $('cond'), condIcon: $('condIcon'), range: $('range'), cards: $('cards'),
 };
 const settingsPanel = $('settings');
 const hourlyPanel = $('hourly');
@@ -140,6 +142,7 @@ function updateScene() {
   const minTemp = v.season === 'live' && f ? f.daily[state.dayIndex]?.min : undefined;
   world.setSelection(time, cond, season, minTemp);
   document.body.classList.toggle('is-dark', time === 'night' || time === 'evening');
+  state.night = time === 'night';
 }
 
 function isPreview() {
@@ -155,7 +158,7 @@ function renderInfo() {
     return;
   }
   const badge = isPreview() ? '미리보기' : state.offline ? '연결 안 됨 · 이전 정보' : badgeText(f, state.dayIndex);
-  renderNow(now, f, state.dayIndex, state.place.name, badge);
+  renderNow(now, f, state.dayIndex, state.place.name, badge, state.night);
   renderWeek($('week'), f, state.dayIndex, selectDay);
   if (!hourlyPanel.hidden) renderHourly($('hourlyTitle'), $<SVGSVGElement>('chart'), $('hourlyList'), f, state.dayIndex);
 }
@@ -167,16 +170,15 @@ function refresh() {
 
 // ── 패널 ──────────────────────────────────────────────
 
-/** 시간별 패널을 닫는 모든 경로(닫기 버튼·Esc·설정 열기·같은 요일 다시 누름)가 여기를 지난다. */
+/** 요일 상세를 닫는 모든 경로(닫기 버튼·Esc·같은 요일 다시 누름)가 여기를 지난다. */
 function closeHourly() {
   hourlyPanel.hidden = true;
   state.dayIndex = 0;
 }
 
+/** 요일 상세는 아래 예보 바 안, 설정은 오른쪽 위라 서로 겹치지 않아 각각 열고 닫는다 */
 function openPanel(panel: HTMLElement) {
   panel.hidden = false;
-  if (panel === hourlyPanel) settingsPanel.hidden = true;
-  else closeHourly();
   syncSettingsButton();
 }
 
