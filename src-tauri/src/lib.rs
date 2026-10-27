@@ -76,12 +76,12 @@ fn layer_path(app: &AppHandle) -> Option<PathBuf> {
   app.path().app_config_dir().ok().map(|dir| dir.join(LAYER_FILE))
 }
 
-/// 저장된 층을 읽는다. 없거나 깨졌으면 바탕화면 고정.
+/// 저장된 층을 읽는다. 없거나 깨졌으면 항상 위.
 fn load_layer(app: &AppHandle) -> Layer {
   layer_path(app)
     .and_then(|p| std::fs::read_to_string(p).ok())
     .and_then(|s| Layer::parse(&s))
-    .unwrap_or(Layer::Desktop)
+    .unwrap_or(Layer::Top)
 }
 
 fn save_layer(app: &AppHandle, layer: Layer) {
