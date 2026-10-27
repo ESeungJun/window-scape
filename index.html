@@ -15,7 +15,7 @@
       <p class="now__badge" id="badge">불러오는 중…</p>
       <h1 class="now__place" id="place">서울</h1>
       <p class="now__temp"><span id="temp">--</span><span class="now__deg">°</span></p>
-      <p class="now__cond" id="cond"></p>
+      <p class="now__cond"><span id="condIcon" class="now__icon"></span><span id="cond"></span></p>
       <p class="now__range" id="range"></p>
       <div class="now__cards" id="cards"></div>
     </section>
@@ -40,13 +40,14 @@
       <p class="panel__note">실시간이 아닌 값을 고르면 실제 날씨 대신 미리보기로 보여줘요.</p>
     </aside>
 
-    <aside id="hourly" class="panel glass" hidden aria-label="시간별 예보">
-      <header class="panel__head"><h2 id="hourlyTitle"></h2><button class="close" type="button" data-close="hourly" aria-label="닫기">✕</button></header>
-      <svg id="chart" class="chart" viewBox="0 0 300 122" role="img" aria-label="시간별 기온 그래프"></svg>
-      <ul id="hourlyList" class="hours"></ul>
-    </aside>
-
     <footer class="week">
+      <section id="hourly" class="hourly" hidden aria-label="시간별 예보">
+        <header class="hourly__head"><h2 id="hourlyTitle"></h2><button class="close" type="button" data-close="hourly" aria-label="시간별 예보 닫기">✕</button></header>
+        <div class="hourly__body">
+          <svg id="chart" class="chart" viewBox="0 0 300 122" role="img" aria-label="시간별 기온 그래프"></svg>
+          <ul id="hourlyList" class="hours"></ul>
+        </div>
+      </section>
       <ol id="week" class="week__days"></ol>
       <p class="week__credit">날씨 데이터 <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> · CC BY 4.0</p>
     </footer>
