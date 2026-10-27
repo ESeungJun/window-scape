@@ -107,11 +107,16 @@ export function renderHourly(title: HTMLElement, chart: SVGSVGElement, list: HTM
 
   // 기온 그래프
   chart.replaceChildren();
+  // 그리는 영역의 가로 길이를 실제 그래프 칸 비율에 맞춘다. 높이(122)는 고정이라 글자 크기는 그대로고
+  // 그래프만 칸 너비를 꽉 채운다(비율을 고정하면 높이를 줄일 때 가로도 같이 줄어 가운데에 작게 그려진다)
+  const H = 122;
+  const W = Math.max(200, Math.round((H * (chart.clientWidth || 300)) / (chart.clientHeight || H)));
+  chart.setAttribute('viewBox', `0 0 ${W} ${H}`);
   if (hours.length > 1) {
     const temps = hours.map((h) => h.temp);
     const min = Math.min(...temps);
     const max = Math.max(...temps);
-    const x = (i: number) => 14 + (i * 272) / (hours.length - 1);
+    const x = (i: number) => 14 + (i * (W - 28)) / (hours.length - 1);
     const y = (t: number) => 26 + (1 - (t - min) / (max - min || 1)) * 58;
     const line = temps.map((t, i) => `${x(i).toFixed(1)},${y(t).toFixed(1)}`).join(' ');
     const svg = (tag: string, attrs: Record<string, string>, text?: string) => {

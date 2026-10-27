@@ -53,8 +53,22 @@ impl Layer {
   }
 
   fn apply(self, window: &WebviewWindow) {
-    let _ = window.set_always_on_top(self == Layer::Top);
-    let _ = window.set_always_on_bottom(self == Layer::Desktop);
+    // macOS 는 창 높이(level)가 하나라, 끄는 호출도 높이를 '일반'으로 되돌린다.
+    // 그래서 끄는 쪽을 먼저, 켜는 쪽을 나중에 불러야 켠 값이 남는다
+    match self {
+      Layer::Top => {
+        let _ = window.set_always_on_bottom(false);
+        let _ = window.set_always_on_top(true);
+      }
+      Layer::Desktop => {
+        let _ = window.set_always_on_top(false);
+        let _ = window.set_always_on_bottom(true);
+      }
+      Layer::Normal => {
+        let _ = window.set_always_on_top(false);
+        let _ = window.set_always_on_bottom(false);
+      }
+    }
   }
 }
 
