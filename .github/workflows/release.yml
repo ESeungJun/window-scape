@@ -8,8 +8,25 @@ permissions:
   contents: write
 
 jobs:
-  macos:
-    runs-on: macos-latest
+  # OS·칩마다 따로 빌드한다. 맥은 Apple Silicon·Intel 을 각각, 윈도우는 x64 설치 파일
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: mac-arm64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            platform: darwin-aarch64
+          - name: mac-x64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            platform: darwin-x86_64
+          - name: windows-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-x86_64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,13 +35,15 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          key: ${{ matrix.target }}
       - run: npm ci
       # 서명 인증서·공증 키는 이 단계에만 넘긴다
-      - name: Build (서명 + 공증)
+      - name: Build macOS (서명 + 공증)
+        if: runner.os == 'macOS'
         env:
           MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
           MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
@@ -60,39 +79,90 @@ jobs:
             echo "::error::Developer ID Application 인증서를 찾지 못했습니다"; exit 1
           fi
           export APPLE_SIGNING_IDENTITY
-          npm run tauri build -- --target universal-apple-darwin --bundles app,dmg
+          npm run tauri build -- --target ${{ matrix.target }} --bundles app,dmg
       - name: 서명·공증 확인
+        if: runner.os == 'macOS'
         run: |
-          app=$(ls -d src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app | head -1)
+          app=$(ls -d src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app | head -1)
           codesign --verify --deep --strict "$app"
           codesign -d --entitlements - "$app" | grep -q personal-information.location
           xcrun stapler validate "$app"
           spctl --assess --type execute -vv "$app"
-      - name: 파일 이름 정리와 업데이트 정보(latest.json)
+      # 윈도우는 코드 서명 인증서가 없어 설치 파일만 업데이트 키로 서명한다
+      - name: Build Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::업데이트 서명 키 Secret(TAURI_SIGNING_PRIVATE_KEY)이 없습니다"; exit 1
+          fi
+          npm run tauri build -- --target ${{ matrix.target }} --bundles nsis
+      - name: 파일 이름 정리
+        shell: bash
         run: |
           mkdir -p out
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          bundle=src-tauri/target/universal-apple-darwin/release/bundle
-          cp $bundle/dmg/*.dmg "out/window-scape-$version-mac-universal.dmg"
-          # 자동 업데이트용 압축 앱과 서명. 유니버설 앱 하나로 Apple Silicon·Intel 을 모두 맡는다
-          tarball=$(ls $bundle/macos/*.app.tar.gz | head -1)
-          update="window-scape-$version-mac-universal.app.tar.gz"
-          cp "$tarball" "out/$update"
+          bundle=src-tauri/target/${{ matrix.target }}/release/bundle
+          if [ "$RUNNER_OS" = macOS ]; then
+            cp $bundle/dmg/*.dmg "out/window-scape-$version-${{ matrix.name }}.dmg"
+            # 자동 업데이트용 압축 앱과 서명
+            src=$(ls $bundle/macos/*.app.tar.gz | head -1)
+            update="window-scape-$version-${{ matrix.name }}.app.tar.gz"
+          else
+            # NSIS 설치 파일이 곧 자동 업데이트 파일이다
+            src=$(ls $bundle/nsis/*-setup.exe | head -1)
+            update="window-scape-$version-${{ matrix.name }}-setup.exe"
+          fi
+          cp "$src" "out/$update"
+          # latest.json 은 release 단계에서 플랫폼별 조각을 합쳐 만든다
           url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$update"
-          SIG="$(cat "$tarball.sig")" URL="$url" VERSION="$version" node -e '
-            const { SIG, URL, VERSION } = process.env;
-            const target = { signature: SIG, url: URL };
-            console.log(JSON.stringify({
-              version: VERSION,
-              notes: `창밖날씨 ${VERSION}`,
-              pub_date: new Date().toISOString(),
-              platforms: { "darwin-aarch64": target, "darwin-x86_64": target },
-            }, null, 2));
-          ' > out/latest.json
-          cat out/latest.json
+          SIG="$(cat "$src.sig")" URL="$url" node -e '
+            const { SIG, URL } = process.env;
+            console.log(JSON.stringify({ signature: SIG, url: URL }));
+          ' > "out/platform-${{ matrix.platform }}.json"
+          ls -l out
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-release
+          name: release-${{ matrix.name }}
+          if-no-files-found: error
+          path: out/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: out
+          merge-multiple: true
+      - name: 업데이트 정보(latest.json)
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          VERSION="$version" node -e '
+            const fs = require("fs");
+            const platforms = {};
+            for (const f of fs.readdirSync("out").filter((f) => f.startsWith("platform-"))) {
+              platforms[f.slice("platform-".length, -".json".length)] = JSON.parse(fs.readFileSync(`out/${f}`, "utf8"));
+            }
+            console.log(JSON.stringify({
+              version: process.env.VERSION,
+              notes: `창밖날씨 ${process.env.VERSION}`,
+              pub_date: new Date().toISOString(),
+              platforms,
+            }, null, 2));
+          ' > latest.json
+          rm out/platform-*.json
+          mv latest.json out/
+          cat out/latest.json
+          ls -l out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
           if-no-files-found: error
           path: out/*
       - name: Publish release
