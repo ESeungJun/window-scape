@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>하늘섬 날씨</title>
+  </head>
+  <body>
+    <div id="scene" class="scene"></div>
+
+    <header class="brand"><b>SKY ISLE</b><span>하늘섬 날씨</span></header>
+
+    <section class="now" aria-live="polite">
+      <p class="now__badge" id="badge">불러오는 중…</p>
+      <h1 class="now__place" id="place">서울</h1>
+      <p class="now__temp"><span id="temp">--</span><span class="now__deg">°</span></p>
+      <p class="now__cond" id="cond"></p>
+      <p class="now__range" id="range"></p>
+      <div class="now__cards" id="cards"></div>
+    </section>
+
+    <div class="toolbar glass">
+      <div class="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4 4" /></svg>
+        <input id="search" type="search" placeholder="도시 검색" autocomplete="off" aria-label="도시 검색" aria-controls="results" aria-expanded="false" />
+        <ul id="results" class="search__results glass" hidden></ul>
+      </div>
+      <button id="locate" class="icon-btn" type="button" aria-label="현재 위치로">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /><circle cx="12" cy="12" r="7.5" /></svg>
+      </button>
+      <button id="settingsBtn" class="icon-btn" type="button" aria-label="보기 설정" aria-expanded="false" aria-controls="settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
+      </button>
+    </div>
+
+    <aside id="settings" class="panel glass" hidden aria-label="보기 설정">
+      <header class="panel__head"><h2>보기 설정</h2><button class="close" type="button" data-close="settings" aria-label="닫기">✕</button></header>
+      <div id="settingsBody"></div>
+      <p class="panel__note">실시간이 아닌 값을 고르면 실제 날씨 대신 미리보기로 보여줘요.</p>
+    </aside>
+
+    <aside id="hourly" class="panel glass" hidden aria-label="시간별 예보">
+      <header class="panel__head"><h2 id="hourlyTitle"></h2><button class="close" type="button" data-close="hourly" aria-label="닫기">✕</button></header>
+      <svg id="chart" class="chart" viewBox="0 0 300 122" role="img" aria-label="시간별 기온 그래프"></svg>
+      <ul id="hourlyList" class="hours"></ul>
+    </aside>
+
+    <footer class="week">
+      <ol id="week" class="week__days"></ol>
+      <p class="week__credit">날씨 데이터 <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> · CC BY 4.0</p>
+    </footer>
+
+    <button id="sound" class="sound glass" type="button" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h3l4 3.5v-11L8 10H5z" /><path d="M16 9a4 4 0 0 1 0 6" /></svg>
+      <span>소리 켜기</span>
+    </button>
+
+    <div id="toast" class="toast" role="status" hidden></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
