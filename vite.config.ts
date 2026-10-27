@@ -12,9 +12,10 @@ const CSP = [
   "form-action 'none'",
 ].join('; ');
 
+// Tauri 빌드는 tauri.conf.json 의 CSP(IPC 허용 포함)를 쓰므로 메타 태그를 넣지 않는다.
 const csp = (): Plugin => ({
   name: 'csp-meta',
-  apply: 'build',
+  apply: (_config, { command }) => command === 'build' && process.env.TAURI_ENV_PLATFORM === undefined,
   transformIndexHtml: () => [
     { tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: CSP }, injectTo: 'head-prepend' },
   ],

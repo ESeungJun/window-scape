@@ -1,0 +1,19 @@
+[package]
+name = "sky-island-weather"
+version = "0.1.0"
+description = "하늘섬 날씨 데스크톱 위젯"
+authors = ["Haul"]
+edition = "2024"
+rust-version = "1.90"
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.5", features = ["macos-private-api", "tray-icon"] }
+tauri-plugin-window-state = "2"
+tauri-plugin-autostart = "2"
