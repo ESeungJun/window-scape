@@ -9,6 +9,7 @@ import { badgeText, renderHourly, renderNow, renderWeek } from './ui/forecast';
 import { setupSearch } from './ui/search';
 import { renderSettings, type Frame, type ViewOptions } from './ui/settings';
 import { Ambience } from './ui/sound';
+import { setupDesktopSettings } from './ui/desktop-settings';
 import { isDesktopApp, nativeLocation, setupWidget } from './widget';
 
 const SEOUL: Place = { name: '서울', lat: 37.5665, lon: 126.978 };
@@ -293,6 +294,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 setupSearch($<HTMLInputElement>('search'), $<HTMLUListElement>('results'), choosePlace);
+if (isDesktopApp) setupDesktopSettings(settingsPanel, toast);
 
 /** 브라우저는 Geolocation API, 데스크톱 앱은 macOS 위치 API. 실패하면 오류 코드(1~3)를 던진다. */
 function locate(): Promise<{ lat: number; lon: number }> {

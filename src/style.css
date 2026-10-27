@@ -39,6 +39,8 @@ svg { stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round
   overflow: hidden;
   transform: translateZ(0);
   transition: inset 0.7s cubic-bezier(0.2, 0.8, 0.2, 1), border-radius 0.7s, box-shadow 0.7s;
+  /* 데스크톱 위젯 투명도(설정에서 조절) */
+  opacity: var(--app-opacity, 1);
 }
 
 /* 쇼케이스: 베이지 배경 위 둥근 창에 화면을 담는다(F 키 또는 ?showcase) */
@@ -408,3 +410,12 @@ body.widget .sound { display: none; }
   body.widget .week { left: auto; width: auto; padding: 2px 8px; background: rgba(18, 32, 46, 0.5); }
   body.widget .week__credit { margin: 0; }
 }
+
+/* ── 데스크톱 설정: 투명도·앱 정보 ── */
+.slider { flex: 1; min-width: 120px; accent-color: var(--accent); }
+.slider__value { min-width: 38px; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.chips__list:has(.slider) { align-items: center; flex-wrap: nowrap; }
+.about__version { align-self: center; margin-right: 4px; font-size: 12px; font-weight: 700; }
+.about__status { margin: 6px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-soft); }
+.about__status:empty { display: none; }
+.chip:disabled { opacity: 0.5; cursor: default; }
