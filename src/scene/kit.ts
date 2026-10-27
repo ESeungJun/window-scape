@@ -276,7 +276,8 @@ export interface Stage {
   /** floating: 구름바다 위에 뜬 섬 / ground: 지평선까지 이어진 땅 */
   readonly kind: 'floating' | 'ground';
   /** 카메라가 바라볼 점과 처음 거리 */
-  readonly view: { target: THREE.Vector3; distance: number };
+  readonly view: { target: THREE.Vector3; distance: number; /** 카메라 최소 올려본 정도(방향 벡터의 y 비율) */ minUp?: number;
+    /** 처음 보는 방향(가운데→카메라). 주면 그 각도로 시작하고 좌우로 lock 라디안까지만 돌릴 수 있다 */ dir?: THREE.Vector3; lock?: number };
   /** 카메라가 따라갈 점(움직이는 주인공이 있는 테마만) */
   focus?(out: THREE.Vector3): THREE.Vector3;
   /** 그 위치의 땅 높이(땅 테마). 카메라가 언덕 속으로 들어가지 않게 쓴다 */

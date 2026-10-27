@@ -90,3 +90,57 @@ export function fallMaterial(): THREE.ShaderMaterial {
     depthWrite: false,
   });
 }
+
+// 둥근 연못. vUv 중심(0.5,0.5)에서 가장자리까지 r=0~1
+const POND_FRAGMENT = /* glsl */ `
+  uniform float time;
+  uniform float bright;
+  uniform vec3 deep;
+  uniform vec3 light;
+  uniform vec2 ripple;
+  varying vec2 vUv;
+  ${NOISE}
+  float waves(vec2 p) {
+    return noise(p * 6.0 + vec2(time * 0.35, time * 0.2)) * 0.6
+         + noise(p * 13.0 - vec2(time * 0.5, -time * 0.4)) * 0.4;
+  }
+  void main() {
+    vec2 p = vUv - 0.5;
+    float r = length(p) * 2.0;
+    // 잔물결 높이를 미분해 반짝이는 면을 만든다
+    float h = waves(vUv);
+    float hx = waves(vUv + vec2(0.004, 0.0)) - h;
+    float hy = waves(vUv + vec2(0.0, 0.004)) - h;
+    // 헤엄치는 포켓몬 둘레로 번지는 동심원
+    float d = length(vUv - ripple) * 2.0;
+    float ring = sin(d * 38.0 - time * 3.2) * exp(-d * 5.0);
+    vec3 n = normalize(vec3(-hx * 18.0 - ring * (vUv.x - ripple.x) * 6.0, 1.0, -hy * 18.0 - ring * (vUv.y - ripple.y) * 6.0));
+    float spec = pow(max(dot(n, normalize(vec3(0.35, 1.0, 0.45))), 0.0), 220.0);
+    float depth = smoothstep(1.0, 0.15, r);
+    vec3 col = mix(light, deep, depth);
+    col += (h - 0.5) * 0.12;
+    col += spec * 1.4 + max(ring, 0.0) * 0.08;
+    // 물가: 얕아지며 밝아지고 물거품이 일렁인다
+    float foam = smoothstep(0.84, 0.97, r + noise(vec2(atan(p.y, p.x) * 6.0, time * 0.6)) * 0.06);
+    col = mix(col, vec3(0.96), foam * 0.75);
+    float alpha = 1.0 - smoothstep(0.97, 1.0, r);
+    gl_FragColor = vec4(col * bright, alpha);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
+
+export function pondMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      time: { value: 0 },
+      bright: { value: 1 },
+      deep: { value: new THREE.Color('#1f6fa8') },
+      light: { value: new THREE.Color('#7fd3ea') },
+      ripple: { value: new THREE.Vector2(0.5, 0.5) },
+    },
+    vertexShader: VERTEX,
+    fragmentShader: POND_FRAGMENT,
+    transparent: true,
+  });
+}
