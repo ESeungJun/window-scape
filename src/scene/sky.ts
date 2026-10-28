@@ -16,13 +16,14 @@ const FRAGMENT = /* glsl */ `
   uniform vec3 sunColor;
   uniform float clear;
   uniform float flash;
+  uniform float blueBelow;
   varying vec3 vDir;
   void main() {
     vec3 d = normalize(vDir);
     float h = d.y;
     vec3 col = mix(bottom, top, pow(clamp(h * 1.15 + 0.08, 0.0, 1.0), 0.75));
-    // 수평선 아래는 섬 밑 허공: 조금 더 짙게
-    col = mix(col, bottom * 0.78, smoothstep(0.0, -0.5, h));
+    // 수평선 아래는 섬 밑 허공: 조금 더 짙게(구운 장면은 하늘 윗색 쪽으로 푸르게)
+    col = mix(col, mix(bottom, top, blueBelow) * 0.78, smoothstep(0.0, -0.5, h));
     float s = max(dot(d, normalize(sunDir)), 0.0);
     col += sunColor * (pow(s, 900.0) * 3.0 + pow(s, 10.0) * 0.3) * clear;
     col += vec3(0.55, 0.6, 0.8) * flash;
@@ -41,6 +42,7 @@ export class SkyDome {
     sunColor: { value: new THREE.Color() },
     clear: { value: 1 },
     flash: { value: 0 },
+    blueBelow: { value: 0 },
   };
   private readonly starMat: THREE.PointsMaterial;
 
@@ -74,8 +76,9 @@ export class SkyDome {
     this.group.add(new THREE.Points(geo, this.starMat));
   }
 
-  update(env: Env, sunDir: THREE.Vector3, flash: number): void {
+  update(env: Env, sunDir: THREE.Vector3, flash: number, blueBelow = 0): void {
     const u = this.uniforms;
+    u.blueBelow.value = blueBelow;
     u.top.value.copy(env.skyTop);
     u.bottom.value.copy(env.skyBottom);
     u.sunDir.value.copy(sunDir);

@@ -59,6 +59,48 @@ a = -1.25
 e = Vector((math.cos(a), math.sin(a))) * R * rim_b(a) * 0.93
 grow(look.lookout(e.x, e.y, a), 1.25)
 
+# 마을 사람들(레퍼런스처럼 섬이 살아 있어 보이게). 카메라 쪽 = rot -0.84
+def at(cx, cy, rot, lx, ly):
+    return cx + lx * math.cos(rot) - ly * math.sin(rot), cy + lx * math.sin(rot) + ly * math.cos(rot)
+
+
+H = math.pi / 2
+grow(look.villager('man_vendor', *at(3.0, 0.7, 0.35, 0.0, 0.42), 0.35 - H, look.CLOTH_G, hat=True))
+grow(look.villager('man_buyer', *at(3.0, 0.7, 0.35, 0.15, -0.85), 0.35 + H, look.CLOTH_R))
+grow(look.villager('man_bench0', *at(fx - 0.8, fy + 0.12, -1.4, 0, 0.04), -1.4 - H, look.CLOTH_B, pose='sit'))
+grow(look.villager('man_bench1', *at(fx + 0.12, fy + 0.8, 3.0, 0, 0.04), 3.0 - H, CLOTH_W, hat=True, pose='sit'))
+grow(look.villager('man_well', 0.62, 0.95, 2.6, look.CLOTH_R))
+grow(look.villager('man_wave', 0.95, 0.25, -0.84, look.CLOTH_B, pose='wave'))
+block(0.95, 0.25, 0.25)
+grow(look.villager('man_shep', px - 1.1, py - 1.0, 0.4, look.CLOTH_G, hat=True))
+o = grow(look.villager('man_look', *at(e.x, e.y, a, 0.85, 0.15), a, CLOTH_W), 1.25)
+o.location.z = surface(e.x, e.y) + 0.05
+
+# 강가: 모래톱, 나무 선착장 끝에 앉은 낚시꾼, 매어 둔 나룻배
+# 폭포 쪽 강줄기, 카메라 쪽 강둑에 둬서 앞에서 잘 보이게
+mid, tan = Vector((3.0, -1.0)), Vector((1.3, -0.8)).normalized()
+nrm = Vector((-tan.y, tan.x))
+ja = math.atan2(nrm.y, nrm.x)
+jb = mid - nrm * 0.95
+blob('sand_bank', 0.6, (jb.x, jb.y - 0.05, TOP - 0.035), SAND, scale=(1.6, 1.1, 0.1), sub=3)
+grow(look.jetty(jb.x, jb.y, ja))
+deck = surface(jb.x, jb.y) + 0.1 * G
+fisher = grow(look.villager('man_fish', *(jb + nrm * 0.62 * G), ja, look.CLOTH_R, hat=True, pose='sit'))
+fisher.location.z = deck - 0.2 * G
+rod = jb + nrm * 0.95 * G
+cyl('fish_rod', 0.01, 0.007, 1.1, (rod.x, rod.y, deck + 0.45), DARKWOOD, seg=5, rot=(0, 0.9, ja))
+boat = mid + tan * 0.45 - nrm * 0.02
+grow(look.rowboat('boat', boat.x, boat.y, TOP - 0.03, math.atan2(tan.y, tan.x)), 1.15)
+# 선착장·배와 그 앞(카메라 쪽)은 나무로 가리지 않게 비워 둔다
+block(mid.x, mid.y, 1.2)
+block(jb.x, jb.y, 1.0)
+block(jb.x + 0.6, jb.y - 0.9, 1.0)
+
+# 길가 등불(밤에 점점이 켜진다)
+# 자리는 손으로 골랐다(집·벤치·강을 피해 길 바로 옆). 집 주변 막아 둔 자리가 넓어 free() 로는 다 걸러진다
+for k, (x, y) in enumerate(((1.45, 1.0), (0.2, -0.05), (-0.1, -1.3), (0.75, -2.5), (-2.4, -2.05), (-2.95, -2.6), (1.1, 1.55), (-0.75, -0.8))):
+    grow(look.lantern(f'lantern_{k}', x, y))
+
 # 나무: 머스터드 뭉게구름·황토 달걀·적갈·전나무. 빈 풀밭이 남도록 적게
 kinds = ['cloud:orange', 'pine', 'oval:red', 'cloud:orange', 'oval:rust', 'pine', 'cloud:red', 'oval:orange', 'pine']
 trees = 0

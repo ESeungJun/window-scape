@@ -73,7 +73,7 @@ export class Clouds {
     this.skyLayer.position.y = visible ? 0 : 5;
   }
 
-  update(dt: number, env: Env): void {
+  update(dt: number, env: Env, blueSea = false): void {
     this.skyMat.color.copy(WHITE).lerp(STORM_GREY, env.cloudDark);
     for (const c of this.sky) {
       const vis = smoothstep(c.threshold - 0.12, c.threshold + 0.12, env.cloudCover);
@@ -85,6 +85,7 @@ export class Clouds {
       c.obj.rotation.y = -c.angle;
     }
     this.seaMat.color.copy(WHITE).lerp(STORM_GREY, env.cloudDark * 0.55);
+    if (blueSea) this.seaMat.color.lerp(env.skyTop, 0.6);
     this.sea.rotation.y += dt * (0.004 + env.wind * 0.012);
   }
 }
