@@ -637,12 +637,12 @@ export function scatterTrees(group: THREE.Group, rng: Rng, field: Field, sway: S
 }
 
 /** 가장자리에 늘어진 덩굴. skip 각도 근처(폭포 등)는 비운다 */
-export function addVines(group: THREE.Group, rng: Rng, sway: Sway, skip: number[] = [], count = 22): void {
+export function addVines(group: THREE.Group, rng: Rng, sway: Sway, skip: number[] = [], count = 22, radius = R): void {
   for (let i = 0; i < count; i++) {
     const ang = rng() * Math.PI * 2;
     if (skip.some((s) => Math.abs(ang - s) < 0.25)) continue;
     const len = 0.6 + rng() * 2.2;
-    const r = R * rimFactor(ang) * 0.985;
+    const r = radius * rimFactor(ang) * 0.985;
     const v = mesh(new THREE.CylinderGeometry(0.035, 0.015, len, 4).translate(0, -len / 2, 0), MATS.vine, false);
     v.position.set(Math.cos(ang) * r, 0.1, Math.sin(ang) * r);
     group.add(v);
@@ -726,7 +726,7 @@ export function fallAt(angle: number, opts: { width: number; length: number; rea
 /** 모든 테마 주변을 떠다니는 작은 섬들 */
 export class Floaters {
   readonly group = new THREE.Group();
-  private readonly items: { obj: THREE.Object3D; y: number; phase: number }[] = [];
+  private readonly items: { obj: THREE.Object3D; x: number; z: number; y: number; phase: number }[] = [];
 
   constructor(rng: Rng) {
     for (let i = 0; i < 6; i++) {
@@ -737,8 +737,13 @@ export class Floaters {
       mini.position.set(Math.cos(ang) * dist, y, Math.sin(ang) * dist);
       mini.rotation.y = rng() * Math.PI;
       this.group.add(mini);
-      this.items.push({ obj: mini, y, phase: rng() * 10 });
+      this.items.push({ obj: mini, x: mini.position.x, z: mini.position.z, y, phase: rng() * 10 });
     }
+  }
+
+  /** 큰 섬과 겹치지 않게 떠다니는 섬들을 k 배 바깥으로 */
+  spread(k: number): void {
+    for (const f of this.items) f.obj.position.set(f.x * k, f.obj.position.y, f.z * k);
   }
 
   update(dt: number, t: number): void {

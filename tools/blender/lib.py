@@ -19,8 +19,17 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
 COL = scene.collection
 
-R, TOP = 6.0, 0.25
-HILL, HILL_R = Vector((-2.2, 1.4)), 2.2
+R, TOP = 9.0, 0.25
+# 앱 기본 시점에서 본 방향: CAM = 섬에서 카메라 쪽, RIGHT = 화면 오른쪽(Blender xy)
+CAM, RIGHT = Vector((0.664, -0.747)), Vector((0.747, 0.664))
+
+
+def scr(u, v):
+    """화면 기준 좌표(u 오른쪽, v 안쪽 = 화면 위) -> Blender xy. 배치를 앱에서 보이는 구도로 잡는다"""
+    return RIGHT * u - CAM * v
+
+
+HILL, HILL_R = scr(-3.4, 3.2), 2.8
 
 
 def rim(a):
@@ -310,7 +319,7 @@ def build_ground():
     rim_cylinder('ground_grass', R, 0.34, TOP - 0.17, GRASS, 0.16)
     rim_cylinder('ground_dirt', R * 0.985, 0.7, TOP - 0.62, DIRT, 0.1, taper=0.96)
     bm = bmesh.new()
-    bmesh.ops.create_cone(bm, cap_ends=True, segments=64, radius1=0.25, radius2=R * 0.93, depth=7.5)
+    bmesh.ops.create_cone(bm, cap_ends=True, segments=64, radius1=0.4, radius2=R * 0.93, depth=8.5)
     bmesh.ops.subdivide_edges(bm, edges=[e for e in bm.edges if abs(e.verts[0].co.z - e.verts[1].co.z) > 0.1], cuts=34)
     for v in bm.verts:
         a = math.atan2(v.co.y, v.co.x)
@@ -320,18 +329,18 @@ def build_ground():
         f *= 1 - 0.07 * layer * layer
         v.co.x *= f
         v.co.y *= f
-        t = (3.75 - v.co.z) / 7.5  # 0 위 ~ 1 아래
+        t = (4.25 - v.co.z) / 8.5  # 0 위 ~ 1 아래
         v.co.x += t * t * 0.9
         v.co.y += t * t * 0.5
     cliff = new_obj('ground_cliff', bm)
-    cliff.location = (0, 0, TOP - 0.95 - 3.75)
+    cliff.location = (0, 0, TOP - 0.95 - 4.25)
     finish(cliff, CLIFF, sub=1, disp=0.35, disp_size=0.9)
     # 절벽에 박힌 바위 덩어리(위쪽에 많이)
-    for i in range(46):
+    for i in range(80):
         a = rnd.random() * math.tau
         t = rnd.random() ** 1.7 * 0.75
-        z = TOP - 0.95 - t * 7.5
-        r = (R * 0.93 * (1 - t) + 0.25 * t) * rim_b(a) * 0.96
+        z = TOP - 0.95 - t * 8.5
+        r = (R * 0.93 * (1 - t) + 0.4 * t) * rim_b(a) * 0.96
         c = Vector((math.cos(a) * r + t * t * 0.9, math.sin(a) * r + t * t * 0.5, z))
         s_ = (0.32 + rnd.random() * 0.4) * (1 - t * 0.6)
         # 절벽과 같은 흙·바위 색의 납작한 판(층진 턱처럼 보이게), 절반쯤 파묻는다
@@ -347,8 +356,11 @@ def build_ground():
 def river_points():
     a = three_angle(0.42)
     edge = Vector((math.cos(a), math.sin(a))) * R * rim_b(a)
-    pts = [(-0.4, -0.3), (0.9, -0.9), (2.3, -0.6), (3.6, -1.4), tuple(edge * 0.9), tuple(edge)]
-    return [Vector(p) for p in pts]
+    # 언덕 옆 샘 -> 마을 오른쪽 -> 다리 -> 앞쪽 호수(LAKE) -> 가장자리 폭포
+    return [scr(-0.5, 5.6), scr(0.9, 3.2), scr(0.6, 0.9), scr(1.7, -1.2), LAKE.copy(), edge * 0.9, edge]
+
+
+LAKE, LAKE_R = scr(3.3, -3.4), (2.0, 1.5)
 
 
 def catmull(pts, n):
