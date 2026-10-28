@@ -166,6 +166,7 @@ LEAF = {
     'yellow': mat('leaf_yellow', '#e2b65a', 0.95, 0.08, 4.0),
     'green': mat('leaf_green', '#7f9a50', 0.95, 0.08, 4.0),
 }
+CLIFF_LEDGE = [mat('ledge_a', '#8a5a3f', 0.95, 0.08, 4.0), mat('ledge_b', '#a07858', 0.95, 0.08, 4.0)]
 PINE = mat('pine', '#4f7a57', 0.95, 0.08, 5.0)
 BUSH = mat('bush', '#7f9a50', 0.95, 0.08, 5.0)
 
@@ -310,10 +311,13 @@ def build_ground():
     rim_cylinder('ground_dirt', R * 0.985, 0.7, TOP - 0.62, DIRT, 0.1, taper=0.96)
     bm = bmesh.new()
     bmesh.ops.create_cone(bm, cap_ends=True, segments=64, radius1=0.25, radius2=R * 0.93, depth=7.5)
-    bmesh.ops.subdivide_edges(bm, edges=[e for e in bm.edges if abs(e.verts[0].co.z - e.verts[1].co.z) > 0.1], cuts=10)
+    bmesh.ops.subdivide_edges(bm, edges=[e for e in bm.edges if abs(e.verts[0].co.z - e.verts[1].co.z) > 0.1], cuts=34)
     for v in bm.verts:
         a = math.atan2(v.co.y, v.co.x)
         f = rim_b(a)
+        # 층진 바위: 높이마다 턱이 지게(톱니 모양으로 안쪽으로 물러난다), 층 두께는 둘레를 따라 조금씩 다르다
+        layer = (v.co.z * 2.6 + 0.35 * math.sin(a * 3 + 1.0)) % 1.0
+        f *= 1 - 0.07 * layer * layer
         v.co.x *= f
         v.co.y *= f
         t = (3.75 - v.co.z) / 7.5  # 0 위 ~ 1 아래
@@ -321,7 +325,19 @@ def build_ground():
         v.co.y += t * t * 0.5
     cliff = new_obj('ground_cliff', bm)
     cliff.location = (0, 0, TOP - 0.95 - 3.75)
-    finish(cliff, CLIFF, sub=1, disp=0.55, disp_size=0.7)
+    finish(cliff, CLIFF, sub=1, disp=0.35, disp_size=0.9)
+    # 절벽에 박힌 바위 덩어리(위쪽에 많이)
+    for i in range(46):
+        a = rnd.random() * math.tau
+        t = rnd.random() ** 1.7 * 0.75
+        z = TOP - 0.95 - t * 7.5
+        r = (R * 0.93 * (1 - t) + 0.25 * t) * rim_b(a) * 0.96
+        c = Vector((math.cos(a) * r + t * t * 0.9, math.sin(a) * r + t * t * 0.5, z))
+        s_ = (0.32 + rnd.random() * 0.4) * (1 - t * 0.6)
+        # 절벽과 같은 흙·바위 색의 납작한 판(층진 턱처럼 보이게), 절반쯤 파묻는다
+        o = blob(f'cliff_rock_{i}', s_, tuple(c * 0.97 + Vector((0, 0, c.z * 0.03))), CLIFF_LEDGE[i % 2], scale=(1.7, 1.4, 0.42), sub=2,
+                 disp=0.1 * s_, disp_size=0.8 * s_)
+        o.rotation_euler = (0, 0, a + math.pi / 2)
     # 언덕
     blob('ground_hill', HILL_R, (HILL.x, HILL.y, 0.15), GRASS, scale=(1, 1, 0.42), sub=4, disp=0.08, disp_size=0.8)
 
@@ -733,7 +749,7 @@ def setup_render(cam_loc, cam_target):
 
 
 
-GROUND_MATS = {'grass', 'grass_dark', 'path', 'cliff', 'dirt', 'sand'}
+GROUND_MATS = {'grass', 'grass_dark', 'path', 'cliff', 'dirt', 'sand', 'ledge_a', 'ledge_b'}
 GROUND_UV_SCALE = 4.0
 
 
@@ -898,7 +914,8 @@ def export_glb(path, join=True, lightmap=None, size=2048, samples=512):
     if lightmap:
         bake_lightmap(lightmap, size, samples)
     bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=False, export_apply=True,
-                              export_vertex_color='ACTIVE')
+                              export_vertex_color='ACTIVE', export_draco_mesh_compression_enable=True,
+                              export_draco_position_quantization=14, export_draco_texcoord_quantization=12)
     print('exported', path, flush=True)
 
 
