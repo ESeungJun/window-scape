@@ -3,9 +3,9 @@ import type { Rng } from '../util';
 import { Diorama, pathCurve, type Layout } from './diorama';
 
 /**
- * 도시 테마: 운하가 가로지르는 구시가 디오라마(모델: tools/blender/city.py).
- * 파스텔 회벽 집들, 시계탑 교회와 분수 광장, 노천카페. 자동차들이 운하를 감싸 도는 돌길을 오른쪽 차선으로 돌고,
- * 짐배 한 척이 운하를 오르내린다.
+ * 도시 테마: 피렌체를 모티브로 한 강변 옛 도시 디오라마(모델: tools/blender/city.py).
+ * 가게가 얹힌 옛 다리, 붉은 돔 성당과 종탑, 탑이 선 시청 궁전과 광장, 강을 따라 늘어선 팔라초.
+ * 자동차들이 강을 두 번 건너는 순환 도로를 오른쪽 차선으로 돌고, 나룻배 한 척이 강을 오르내린다(layout 의 길 이름은 ring·canal).
  */
 const LANE = 0.27;
 
@@ -60,7 +60,7 @@ export class City extends Diorama {
       }
     }
     if (this.canal && this.boat) {
-      // 운하 끝에 닿으면 돌아선다
+      // 강 끝에 닿으면 돌아선다
       this.boatU += (this.boatDir * 0.22 * dt) / this.canal.getLength();
       if (this.boatU > 0.93 || this.boatU < 0.07) {
         this.boatDir = -this.boatDir;

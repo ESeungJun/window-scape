@@ -55,6 +55,8 @@ export class World {
   private minFrameTime = 0;
   private qualityKey = '';
   private readonly shadowCenter = new THREE.Vector3();
+  private readonly focusPoint = new THREE.Vector3();
+  private readonly focusDelta = new THREE.Vector3();
   private static readonly ORIGIN = new THREE.Vector3();
 
   constructor(private readonly container: HTMLElement, theme: Theme = 'island') {
@@ -178,7 +180,9 @@ export class World {
     dir.y = Math.max(dir.y, dir.length() * (floating ? 0.58 : 0.45));
     dir.normalize();
     const narrow = this.container.clientWidth < this.container.clientHeight;
-    c.target.copy(this.stage.view.target);
+    // 돌아다니는 주인공이 있으면 처음부터 그쪽을 비춘다
+    if (this.stage.focus) this.stage.focus(c.target);
+    else c.target.copy(this.stage.view.target);
     this.camera.position.copy(c.target).addScaledVector(dir, this.stage.view.distance * (narrow ? 1.45 : 1));
     c.update();
   }
@@ -290,6 +294,13 @@ export class World {
     updateSharedMaterials(env);
     this.stage.update(dt, this.time, env);
     this.floaters.update(dt, this.time);
+    // 돌아다니는 주인공이 있으면 카메라가 부드럽게 따라간다(보는 각도는 유지)
+    if (this.stage.focus) {
+      this.stage.focus(this.focusPoint);
+      this.focusDelta.subVectors(this.focusPoint, this.controls.target).multiplyScalar(1 - Math.exp(-dt * 0.8));
+      this.controls.target.add(this.focusDelta);
+      this.camera.position.add(this.focusDelta);
+    }
     this.controls.update(dt);
     // 땅 테마: 카메라가 언덕 속으로 들어가지 않게 땅 위로 밀어 올린다
     if (this.stage.groundHeight) {

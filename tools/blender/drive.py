@@ -109,8 +109,8 @@ def paint_far(x, y, z):
     return GRASS
 
 
-tile.surround('far_ground', W, D, 0.2, hfar, paint_far)
-tile.liquid_far('liquid_sea_far', W, D, hfar, LEVEL)
+tile.surround('far_ground', W, D, 0.2, hfar, paint_far, keep=10.0)
+tile.liquid_far('liquid_sea_far', W, D, hfar, LEVEL, margin=0.8)
 
 # ── 도로: 아스팔트, 가운데 점선, 바다 쪽 가드레일 ─────────────
 ASPHALT = mat('road', '#5d5f66', 0.9, 0.05, 10.0)

@@ -1,45 +1,55 @@
-# 도시 테마: 운하가 가로지르는 구시가 디오라마. 앱: public/models/city.glb + city_light.png(라이트맵)
-#   blender -b -P tools/blender/city.py -- public/models glb 384
+# 도시 테마: 피렌체를 모티브로 한 강변 옛 도시 디오라마. 앱: public/models/city.glb + city_light.png(라이트맵)
+#   blender -b -P tools/blender/city.py -- public/models glb 256
 #   ffmpeg -i public/models/city_light.png -c:v libwebp -quality 90 public/models/city_light.webp  (png 는 지운다)
-# 구시가 한 구역: 가운데를 지나는 돌 운하(아치 다리 둘), 운하를 감싸 도는 돌길(자동차가 돈다),
-# 뒤쪽 두 변을 따라 늘어선 파스텔 회벽 집들, 시계탑 교회와 분수 광장, 노천카페, 앞쪽 공원.
-# 둘레(far_*)는 운하가 이어지는 시가지 구역들(밤에 창이 켜진다)이 펼쳐지고, 멀리 초록 언덕이 감싼다.
+# 가운데를 흐르는 넓은 강(아르노 같은)과 가게가 얹힌 옛 다리(베키오 다리 같은), 순환 도로가 건너는 세 아치 돌다리,
+# 왼쪽 둑에는 붉은 팔각 돔 성당과 줄무늬 종탑·세례당, 흉벽 탑이 선 시청 궁전과 광장,
+# 강을 따라 늘어선 황토·크림색 팔라초(초록 덧창, 낮은 모임지붕, 처마, 옥상 정자), 오른쪽 둑에는 사이프러스 정원.
+# 둘레(far_*)는 크기·높이·지붕이 제각각인 시가지와 먼 돔·종탑, 이어지는 강과 다리, 그 너머 사이프러스·올리브 언덕과 빌라.
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import *  # noqa: F401,F403
 import lib
 import look
 import tile
-
-# 집이 많아 기와는 줄 단위로(삼각형을 크게 줄인다)
-look.ROW_ROOF = True
 from tile import smooth, three
 
 W = D = 16.0
 H = math.pi / 2
-CX0, CX1 = 0.4, 2.8  # 운하 양쪽 둑(x). 타일 격자(0.2)에 맞춘다
+RX0, RX1 = 2.0, 4.8  # 강 양쪽 둑(x). 타일 격자(0.2)에 맞춘다
+MID = (RX0 + RX1) / 2
 BED, LEVEL = TOP - 0.8, TOP - 0.38
-RING, RW = 5.3, 1.0  # 순환 도로 반 크기, 폭
+RC, RXR, RYR, RW = 0.6, 6.0, 5.4, 1.0  # 순환 도로 가운데 x, 반 크기(x, y), 폭
+PV_Y = -0.6  # 옛 다리 자리(y)
 
-PAVE = mat('pave', '#ddd2bf', 0.95, 0.07, 9.0)
+PAVE = mat('pave', '#d8ccb6', 0.95, 0.07, 9.0)
+PIAZZA = mat('piazza', '#e6dccb', 0.95, 0.05, 7.0)
 ROAD = mat('road', '#8e8780', 0.9, 0.08, 12.0)
-QUAY = mat('quay', '#b9ab95', 0.9, 0.08, 6.0)
-PAVE_LIGHT = mat('pave_light', '#ebe2d0', 0.95, 0.05, 9.0)
+QUAY = mat('quay', '#b6a68a', 0.9, 0.08, 6.0)
 CURB = mat('curb', '#cfc4b0', 0.9, 0.05, 6.0)
-SLATE = banded('roof_slate', ['#5f6b74', '#6b7882', '#56616a'], 14.0, 0.3, 0.3, 0.8)
+PIETRA = mat('pietra', '#8f8c86', 0.9, 0.05, 8.0)  # 회색 사암(창틀·띠)
+RUSTIC = mat('rustic', '#c4b08c', 0.9, 0.12, 5.0)  # 거친 돌 1층
+MARBLE = mat('marble', '#efeae0', 0.7, 0.03, 8.0)
+MARBLE_G = mat('marble_g', '#55705a', 0.7, 0.04, 8.0)
+MARBLE_P = mat('marble_p', '#d7a596', 0.7, 0.04, 8.0)
+DOME = banded('dome', ['#bf5f3a', '#c96a43', '#b45634'], 10.0, 0.3, 0.3, 0.8)
+GOLD = mat('gold', '#d9b25a', 0.4, 0.03)
+COTTO = [banded(f'cotto_{k}', c, 14.0, 0.3, 0.3, 0.85) for k, c in enumerate((
+    ['#b9603d', '#c46c47', '#ad5636'], ['#c87850', '#d18459', '#bd6e48'], ['#a85a3c', '#b36443', '#9d5236']))]
 WALLS = [mat(f'wall_{k}', c, 0.9, 0.05, 8.0) for k, c in enumerate(
-    ('#efe4cf', '#ebc9a6', '#efd9a0', '#e8bcae', '#cdd6b8', '#c3d5dc', '#f3efe7', '#e6c08e'))]
-SHUTTERS = [mat(f'shutter_{k}', c, 0.8, 0.04) for k, c in enumerate(('#6f8a6a', '#5f7f9c', '#a8664a', '#5e6f6a'))]
-AWNINGS = [(CLOTH_R, CLOTH_W), (look.CLOTH_G, CLOTH_W), (look.CLOTH_B, CLOTH_W)]
-ROOFS = [TILE, ROOF_RED, ROOF_BROWN, SLATE]
+    ('#ead3a4', '#ddb47c', '#cf9a68', '#f0e4c8', '#dcae92', '#e7c88e', '#c99872', '#efdcb4'))]
+SHUT = [mat('shut_g', '#55684a', 0.8, 0.04), mat('shut_b', '#6a5038', 0.8, 0.04)]
+CYPRESS = mat('cypress', '#3f5a3d', 0.95, 0.08, 5.0)
+UMBRELLA = mat('umbrella', '#5f7a45', 0.95, 0.08, 5.0)
+OLIVE = mat('olive', '#9aa17a', 0.95, 0.08, 5.0)
+FIELD = [GRASS, mat('field_dry', '#c8b878', 0.95, 0.08, 4.0), mat('field_olive', '#a9ad7c', 0.95, 0.08, 4.0), GRASS_DARK]
 
 
-def in_canal(x):
-    return CX0 < x < CX1
+def in_river(x):
+    return RX0 < x < RX1
 
 
 def height(x, y):
-    if CX0 + 0.01 < x < CX1 - 0.01:
+    if RX0 + 0.01 < x < RX1 - 0.01:
         return BED
     return TOP
 
@@ -48,85 +58,200 @@ lib.surface = height
 look.surface = height
 
 
+def garden(x, y):
+    """오른쪽 둑 앞 정원, 앞쪽 강변 공원"""
+    return (x > RX1 + 0.4 and y < -1.4) or (y < -RYR - 0.7 and x < RX0 - 0.3)
+
+
+def piazza(x, y):
+    return (-3.9 < x < -0.1 and -2.9 < y < 0.3) or (-4.7 < x < -0.3 and -4.9 < y < -2.6)
+
+
 def paint(x, y, z):
     if z < TOP - 0.1:
         return QUAY
-    # 앞쪽 공원(앞 두 변 안쪽 띠)
-    if (x > RING + 0.9 and y < RING - 1.5) or (y < -RING - 0.9 and x > -RING + 1.5 and not in_canal(x)):
+    if garden(x, y):
         return GRASS
+    if piazza(x, y):
+        return PIAZZA
     return PAVE
 
 
 tile.build(W, D, height, paint, water=LEVEL, step=0.2, ground=True)
-tile.liquid_plane('liquid_canal', W, D, height, LEVEL, step=0.2)
+tile.liquid_plane('liquid_river', W, D, height, LEVEL, step=0.2)
 
-# ── 둘레 시가지: 네모 구역(집이 가장자리를 두른다)과 길, 운하는 그대로 이어진다 ─────────
-PER, BX, SW = W / 2 + 1.4, 6.0, 1.2  # 타일 둘레 길 바깥 끝, 구역 폭, 길 폭
-CITY_R = 44.0
-MID = (CX0 + CX1) / 2
-spans = [(-W / 2, W / 2)] + [(PER + k * (BX + SW), PER + k * (BX + SW) + BX) for k in range(7)]
-spans += [(-b, -a) for a, b in spans[1:]]
+# ── 둘레 시가지: 크기가 제각각인 구역, 강은 그대로 이어진다 ─────────
+CITY_R = 40.0
+PER = W / 2 + 1.2
 
 
-def span_of(v):
+def spans_out(seed):
+    r = random.Random(seed)
+    out, t = [], PER
+    while t < CITY_R + 8:
+        b = 3.6 + r.random() * 3.6
+        out.append((t, t + b))
+        t += b + 0.9 + r.random() * 0.6
+    return out
+
+
+XS = [(-W / 2, W / 2)] + spans_out(1) + [(-b, -a) for a, b in spans_out(2)]
+YS = [(-D / 2, D / 2)] + spans_out(3) + [(-b, -a) for a, b in spans_out(4)]
+
+
+def span_of(v, spans):
     return next((sp for sp in spans if sp[0] <= v <= sp[1]), None)
 
 
-# 옛 구역을 감싼 첫 줄 구역은 공원 띠(집이 옛 구역을 가리지 않게)
-RING1 = (spans[0], spans[1], spans[8])
-park = lambda sx, sy: sx in RING1 and sy in RING1
-
-
 def corridor(x):
-    """운하와 양쪽 둑길"""
-    return abs(x - MID) < (CX1 - CX0) / 2 + 0.9
+    """강과 양쪽 둑길"""
+    return abs(x - MID) < (RX1 - RX0) / 2 + 0.9
 
 
 def hills(x, y):
     r = math.hypot(x, y)
     a = math.atan2(y, x)
-    return 6.0 * (0.6 + 0.3 * math.sin(a * 3 + 0.5)) * smooth(CITY_R + 2, 85, r) * smooth(1.6, 5.0, abs(x - MID))
+    # 뒤쪽(북쪽 언덕 마을 쪽)이 더 높다
+    return (5.0 + 3.0 * max(0.0, math.sin(a))) * (0.6 + 0.3 * math.sin(a * 3 + 0.5) + 0.15 * math.sin(a * 7 + 1.3)) \
+        * smooth(CITY_R + 2, 80, r) * smooth(1.6, 6.0, abs(x - MID))
 
 
 def hfar(x, y):
     return height(x, y) + hills(x, y)
 
 
+def belt(x, y):
+    """앞쪽 두 변을 감싼 공원 띠(집이 가운데 타일을 가리지 않게)"""
+    return max(abs(x) - W / 2, abs(y) - D / 2) < 8.0 and (x > W / 2 + 0.1 or y < -D / 2 - 0.1)
+
+
+def cell(x, y, s):
+    return math.floor(x / s) * 7 + math.floor(y / s) * 13
+
+
 def paint_far(x, y, z):
-    if in_canal(x) and z < TOP - 0.1:
+    if in_river(x) and z < TOP - 0.1:
         return QUAY
     if math.hypot(x, y) > CITY_R + 3:
-        return GRASS
-    sx, sy = span_of(x), span_of(y)
+        # 언덕: 밭·올리브밭·풀밭 조각보
+        return FIELD[(cell(x + 3, y, 7.0) * 2654435761 >> 7) % len(FIELD)]
+    sx, sy = span_of(x, XS), span_of(y, YS)
     if sx and sy and not corridor(x):
         inset = min(x - sx[0], sx[1] - x, y - sy[0], sy[1] - y)
-        if inset > (0.3 if park(sx, sy) else 1.6):
-            return GRASS  # 공원·안뜰
+        if belt(x, y) and inset > 0.3:
+            return GRASS
+        if inset > 1.9:
+            return GRASS if (cell(x, y, 5) % 3) else PIAZZA  # 안뜰 정원·광장
     return PAVE
 
 
-tile.surround('far_ground', W, D, 0.2, hfar, paint_far)
-tile.liquid_far('liquid_canal_far', W, D, hfar, LEVEL)
+tile.surround('far_ground', W, D, 0.2, hfar, paint_far, keep=6.0)
+tile.liquid_far('liquid_river_far', W, D, hfar, LEVEL, margin=0.3)
 
-# 운하 둑: 돌벽 + 갓돌
-for sx, x in ((-1, CX0), (1, CX1)):
-    o = box(f'quay_wall_{sx}', (0.16, D, TOP - BED), (x - sx * 0.08, 0, (TOP + BED) / 2), QUAY, bevel=0.01)
-    o = box(f'quay_cap_{sx}', (0.26, D, 0.07), (x - sx * 0.04, 0, TOP + 0.03), CURB, bevel=0.02)
-    for k in range(40):
-        yy = -D / 2 + (k + 0.5) * D / 40
-        if rnd.random() < 0.25:
-            o = cyl(f'bollard_{sx}_{k}', 0.045, 0.05, 0.16, (x + sx * 0.3, yy, TOP + 0.08), DARKWOOD, seg=8, bevel=0.01)
+# 강둑: 돌벽 + 갓돌
+for sx, x in ((-1, RX0), (1, RX1)):
+    box(f'quay_wall_{sx}', (0.16, D, TOP - BED), (x - sx * 0.08, 0, (TOP + BED) / 2), QUAY, bevel=0.01)
+    box(f'quay_cap_{sx}', (0.26, D, 0.07), (x - sx * 0.04, 0, TOP + 0.03), CURB, bevel=0.02)
 
-# ── 순환 도로 ────────────────────────────────────────
-def ring_points(r, n=96):
+
+# ── 모양 도우미 ───────────────────────────────────────
+
+def lathe(name, prof, seg, m, rot0=0.0, cap=True):
+    """(반지름, 높이) 단면을 seg 각으로 돌린 면(성당 돔·북·탑)"""
+    bm = bmesh.new()
+    rings = [[bm.verts.new((r * math.cos(rot0 + k * math.tau / seg), r * math.sin(rot0 + k * math.tau / seg), z)) for k in range(seg)]
+             for r, z in prof]
+    for a, b in zip(rings, rings[1:]):
+        for k in range(seg):
+            j = (k + 1) % seg
+            bm.faces.new([a[k], a[j], b[j], b[k]])
+    if cap and prof[-1][0] > 0:
+        bm.faces.new(rings[-1])
+    return finish(new_obj(name, bm), m, smooth=False)
+
+
+def ribs(name, prof, seg, m, rot0=0.0, w=0.035, out=0.02):
+    """돔 모서리마다 흰 갈비뼈 띠"""
+    bm = bmesh.new()
+    for k in range(seg):
+        a = rot0 + k * math.tau / seg
+        c, s = math.cos(a), math.sin(a)
+        L, R_ = [], []
+        for r, z in prof:
+            rr = r + out
+            L.append(bm.verts.new((rr * c - w * s, rr * s + w * c, z)))
+            R_.append(bm.verts.new((rr * c + w * s, rr * s - w * c, z)))
+        for i in range(len(prof) - 1):
+            bm.faces.new([R_[i], L[i], L[i + 1], R_[i + 1]])
+    return finish(new_obj(name, bm), m, smooth=False)
+
+
+def hip_roof(name, w, d, z, rise, m, o=0.14):
+    """낮은 모임지붕(용마루는 긴 쪽)"""
+    sw = d > w
+    if sw:
+        w, d = d, w
+    r_ = (w - d) / 2
+    bm = bmesh.new()
+    P_ = lambda x, y, zz: bm.verts.new((y, x, zz) if sw else (x, y, zz))
+    A, B, C, D_ = P_(-w / 2 - o, -d / 2 - o, z), P_(w / 2 + o, -d / 2 - o, z), P_(w / 2 + o, d / 2 + o, z), P_(-w / 2 - o, d / 2 + o, z)
+    R1, R2 = P_(-r_, 0, z + rise), P_(r_ + 1e-3, 0, z + rise)
+    faces = ([A, B, R2, R1], [C, D_, R1, R2], [D_, A, R1], [B, C, R2])
+    for f in faces:
+        bm.faces.new(f[::-1] if sw else f)
+    return finish(new_obj(name, bm), m, smooth=False)
+
+
+def gable_prism(name, w, L, z, rise, m, o=0.08):
+    """박공 지붕(용마루는 y 방향, 길이 L)"""
+    bm = bmesh.new()
+    v = [bm.verts.new(p) for p in ((-w / 2 - o, -L / 2, z), (w / 2 + o, -L / 2, z), (0, -L / 2, z + rise),
+                                     (-w / 2 - o, L / 2, z), (w / 2 + o, L / 2, z), (0, L / 2, z + rise))]
+    bm.faces.new([v[1], v[4], v[5], v[2]])
+    bm.faces.new([v[3], v[0], v[2], v[5]])
+    return finish(new_obj(name, bm), m, smooth=False)
+
+
+def arched_bridge(name, x, y, span, width, arches, r, sz, rail_m, deck_m=QUAY):
+    """돌다리: 강바닥까지 내려간 돌벽에 아치를 뚫는다(sz: 아치 세로 비율)"""
+    deck = box(f'{name}_deck', (span, width, TOP + 0.06 - BED), (0, 0, (TOP + 0.06 + BED) / 2), deck_m, bevel=0.03)
+    bpy.context.view_layer.objects.active = deck
+    bpy.ops.object.modifier_apply(modifier='bevel')
+    step = (RX1 - RX0) / arches
+    for k in range(arches):
+        cut = cyl(f'{name}_cut', r, r, width + 0.4, ((k - (arches - 1) / 2) * step, 0, BED), deck_m, seg=28, rot=(H, 0, 0))
+        cut.scale = (1, sz, 1)
+        b = deck.modifiers.new('arch', 'BOOLEAN')
+        b.operation = 'DIFFERENCE'
+        b.object = cut
+        bpy.context.view_layer.objects.active = deck
+        bpy.ops.object.modifier_apply(modifier='arch')
+        bpy.data.objects.remove(cut, do_unlink=True)
+    P = [deck]
+    for s in (-1, 1):
+        if rail_m:
+            P.append(box(f'{name}_rail', (span, 0.1, 0.2), (0, s * (width / 2 - 0.05), TOP + 0.15), rail_m, bevel=0.02))
+        # 아치 이맛돌
+        for k in range(arches):
+            cx = (k - (arches - 1) / 2) * step
+            for j in range(9):
+                a = math.pi * (j + 0.5) / 9
+                P.append(box(f'{name}_vous', (0.1, 0.03, 0.14), (cx + math.cos(a) * (r + 0.05), s * (width / 2 + 0.01),
+                                                                  BED + math.sin(a) * (r + 0.05) * sz), CURB, rot=(0, -a + H, 0), bevel=0))
+    o = bake(P, name, origin=(0, 0, 0))
+    o.location = (x, y, 0)
+    return o
+
+
+# ── 순환 도로(강을 두 번 건넌다) ───────────────────────────
+def ring_points(rx, ry, n=96):
     pts = []
     for k in range(n):
         a = k / n * math.tau
         c, s = math.cos(a), math.sin(a)
-        # 둥근 모서리 사각형 위의 점(초타원으로 근사)
         e = 6
         k_ = (abs(c) ** e + abs(s) ** e) ** (-1 / e)
-        pts.append(Vector((c * k_ * r, s * k_ * r)))
+        pts.append(Vector((RC + c * k_ * rx, s * k_ * ry)))
     return pts
 
 
@@ -148,123 +273,101 @@ def ribbon(name, pts, width, z, m, closed=True):
     return finish(new_obj(name, bm), m)
 
 
-ROUTE = ring_points(RING)
+ROUTE = ring_points(RXR, RYR)
 ribbon('road', ROUTE, RW, TOP + 0.012, ROAD)
-ribbon('curb_out', ring_points(RING + RW / 2 + 0.05), 0.1, TOP + 0.03, CURB)
-ribbon('curb_in', ring_points(RING - RW / 2 - 0.05), 0.1, TOP + 0.03, CURB)
+ribbon('curb_out', ring_points(RXR + RW / 2 + 0.05, RYR + RW / 2 + 0.05), 0.1, TOP + 0.03, CURB)
+ribbon('curb_in', ring_points(RXR - RW / 2 - 0.05, RYR - RW / 2 - 0.05), 0.1, TOP + 0.03, CURB)
 for p in ROUTE[::2]:
     block(p.x, p.y, RW * 0.75)
-# 도로가 운하를 건너는 곳: 돌 아치 다리
-
-
-def arch_bridge(name, x, y, span, width, rail=True):
-    deck = box(f'{name}_deck', (span, width, 0.5), (0, 0, TOP - 0.2), QUAY, bevel=0.03)
-    cut = cyl(f'{name}_cut', 0.95, 0.95, width + 0.4, (0, 0, BED - 0.25), QUAY, seg=32, rot=(H, 0, 0))
-    b = deck.modifiers.new('arch', 'BOOLEAN')
-    b.operation = 'DIFFERENCE'
-    b.object = cut
-    bpy.context.view_layer.objects.active = deck
-    bpy.ops.object.modifier_apply(modifier='bevel')
-    bpy.ops.object.modifier_apply(modifier='arch')
-    bpy.data.objects.remove(cut, do_unlink=True)
-    P = [deck]
-    if rail:
-        for s in (-1, 1):
-            P.append(box(f'{name}_rail', (span, 0.12, 0.22), (0, s * (width / 2 - 0.06), TOP + 0.16), PAVE_LIGHT, bevel=0.03))
-            for e in (-1, 1):
-                P.append(box(f'{name}_post', (0.18, 0.18, 0.32), (e * span / 2, s * (width / 2 - 0.06), TOP + 0.2), PAVE_LIGHT, bevel=0.03))
-    # 아치 이맛돌
-    for k in range(9):
-        a = math.pi * (k + 0.5) / 9
-        for s in (-1, 1):
-            P.append(box(f'{name}_vous', (0.12, 0.04, 0.18), (math.cos(a) * 1.0, s * (width / 2 + 0.01), BED - 0.25 + math.sin(a) * 1.0),
-                         CURB, rot=(0, -a + H, 0), bevel=0.01))
-    o = bake(P, name, origin=(0, 0, 0))
-    o.location = (x, y, 0)
-    return o
-
-
 for s in (-1, 1):
-    arch_bridge(f'bridge_{s}', MID, s * RING, CX1 - CX0 + 0.6, RW + 0.5)
-arch_bridge('bridge_foot', MID, 0.6, CX1 - CX0 + 0.6, 0.8)
+    arched_bridge(f'bridge_{s}', MID, s * RYR, RX1 - RX0 + 0.6, RW + 0.4, 3, 0.4, 1.4, CURB)
 
-# ── 집 ───────────────────────────────────────────────
-
-
-def townhouse(name, x, y, rot, w, d, floors, wall, roof, shop=None, side_gable=False):
-    """좁은 구시가 집(앞 = -y): 돌 1층(가게 창·차양 또는 문), 회벽 위층(덧창 창·꽃상자), 처마 돌림띠, 기와 지붕, 굴뚝"""
-    P = []
-    gh, fh = 0.72, 0.6
-    top = gh + floors * fh
-    sh = SHUTTERS[rnd.randrange(len(SHUTTERS))]
-    P.append(box(f'{name}_wall', (w, d, top - gh), (0, 0, gh + (top - gh) / 2), wall, bevel=0.02))
-    P.append(box(f'{name}_ground', (w + 0.02, d + 0.02, gh), (0, 0, gh / 2), PAVE_LIGHT if shop else wall, bevel=0.02))
-    P.append(box(f'{name}_band', (w + 0.08, d + 0.08, 0.06), (0, 0, gh), PAVE_LIGHT, bevel=0.015))
-    P.append(box(f'{name}_eave', (w + 0.1, d + 0.1, 0.08), (0, 0, top - 0.02), PAVE_LIGHT, bevel=0.02))
-    fy = -d / 2 - 0.02
-    if shop:
-        a, b = shop
-        P.append(box(f'{name}_shopglass', (w * 0.62, 0.03, 0.42), (-w * 0.1, fy, 0.36), GLASS, bevel=0.01))
-        P.append(box(f'{name}_shopframe', (w * 0.66, 0.025, 0.46), (-w * 0.1, fy + 0.008, 0.36), DARKWOOD, bevel=0.01))
-        n = max(4, round(w * 0.66 / 0.1))
-        for k in range(n):
-            P.append(box(f'{name}_awn', (w * 0.7 / n, 0.38, 0.02), (-w * 0.1 - w * 0.35 + (k + 0.5) * w * 0.7 / n, fy - 0.17, 0.66),
-                         a if k % 2 else b, rot=(0.32, 0, 0), bevel=0.004))
-        P.append(box(f'{name}_door', (0.2, 0.03, 0.46), (w / 2 - 0.17, fy, 0.24), DARKWOOD, bevel=0.01))
-    else:
-        P.append(box(f'{name}_door', (0.26, 0.03, 0.5), (0, fy, 0.26), DARKWOOD, bevel=0.01))
-        P.append(box(f'{name}_doorframe', (0.34, 0.025, 0.56), (0, fy + 0.008, 0.28), PAVE_LIGHT, bevel=0.01))
-        P.append(box(f'{name}_step', (0.4, 0.14, 0.05), (0, fy - 0.06, 0.025), STONE, bevel=0.015))
-    n = max(1, round(w / 0.42))
-
-    def window(cx, cz, ry, fy_):
-        c, s = math.cos(ry), math.sin(ry)
-        off = lambda dx, dy, dz=0: (cx * c - (fy_ + dy) * s + dx * c, cx * s + (fy_ + dy) * c + dx * s, cz + dz)
-        P.append(box(f'{name}_glass', (0.16, 0.03, 0.26), off(0, 0), GLASS, rot=(0, 0, ry), bevel=0.005))
-        P.append(box(f'{name}_frame', (0.21, 0.02, 0.31), off(0, 0.008), PAVE_LIGHT, rot=(0, 0, ry), bevel=0.006))
-        P.append(box(f'{name}_sill', (0.24, 0.07, 0.03), off(0, -0.03, -0.16), PAVE_LIGHT, rot=(0, 0, ry), bevel=0.008))
+# ── 베키오 다리 같은 옛 다리: 낮은 세 아치 위로 작은 가게들이 양쪽에 매달리고 한쪽 위로 긴 회랑 ─────
+SHOPS = [WALLS[1], WALLS[5], WALLS[2], WALLS[0], WALLS[6]]
+P = [arched_bridge('pv', 0, 0, RX1 - RX0 + 0.5, 1.1, 3, 0.42, 1.1, None, RUSTIC)]
+L = RX1 - RX0 + 0.3
+n = 9
+for s in (-1, 1):
+    for k in range(n):
+        if k == n // 2:
+            continue  # 가운데는 강이 보이는 빈 터
+        cx = -L / 2 + (k + 0.5) * L / n
+        w = L / n - 0.03
+        h = 0.5 + ((k * 7 + (s + 1) * 3) % 4) * 0.08
+        dep = 0.42 + (k % 3) * 0.06
+        cy = s * (0.55 - dep / 2 + 0.16)  # 다리 밖으로 조금 튀어나온다
+        wall = SHOPS[(k + (s + 1)) % len(SHOPS)]
+        P.append(box('pv_shop', (w, dep, h), (cx, cy, TOP + h / 2), wall, bevel=0.01))
+        # 튀어나온 가게 밑 나무 받침
+        P.append(box('pv_sporto', (w - 0.06, 0.12, 0.06), (cx, s * 0.6, TOP - 0.05), DARKWOOD, bevel=0))
         for e in (-1, 1):
-            P.append(box(f'{name}_shut', (0.08, 0.02, 0.29), off(e * 0.14, -0.005), sh, rot=(0, 0, ry), bevel=0.005))
+            P.append(box('pv_brace', (0.04, 0.04, 0.3), (cx + e * w * 0.3, s * 0.62, TOP - 0.2), DARKWOOD, rot=(s * 0.5, 0, 0), bevel=0))
+        # 지붕(바깥으로 기운 외쪽 지붕), 가게 문·창
+        P.append(box('pv_roof', (w + 0.04, dep + 0.08, 0.04), (cx, cy, TOP + h + 0.04), COTTO[k % 3], rot=(-s * 0.18, 0, 0), bevel=0))
+        P.append(box('pv_glass', (w * 0.6, 0.02, 0.22), (cx, cy - s * (dep / 2 + 0.005), TOP + 0.2), GLASS, bevel=0))
+        P.append(box('pv_door', (w * 0.7, 0.02, 0.32), (cx, cy - s * (-dep / 2 - 0.005), TOP + 0.2), DARKWOOD, bevel=0))
+        P.append(box('pv_win', (0.1, 0.02, 0.12), (cx, cy + s * (dep / 2 + 0.005), TOP + h - 0.18), GLASS, bevel=0))
+# 위쪽 회랑(뒤쪽 가게 줄 위로)
+P.append(box('pv_corridor', (L + 0.4, 0.34, 0.32), (0, 0.45, TOP + 0.95), WALLS[1], bevel=0.01))
+P.append(gable_prism('pv_corroof', 0.34, L + 0.4, TOP + 1.11, 0.12, COTTO[0]))
+P[-1].rotation_euler.z = H
+for k in range(12):
+    P.append(box('pv_cwin', (0.08, 0.02, 0.1), (-L / 2 - 0.1 + (k + 0.5) * (L + 0.4) / 12, 0.45 - 0.18, TOP + 0.97), GLASS, bevel=0))
+# 가운데 빈 터: 세 아치 열린 회랑
+for e in (-1, 1):
+    P.append(box('pv_pier', (0.07, 0.07, 0.6), (e * 0.14, 0.45, TOP + 0.3), RUSTIC, bevel=0))
+pv = bake(P, 'ponte', origin=(0, 0, 0))
+pv.location = (MID, PV_Y, 0)
 
+# ── 팔라초 ───────────────────────────────────────────
+
+
+def palazzo(name, x, y, rot, w, d, floors, wall, roof, altana=False):
+    """피렌체 팔라초(앞 = -y): 거친 돌 1층과 아치 대문, 회벽 위층(사암 창틀·초록 덧창), 층 띠, 넓은 처마, 낮은 모임지붕"""
+    P = []
+    gh, fh = 0.62, 0.5
+    top = gh + floors * fh
+    sh = SHUT[0] if rnd.random() < 0.75 else SHUT[1]
+    P.append(box(f'{name}_wall', (w, d, top - gh), (0, 0, gh + (top - gh) / 2), wall, bevel=0.01))
+    P.append(box(f'{name}_ground', (w + 0.03, d + 0.03, gh), (0, 0, gh / 2), RUSTIC, bevel=0.02))
     for f in range(floors):
-        cz = gh + f * fh + fh * 0.52
+        P.append(box(f'{name}_band', (w + 0.05, d + 0.05, 0.035), (0, 0, gh + f * fh), PIETRA, bevel=0))
+    fy = -d / 2 - 0.02
+    # 아치 대문
+    P.append(box(f'{name}_door', (0.26, 0.03, 0.36), (0, fy, 0.18), DARKWOOD, bevel=0))
+    P.append(cyl(f'{name}_arch', 0.13, 0.13, 0.03, (0, fy, 0.36), DARKWOOD, seg=10, rot=(H, 0, 0)))
+    P.append(cyl(f'{name}_archs', 0.17, 0.17, 0.02, (0, fy + 0.012, 0.36), PIETRA, seg=10, rot=(H, 0, 0)))
+    n = max(1, round(w / 0.42))
+    for k in range(n):
+        cx = (k - (n - 1) / 2) * w / n
+        if abs(cx) > 0.3:
+            P.append(box(f'{name}_gwin', (0.12, 0.03, 0.18), (cx, fy, 0.38), GLASS, bevel=0))
+    for f in range(floors):
+        cz = gh + f * fh + fh * 0.5
         for k in range(n):
             cx = (k - (n - 1) / 2) * w / n
-            window(cx, cz, 0, fy)
-            if rnd.random() < 0.35:
-                P.append(box(f'{name}_flowerbox', (0.2, 0.06, 0.05), (cx, fy - 0.06, cz - 0.12), DARKWOOD, bevel=0.008))
-                for j in range(3):
-                    P.append(blob(f'{name}_fl', 0.035, (cx + (j - 1) * 0.06, fy - 0.06, cz - 0.08),
-                                  CLOTH_R if rnd.random() < 0.6 else look.CROP, sub=1))
-            window(cx, cz, math.pi, fy)
-    pitch = math.radians(rnd.choice((38, 45, 50)))
-    Q = []
-    if side_gable:
-        rise = look.tile_roof(Q, name, d, w, top, pitch, roof)
-        for q in Q:
-            q.location = (-q.location.y, q.location.x, q.location.z)
-            q.rotation_euler.z += H
-    else:
-        rise = look.tile_roof(Q, name, w, d, top, pitch, roof)
-    P += Q
-    gw, gy = (d, w) if side_gable else (w, d)
-    for s in (-1, 1):
-        bm = bmesh.new()
-        vs = [bm.verts.new(v) for v in ((-gw / 2, 0, 0), (gw / 2, 0, 0), (0, 0, rise))]
-        bmesh.ops.solidify(bm, geom=[bm.faces.new(vs)], thickness=0.04)
-        g = new_obj(f'{name}_gable', bm)
-        g.location = (0, s * gy / 2, top)
-        if side_gable:
-            g.location = (s * gy / 2, 0, top)
-            g.rotation_euler.z = H
-        P.append(finish(g, wall, smooth=False))
-    if not side_gable:
-        # 앞 박공 다락 창
-        P.append(box(f'{name}_attic', (0.14, 0.03, 0.18), (0, fy, top + rise * 0.35), GLASS, bevel=0.005))
-        P.append(box(f'{name}_atticf', (0.19, 0.02, 0.23), (0, fy + 0.008, top + rise * 0.35), PAVE_LIGHT, bevel=0.006))
+            for s in (-1, 1):
+                yy = s * (d / 2 + 0.015)
+                P.append(box(f'{name}_glass', (0.14, 0.02, 0.26), (cx, yy, cz), GLASS, bevel=0))
+                P.append(box(f'{name}_frame', (0.19, 0.012, 0.31), (cx, yy - s * 0.006, cz + 0.005), PIETRA, bevel=0))
+                if s < 0:
+                    for e in (-1, 1):
+                        P.append(box(f'{name}_shut', (0.075, 0.02, 0.27), (cx + e * 0.135, yy + s * 0.005, cz), sh, bevel=0))
+    # 넓은 처마(나무 서까래가 받친다) + 낮은 모임지붕
+    P.append(box(f'{name}_gronda', (w + 0.26, d + 0.26, 0.05), (0, 0, top + 0.02), DARKWOOD, bevel=0))
+    rise = min(w, d) * 0.28
+    P.append(hip_roof(f'{name}_roof', w + 0.12, d + 0.12, top + 0.045, rise, roof, o=0.0))
+    if altana:
+        # 옥상 정자(기둥 넷 위 작은 지붕)
+        ax = w * 0.22
+        for ex in (-1, 1):
+            for ey in (-1, 1):
+                P.append(box(f'{name}_alt_p', (0.05, 0.05, 0.4), (ax + ex * 0.24, ey * 0.18, top + rise * 0.5 + 0.2), wall, bevel=0))
+        P.append(box(f'{name}_alt_f', (0.56, 0.44, 0.06), (ax, 0, top + rise * 0.5), wall, bevel=0))
+        P.append(hip_roof(f'{name}_alt_r', 0.56, 0.44, top + rise * 0.5 + 0.4, 0.14, roof, o=0.06))
     cx = (rnd.random() - 0.5) * w * 0.5
-    P.append(box(f'{name}_chim', (0.18, 0.18, 0.5), (cx, d * 0.2, top + rise * 0.6), wall, bevel=0.02))
-    P.append(box(f'{name}_chimcap', (0.24, 0.24, 0.05), (cx, d * 0.2, top + rise * 0.6 + 0.26), PAVE_LIGHT, bevel=0.01))
+    P.append(box(f'{name}_chim', (0.14, 0.14, 0.35), (cx, d * 0.22, top + rise * 0.6), wall, bevel=0))
+    P.append(box(f'{name}_chimcap', (0.2, 0.2, 0.04), (cx, d * 0.22, top + rise * 0.6 + 0.19), roof, bevel=0))
     o = bake(P, name, origin=(0, 0, 0))
     o.location = (x, y, TOP - 0.02)
     o.rotation_euler = (0, 0, rot)
@@ -272,235 +375,418 @@ def townhouse(name, x, y, rot, w, d, floors, wall, roof, shop=None, side_gable=F
     return o
 
 
-def row(prefix, start, end, rot, depth, floors_rng, shops=0.4, skip=None):
-    """start→end 직선을 따라 폭이 제각각인 집을 빈틈없이 잇는다(앞 = rot 방향의 -y)"""
+def tower_house(name, x, y, rot, wall):
+    """좁고 높은 탑집(돌), 꼭대기 흉벽"""
+    P = [box(f'{name}_body', (0.8, 0.8, 3.6), (0, 0, 1.8), wall, bevel=0.01)]
+    for k in range(5):
+        for s in (-1, 1):
+            P.append(box(f'{name}_win', (0.12, 0.02, 0.22), (0, s * 0.41, 0.8 + k * 0.6), GLASS, bevel=0))
+    for i in range(4):
+        for j in range(3):
+            c, s_ = math.cos(i * H), math.sin(i * H)
+            dx, dy = -0.3 + j * 0.3, -0.42
+            P.append(box(f'{name}_mer', (0.16, 0.1, 0.18), (dx * c - dy * s_, dx * s_ + dy * c, 3.69), wall, rot=(0, 0, i * H), bevel=0))
+    o = bake(P, name, origin=(0, 0, 0))
+    o.location = (x, y, TOP - 0.02)
+    o.rotation_euler = (0, 0, rot)
+    block(x, y, 0.6)
+    return o
+
+
+def row(prefix, start, end, rot, depth, floors_rng, skip=None, towers=0.0):
+    """start→end 직선을 따라 폭이 제각각인 팔라초를 빈틈없이 잇는다(앞 = rot 방향의 -y)"""
     a, b = Vector(start), Vector(end)
     L = (b - a).length
     t = 0.0
     k = 0
-    out = []
-    while t < L - 0.5:
-        w = min(0.9 + rnd.random() * 0.6, L - t)
+    while t < L - 0.6:
+        w = min(0.95 + rnd.random() * 1.15, L - t)
         c = a + (b - a) * ((t + w / 2) / L)
         if not (skip and skip(c)):
-            floors = rnd.randint(*floors_rng)
-            shop = AWNINGS[rnd.randrange(3)] if rnd.random() < shops else None
-            out.append(townhouse(f'{prefix}_{k}', c.x, c.y, rot, w - 0.02, depth, floors, WALLS[rnd.randrange(len(WALLS))],
-                                 ROOFS[rnd.randrange(len(ROOFS))], shop, side_gable=rnd.random() < 0.3))
+            wall = WALLS[rnd.randrange(len(WALLS))]
+            if rnd.random() < towers and w > 0.9:
+                tower_house(f'{prefix}_t{k}', c.x, c.y, rot, RUSTIC if rnd.random() < 0.5 else wall)
+            else:
+                palazzo(f'{prefix}_{k}', c.x, c.y, rot, w - 0.03, depth * (0.85 + rnd.random() * 0.15), rnd.randint(*floors_rng), wall,
+                        COTTO[rnd.randrange(3)], altana=w > 1.3 and rnd.random() < 0.35)
         t += w
         k += 1
-    return out
 
 
-FACE_PX = H  # 앞(-y)이 +x 를 보게
-skip_canal = lambda c: CX0 - 0.6 < c.x < CX1 + 0.6
-row('house_l', (-7.0, -6.6), (-7.0, 7.4), FACE_PX, 1.6, (2, 3))  # 뒤 왼쪽 변: +x 를 본다
-row('house_b', (-6.0, 7.0), (7.4, 7.0), 0.0, 1.6, (2, 3), skip=skip_canal)  # 뒤 오른쪽 변: -y 를 본다
-row('house_e', (3.6, -3.9), (3.6, 4.0), FACE_PX, 1.4, (1, 2), shops=0.6, skip=lambda c: abs(c.y - 0.6) < 0.9)
+skip_pv = lambda c: abs(c.y - PV_Y) < 0.9
+row('pal_lf', (1.1, -4.7), (1.1, PV_Y), H, 1.0, (2, 3), skip_pv)  # 성당이 가리지 않게 낮게
+row('pal_lb', (1.1, PV_Y), (1.1, 4.7), H, 1.0, (3, 5), skip_pv, towers=0.15)
+row('pal_w', (-4.35, -1.8), (-4.35, 4.7), H, 0.8, (2, 4))
+row('pal_r', (5.6, PV_Y + 0.9), (5.6, 4.7), -H, 0.8, (3, 4), towers=0.2)
+row('pal_ow', (-7.0, -7.5), (-7.0, 7.5), H, 1.6, (3, 5), towers=0.1)
+row('pal_ob', (-6.0, 7.0), (7.5, 7.0), 0.0, 1.6, (3, 5), lambda c: RX0 - 0.6 < c.x < RX1 + 0.6, towers=0.1)
+row('pal_or', (7.3, -3.0), (7.3, 6.0), -H, 1.0, (2, 3))
 
-# ── 교회와 분수 광장 ───────────────────────────────────
-CH = Vector((-2.4, 2.2))
+# ── 성당: 줄무늬 대리석 본당과 정면, 팔각 북 위 붉은 갈비뼈 돔과 등탑, 세 반원 제단 ─────────
+DX, DY = -2.1, 3.25  # 돔 가운데
+NAVE_Y0, NAVE_Y1, NW, NH = -0.2, 2.45, 1.5, 1.55
 P = []
-P.append(box('ch_nave', (1.9, 2.8, 1.6), (0, 0.6, 0.8), WALLS[6], bevel=0.03))
-P.append(box('ch_plinth', (2.0, 2.9, 0.2), (0, 0.6, 0.1), STONE, bevel=0.02))
-Q = []
-rise = look.tile_roof(Q, 'ch', 1.9, 2.8, 1.6, math.radians(45), ROOF_RED)
-for q in Q:
-    q.location.y += 0.6
-P += Q
+nc = (NAVE_Y0 + NAVE_Y1) / 2
+P.append(box('du_nave', (NW, NAVE_Y1 - NAVE_Y0, NH), (0, nc - DY, NH / 2), MARBLE, bevel=0.01))
+P.append(gable_prism('du_roof', NW, NAVE_Y1 - NAVE_Y0, NH, 0.45, DOME))
+P[-1].location.y = nc - DY
+for z in (0.08, NH * 0.55, NH - 0.05):
+    P.append(box('du_band', (NW + 0.03, NAVE_Y1 - NAVE_Y0 + 0.03, 0.06), (0, nc - DY, z), MARBLE_G, bevel=0))
+for k in range(6):
+    yy = NAVE_Y0 + 0.2 + k * (NAVE_Y1 - NAVE_Y0 - 0.4) / 5 - DY
+    for s in (-1, 1):
+        P.append(box('du_pil', (0.04, 0.07, NH), (s * (NW / 2 + 0.015), yy, NH / 2), MARBLE_G, bevel=0))
+        if k < 5:
+            P.append(box('du_win', (0.02, 0.12, 0.34), (s * (NW / 2 + 0.01), yy + 0.24, NH * 0.75), GLASS, bevel=0))
+            P.append(box('du_panel', (0.02, 0.26, 0.4), (s * (NW / 2 + 0.008), yy + 0.24, NH * 0.28), MARBLE_P, bevel=0))
+# 정면(더 높고 넓다): 세 문, 장미창, 녹·분홍 판
+FY = NAVE_Y0 - DY - 0.06
+FH = NH + 0.65
+P.append(box('du_facade', (NW + 0.4, 0.14, FH), (0, FY, FH / 2), MARBLE, bevel=0.01))
 bm = bmesh.new()
-f = bm.faces.new([bm.verts.new(v) for v in ((-0.95, 0, 0), (0.95, 0, 0), (0, 0, rise))])
-bmesh.ops.solidify(bm, geom=[f], thickness=0.04)
-g = new_obj('ch_gable', bm)
-g.location = (0, 0.6 + 1.4, 1.6)
-P.append(finish(g, WALLS[6], smooth=False))
-for k in range(3):
-    P.append(box('ch_win', (0.03, 0.2, 0.6), (0.96, -0.2 + k * 0.7, 0.95), GLASS, bevel=0.01))
-    P.append(box('ch_win', (0.03, 0.2, 0.6), (-0.96, -0.2 + k * 0.7, 0.95), GLASS, bevel=0.01))
-# 종탑(앞)
-tw = 1.05
-P.append(box('ch_tower', (tw, tw, 3.4), (0, -1.05, 1.7), WALLS[6], bevel=0.03))
-P.append(box('ch_tbase', (tw + 0.1, tw + 0.1, 0.5), (0, -1.05, 0.25), STONE, bevel=0.02))
-for z in (1.6, 2.6, 3.4):
-    P.append(box('ch_tband', (tw + 0.08, tw + 0.08, 0.07), (0, -1.05, z), PAVE_LIGHT, bevel=0.015))
-P.append(box('ch_door', (0.42, 0.03, 0.72), (0, -1.05 - tw / 2 - 0.02, 0.36), DARKWOOD, bevel=0.012))
-P.append(cyl('ch_doorarch', 0.21, 0.21, 0.03, (0, -1.05 - tw / 2 - 0.02, 0.72), DARKWOOD, seg=16, rot=(H, 0, 0)))
-for a in range(4):
-    c, s = math.cos(a * H), math.sin(a * H)
-    off = lambda dx, dy, dz: (dx * c - dy * s, -1.05 + dx * s + dy * c, dz)
-    P.append(cyl('ch_clock', 0.26, 0.26, 0.04, off(0, -tw / 2 - 0.02, 2.1), WALLS[6], seg=24, rot=(H, 0, a * H)))
-    P.append(cyl('ch_clockr', 0.3, 0.3, 0.03, off(0, -tw / 2 - 0.01, 2.1), DARKWOOD, seg=24, rot=(H, 0, a * H)))
-    P.append(box('ch_hand', (0.03, 0.02, 0.2), off(0.0, -tw / 2 - 0.05, 2.18), DARKWOOD, rot=(0, 0, a * H)))
-    P.append(box('ch_hand2', (0.15, 0.02, 0.03), off(0.06, -tw / 2 - 0.05, 2.1), DARKWOOD, rot=(0, 0, a * H)))
-    for e in (-1, 1):
-        P.append(box('ch_bell', (0.16, 0.04, 0.42), off(e * 0.2, -tw / 2 - 0.005, 2.95), DARKWOOD, rot=(0, 0, a * H), bevel=0.01))
-spire = cyl('ch_spire', 0.82, 0.02, 1.7, (0, -1.05, 3.4 + 0.85), SLATE, seg=4, rot=(0, 0, math.pi / 4), bevel=0.02)
-P.append(spire)
-P.append(cyl('ch_cross', 0.015, 0.015, 0.4, (0, -1.05, 5.35), DARKWOOD, seg=6))
-P.append(box('ch_crossb', (0.2, 0.025, 0.025), (0, -1.05, 5.42), DARKWOOD))
-church = bake(P, 'church', origin=(0, 0, 0))
-church.location = (CH.x, CH.y, TOP - 0.02)
-church.rotation_euler = (0, 0, -0.0)
-block(CH.x, CH.y + 0.2, 2.0)
+f = bm.faces.new([bm.verts.new(v) for v in ((-NW / 2 - 0.2, 0, 0), (NW / 2 + 0.2, 0, 0), (0, 0, 0.42))])
+bmesh.ops.solidify(bm, geom=[f], thickness=0.14)
+g = new_obj('du_fgable', bm)
+g.location = (0, FY + 0.07, FH)
+P.append(finish(g, MARBLE, smooth=False))
+for z in (0.55, 1.2, FH - 0.04):
+    P.append(box('du_fband', (NW + 0.42, 0.16, 0.05), (0, FY, z), MARBLE_G, bevel=0))
+for e in (-1, 0, 1):
+    hh = 0.46 if e == 0 else 0.34
+    P.append(box('du_door', (0.22 if e == 0 else 0.16, 0.03, hh), (e * 0.55, FY - 0.07, hh / 2), DARKWOOD, bevel=0))
+    P.append(box('du_dframe', (0.32 if e == 0 else 0.24, 0.02, hh + 0.1), (e * 0.55, FY - 0.065, (hh + 0.1) / 2), MARBLE_P, bevel=0))
+    for z in (0.85, 1.5):
+        P.append(box('du_fpanel', (0.22, 0.02, 0.4), (e * 0.62, FY - 0.075, z), MARBLE_P if e else MARBLE_G, bevel=0))
+P.append(cyl('du_rose', 0.22, 0.22, 0.03, (0, FY - 0.08, 1.62), GLASS, seg=16, rot=(H, 0, 0)))
+P.append(cyl('du_rosef', 0.28, 0.28, 0.02, (0, FY - 0.072, 1.62), MARBLE_G, seg=16, rot=(H, 0, 0)))
+# 세 반원 제단(왼·오른·뒤)과 작은 반구 지붕
+for ax, ay in ((-1, 0), (1, 0), (0, 1)):
+    cx, cy = ax * 1.05, ay * 1.05
+    P.append(cyl('du_apse', 0.58, 0.58, 1.15, (cx, cy, 0.575), MARBLE, seg=8, rot=(0, 0, math.pi / 8)))
+    P.append(cyl('du_apseb', 0.6, 0.6, 0.06, (cx, cy, 1.15), MARBLE_G, seg=8, rot=(0, 0, math.pi / 8)))
+    P.append(cyl('du_apser', 0.62, 0.05, 0.4, (cx, cy, 1.38), DOME, seg=8, rot=(0, 0, math.pi / 8)))
+# 팔각 북
+R8 = math.pi / 8
+DR = 0.95
+P.append(lathe('du_drum', [(DR, 0), (DR, 2.55)], 8, MARBLE, R8, cap=False))
+for z in (1.6, 2.1, 2.5):
+    P.append(lathe('du_drumb', [(DR + 0.025, z), (DR + 0.025, z + 0.06)], 8, MARBLE_G, R8, cap=False))
+for k in range(8):
+    a = R8 + (k + 0.5) * math.tau / 8
+    r = DR * math.cos(math.pi / 8) + 0.01
+    P.append(cyl('du_oc', 0.1, 0.1, 0.02, (math.cos(a) * r, math.sin(a) * r, 2.3), GLASS, seg=10, rot=(H, 0, a + H)))
+# 갈비뼈 돔(끝이 뾰족한 아치 단면)
+prof = []
+for i in range(9):
+    p = i / 8 * 1.36
+    prof.append((max(DR * math.cos(p) ** 0.75, 0.2), 2.56 + 1.55 * math.sin(p)))
+P.append(lathe('du_dome', prof, 8, DOME, R8))
+P.append(ribs('du_ribs', prof, 8, MARBLE, R8))
+# 등탑
+LZ = prof[-1][1]
+P.append(lathe('du_lantern', [(0.22, LZ), (0.2, LZ + 0.38)], 8, MARBLE, R8))
+P.append(cyl('du_lcone', 0.24, 0.02, 0.36, (0, 0, LZ + 0.56), MARBLE, seg=8, rot=(0, 0, R8)))
+P.append(blob('du_ball', 0.06, (0, 0, LZ + 0.78), GOLD, sub=2))
+P.append(box('du_cross', (0.02, 0.02, 0.18), (0, 0, LZ + 0.92), GOLD, bevel=0))
+duomo = bake(P, 'duomo', origin=(0, 0, 0))
+duomo.location = (DX, DY, TOP - 0.02)
+block(DX, DY, 1.7)
+block(DX, (NAVE_Y0 + NAVE_Y1) / 2, 1.3)
 
-FT = Vector((-2.2, -1.6))
-ribbon('plaza_ring', [FT + Vector((math.cos(a), math.sin(a))) * 1.25 for a in [k / 48 * math.tau for k in range(48)]], 0.9, TOP + 0.006,
-       PAVE_LIGHT)
-P = [cyl('ft_basin', 0.72, 0.75, 0.24, (0, 0, 0.12), STONE, seg=32, bevel=0.03),
-     cyl('ft_water', 0.64, 0.64, 0.04, (0, 0, 0.2), WATER, seg=32),
-     cyl('ft_col', 0.09, 0.12, 0.62, (0, 0, 0.4), STONE, seg=12, bevel=0.02),
-     cyl('ft_bowl', 0.32, 0.12, 0.12, (0, 0, 0.68), STONE, seg=20, bevel=0.03),
-     cyl('ft_bwater', 0.27, 0.27, 0.03, (0, 0, 0.72), WATER, seg=20),
-     cyl('ft_top', 0.04, 0.06, 0.26, (0, 0, 0.84), STONE, seg=10),
-     blob('ft_ball', 0.07, (0, 0, 0.98), STONE, sub=2)]
-look.place(bake(P, 'fountain', origin=(0, 0, 0)), FT.x, FT.y, 0, 1.1)
-for k in range(4):
-    a = k / 4 * math.tau + 0.4
-    p = FT + Vector((math.cos(a), math.sin(a))) * 1.75
-    look.bench(f'bench_p{k}', p.x, p.y, a + H)
+# 종탑: 네 귀 초록 기둥, 층 띠, 위층일수록 큰 창, 내민 처마
+CX_, CY_ = -0.55, -0.55
+P = [box('ca_body', (0.62, 0.62, 4.3), (0, 0, 2.15), MARBLE, bevel=0.005)]
+for ex in (-1, 1):
+    for ey in (-1, 1):
+        P.append(box('ca_corner', (0.08, 0.08, 4.3), (ex * 0.3, ey * 0.3, 2.15), MARBLE_G, bevel=0))
+for z in (0.5, 1.1, 1.75, 2.45, 3.25, 4.25):
+    P.append(box('ca_band', (0.66, 0.66, 0.05), (0, 0, z), MARBLE_G, bevel=0))
+for i in range(4):
+    c, s = math.cos(i * H), math.sin(i * H)
+    for z, h_, w_ in ((1.42, 0.3, 0.1), (2.1, 0.4, 0.12), (2.85, 0.5, 0.18), (3.75, 0.7, 0.26)):
+        P.append(box('ca_win', (w_, 0.02, h_), (-0.32 * s, -0.32 * c, z), GLASS, rot=(0, 0, -i * H), bevel=0))
+    P.append(box('ca_panel', (0.3, 0.02, 0.3), (-0.315 * s, -0.315 * c, 0.8), MARBLE_P, rot=(0, 0, -i * H), bevel=0))
+P.append(box('ca_cornice', (0.8, 0.8, 0.08), (0, 0, 4.34), MARBLE, bevel=0.01))
+campanile = bake(P, 'campanile', origin=(0, 0, 0))
+campanile.location = (CX_, CY_, TOP - 0.02)
+block(CX_, CY_, 0.5)
 
-# 노천카페: 파라솔 탁자(교회 옆 길가)
+# 세례당: 팔각, 줄무늬, 낮은 팔각 지붕과 작은 등탑
+BX_, BY_ = -2.1, -1.75
+P = [lathe('ba_body', [(0.6, 0), (0.6, 1.05)], 8, MARBLE, R8, cap=False)]
+for z in (0.05, 0.5, 1.0):
+    P.append(lathe('ba_band', [(0.62, z), (0.62, z + 0.05)], 8, MARBLE_G, R8, cap=False))
+P.append(lathe('ba_attic', [(0.56, 1.05), (0.56, 1.3)], 8, MARBLE, R8, cap=False))
+P.append(lathe('ba_roof', [(0.64, 1.3), (0.12, 1.62)], 8, MARBLE, R8))
+P.append(lathe('ba_lantern', [(0.1, 1.62), (0.1, 1.82)], 8, MARBLE, R8))
+P.append(blob('ba_ball', 0.04, (0, 0, 1.86), GOLD, sub=1))
+for k in range(8):
+    a = R8 + (k + 0.5) * math.tau / 8
+    r = 0.6 * math.cos(math.pi / 8) + 0.01
+    P.append(box('ba_panel', (0.02, 0.18, 0.32), (math.cos(a) * r, math.sin(a) * r, 0.75), MARBLE_G, rot=(0, 0, a), bevel=0))
+P.append(box('ba_door', (0.02, 0.18, 0.34), (0, -0.56, 0.17), GOLD, rot=(0, 0, H), bevel=0))
+bapt = bake(P, 'baptistery', origin=(0, 0, 0))
+bapt.location = (BX_, BY_, TOP - 0.02)
+block(BX_, BY_, 0.75)
+
+# ── 시청 궁전: 거친 돌 몸채, 내민 흉벽 회랑, 앞쪽에 높은 탑 ─────────
+PX, PY = -3.65, -3.75
+P = [box('pa_body', (1.5, 1.3, 2.3), (0, 0, 1.15), RUSTIC, bevel=0.01)]
+P.append(box('pa_gallery', (1.66, 1.46, 0.28), (0, 0, 2.38), RUSTIC, bevel=0))
+for s in (-1, 1):
+    for z in (0.95, 1.65):
+        for k in range(4):
+            P.append(box('pa_win', (0.14, 0.02, 0.3), (-0.55 + k * 0.37, s * 0.66, z), GLASS, bevel=0))
+            P.append(cyl('pa_warch', 0.1, 0.1, 0.02, (-0.55 + k * 0.37, s * 0.665, z + 0.15), PIETRA, seg=8, rot=(H, 0, 0)))
+    P.append(box('pa_door', (0.24, 0.02, 0.4), (0.3, s * 0.66, 0.2), DARKWOOD, bevel=0))
+for i in range(4):
+    L_ = 1.66 if i % 2 == 0 else 1.46
+    off = 1.46 / 2 if i % 2 == 0 else 1.66 / 2
+    c, s_ = math.cos(i * H), math.sin(i * H)
+    n_ = int(L_ / 0.2)
+    for k in range(n_):
+        dx = -L_ / 2 + (k + 0.5) * L_ / n_
+        dy = -off + 0.04
+        P.append(box('pa_mer', (0.09, 0.07, 0.14), (dx * c - dy * s_, dx * s_ + dy * c, 2.59), RUSTIC, rot=(0, 0, i * H), bevel=0))
+P.append(hip_roof('pa_roof', 1.36, 1.16, 2.52, 0.25, COTTO[0], o=0))
+# 탑(앞면 위에서 솟는다)
+TX, TY = 0.15, -0.45
+P.append(box('pa_tower', (0.42, 0.42, 1.9), (TX, TY, 2.52 + 0.95), RUSTIC, bevel=0))
+P.append(box('pa_tgal', (0.56, 0.56, 0.2), (TX, TY, 4.5), RUSTIC, bevel=0))
+for i in range(4):
+    c, s_ = math.cos(i * H), math.sin(i * H)
+    for k in range(3):
+        dx, dy = -0.18 + k * 0.18, -0.26
+        P.append(box('pa_tmer', (0.08, 0.06, 0.12), (TX + dx * c - dy * s_, TY + dx * s_ + dy * c, 4.66), RUSTIC, rot=(0, 0, i * H), bevel=0))
+P.append(box('pa_clock', (0.2, 0.02, 0.2), (TX, TY - 0.22, 3.7), MARBLE, bevel=0))
+for ex in (-1, 1):
+    for ey in (-1, 1):
+        P.append(box('pa_col', (0.05, 0.05, 0.45), (TX + ex * 0.13, TY + ey * 0.13, 4.83), RUSTIC, bevel=0))
+P.append(box('pa_bell', (0.12, 0.12, 0.14), (TX, TY, 4.8), GOLD, bevel=0))
+P.append(cyl('pa_spire', 0.24, 0.02, 0.42, (TX, TY, 5.27), COTTO[2], seg=4, rot=(0, 0, math.pi / 4)))
+palace = bake(P, 'palazzo_vecchio', origin=(0, 0, 0))
+palace.location = (PX, PY, TOP - 0.02)
+block(PX, PY, 1.0)
+
+# 광장 분수(넵투누스 같은 조각)와 흰 조각상
+FT = Vector((-1.8, -3.55))
+P = [cyl('ft_basin', 0.5, 0.52, 0.18, (0, 0, 0.09), MARBLE, seg=8, rot=(0, 0, R8), bevel=0.02),
+     cyl('ft_water', 0.45, 0.45, 0.03, (0, 0, 0.15), WATER, seg=8, rot=(0, 0, R8)),
+     cyl('ft_ped', 0.1, 0.12, 0.3, (0, 0, 0.3), MARBLE, seg=8),
+     blob('ft_body', 0.07, (0, 0, 0.55), MARBLE, scale=(0.8, 0.6, 1.8), sub=2),
+     blob('ft_head', 0.04, (0, 0, 0.72), MARBLE, sub=1)]
+look.place(bake(P, 'fountain', origin=(0, 0, 0)), FT.x, FT.y, 0, 0.75)
+P = [box('st_base', (0.2, 0.2, 0.3), (0, 0, 0.15), MARBLE, bevel=0.01),
+     blob('st_body', 0.06, (0, 0, 0.44), MARBLE, scale=(0.8, 0.6, 1.9), sub=2), blob('st_head', 0.035, (0, 0, 0.62), MARBLE, sub=1)]
+look.place(bake(P, 'statue', origin=(0, 0, 0)), PX + 0.95, PY - 0.8, 0, 0.2)
+
+# 노천카페: 파라솔 탁자(성당 광장 가장자리)
 def parasol(name, x, y, cloth):
     P = [cyl(f'{name}_pole', 0.015, 0.015, 0.8, (0, 0, 0.4), DARKWOOD, seg=6),
-         cyl(f'{name}_top', 0.42, 0.02, 0.18, (0, 0, 0.84), cloth, seg=8, bevel=0.01),
-         cyl(f'{name}_table', 0.16, 0.16, 0.03, (0, 0, 0.36), WOOD, seg=12),
+         cyl(f'{name}_top', 0.4, 0.02, 0.16, (0, 0, 0.84), cloth, seg=8, bevel=0.01),
+         cyl(f'{name}_table', 0.15, 0.15, 0.03, (0, 0, 0.36), WOOD, seg=10),
          cyl(f'{name}_leg', 0.02, 0.03, 0.36, (0, 0, 0.18), DARKWOOD, seg=6)]
     for k in range(2):
         a = k * math.pi + 0.5
-        P.append(box(f'{name}_chair', (0.13, 0.13, 0.03), (math.cos(a) * 0.3, math.sin(a) * 0.3, 0.2), DARKWOOD, bevel=0.008))
-        P.append(box(f'{name}_chairb', (0.03, 0.13, 0.16), (math.cos(a) * 0.37, math.sin(a) * 0.37, 0.28), DARKWOOD, rot=(0, 0, a),
-                     bevel=0.008))
+        P.append(box(f'{name}_chair', (0.13, 0.13, 0.03), (math.cos(a) * 0.3, math.sin(a) * 0.3, 0.2), DARKWOOD, bevel=0))
     return look.place(bake(P, name, origin=(0, 0, 0)), x, y, rnd.random(), 0.45)
 
 
-cafe = [Vector((-0.3, -3.6)), Vector((-1.2, -3.9)), Vector((-0.4, -2.5))]
+cafe = [Vector((-0.6, -2.3)), Vector((-1.0, -1.5)), Vector((-0.5, -3.3))]
 for k, p in enumerate(cafe):
-    parasol(f'parasol_{k}', p.x, p.y, (CLOTH_R, CLOTH_W, look.CLOTH_G)[k])
-# 사람들
+    parasol(f'parasol_{k}', p.x, p.y, (CLOTH_W, look.CLOTH_G, CLOTH_W)[k])
 for k, (p, rot, shirt, pose) in enumerate((
-        (FT + Vector((1.0, -0.6)), 2.4, look.CLOTH_B, 'stand'), (FT + Vector((-0.9, 0.8)), -0.6, CLOTH_R, 'wave'),
+        (FT + Vector((0.7, -0.4)), 2.4, look.CLOTH_B, 'stand'), (FT + Vector((-0.6, 0.6)), -0.6, CLOTH_R, 'wave'),
         (cafe[0] + Vector((0.3, 0.05)), 3.4, look.CLOTH_G, 'sit'), (cafe[1] + Vector((-0.3, 0.1)), 0.2, CLOTH_W, 'sit'),
-        (Vector((MID + 0.1, 0.6)), 0.0, CLOTH_R, 'stand'), (Vector((-4.6, -4.6)), 0.8, look.CLOTH_B, 'stand'),
-        (Vector((6.4, -3.0)), 2.0, look.CLOTH_G, 'stand'), (Vector((-1.2, 4.6)), -1.2, CLOTH_W, 'stand'))):
+        (Vector((MID - 0.6, PV_Y + 0.05)), 0.0, CLOTH_R, 'stand'), (Vector((MID + 0.5, PV_Y - 0.1)), 3.0, look.CLOTH_B, 'stand'),
+        (Vector((-2.1, -0.75)), 1.6, CLOTH_W, 'stand'), (Vector((-1.2, 0.0)), -1.2, look.CLOTH_G, 'stand'),
+        (Vector((6.0, -3.0)), 2.0, CLOTH_R, 'stand'))):
     o = look.villager(f'man_{k}', p.x, p.y, rot, shirt, hat=k % 3 == 0, pose=pose)
     o.scale = (1.3, 1.3, 1.3)
-    if in_canal(p.x):
-        o.location.z = TOP + 0.08
+    if in_river(p.x):
+        o.location.z = TOP + 0.02
 
-# 운하: 묶어 둔 배, 앱이 움직이는 배(mover_boat)
-BOAT = mat('boat_blue', '#4f7f9c', 0.6, 0.04)
-for k, (yy, rot) in enumerate(((-2.6, 0.05), (3.0, -0.04), (-6.8, 0.0))):
-    o = look.rowboat(f'moored_{k}', CX0 + 0.42 if k % 2 else CX1 - 0.42, yy, LEVEL - 0.03, H + rot)
+# 강: 묶어 둔 나룻배, 앱이 움직이는 배(mover_boat, 다리 아치 밑을 지나도록 낮게)
+for k, (yy, rot) in enumerate(((-3.0, 0.05), (2.6, -0.04), (-6.8, 0.0))):
+    o = look.rowboat(f'moored_{k}', RX0 + 0.42 if k % 2 else RX1 - 0.42, yy, LEVEL - 0.03, H + rot)
     o.scale = (1.35, 1.35, 1.35)
-# 다리 아치 밑을 지나도록 낮은 짐배(뱃사공 + 상자)
-P = [blob('mb_hull', 0.3, (0, 0, 0.0), BOAT, scale=(2.3, 0.75, 0.3), sub=3),
-     blob('mb_in', 0.28, (0, 0, 0.04), DARKWOOD, scale=(2.2, 0.66, 0.12), sub=3)]
-for k in range(3):
-    P += look.crate('mb_crate', (-0.25 + k * 0.17, (k % 2) * 0.08 - 0.04, 0.1), 0.12)
+BOAT = mat('boat_green', '#4f6f58', 0.6, 0.04)
+P = [blob('mb_hull', 0.3, (0, 0, 0.0), BOAT, scale=(2.4, 0.7, 0.28), sub=3),
+     blob('mb_in', 0.28, (0, 0, 0.035), DARKWOOD, scale=(2.3, 0.62, 0.1), sub=3),
+     cyl('mb_pole', 0.012, 0.012, 0.9, (-0.45, 0.0, 0.3), DARKWOOD, seg=6, rot=(0, 0.5, 0))]
 boat = bake(P, 'mover_boat', origin=(0, 0, 0))
 boat.location = (MID, -4.0, LEVEL)
 boat.rotation_euler = (0, 0, H)
 boat.scale = (1.3, 1.3, 1.3)
 
-# 자동차(앱이 순환 도로를 따라 움직인다)
-for k, (c, kind) in enumerate((('#d9583b', 'hatch'), ('#4f86b8', 'hatch'), ('#e8c25a', 'hatch'), ('#f2efe8', 'van'))):
-    o = look.car(f'mover_car_{k}', c, kind)
+# 작은 자동차(앱이 순환 도로를 따라 움직인다): 크림·빨강·민트·하늘
+for k, c in enumerate(('#efe4c6', '#c8453a', '#9fcbb7', '#8fb3d1')):
+    o = look.car(f'mover_car_{k}', c, 'hatch')
     p = ROUTE[k * 24]
     o.location = (p.x, p.y, TOP + 0.02)
-    o.scale = (1.3, 1.3, 1.3)
+    o.scale = (1.25, 1.25, 1.25)
 
-# ── 둘레 시가지의 집, 안뜰 나무, 운하 다리, 먼 종탑 ──────────────────
-items, spots = [], []
-for sx in spans:
-    for sy in spans:
-        if sx == spans[0] and sy == spans[0]:
-            continue
-        x0, x1 = sx
-        y0, y1 = sy
-        if math.hypot((x0 + x1) / 2, (y0 + y1) / 2) > CITY_R:
-            continue
-        if park(sx, sy):
-            for k in range(int((x1 - x0) * (y1 - y0) / 7)):
-                x, y = x0 + 0.8 + rnd.random() * (x1 - x0 - 1.6), y0 + 0.8 + rnd.random() * (y1 - y0 - 1.6)
-                if not corridor(x):
-                    spots.append((x, y, TOP - 0.03, 1.2 + rnd.random() * 0.5,
-                                  LEAF[('green', 'orange', 'green', 'yellow', 'red')[rnd.randrange(5)]]))
-            continue
-        dd = 1.3
-        for side in range(4):
-            # 길을 따라 집을 잇는다(앞 = 길 쪽)
-            if side < 2:
-                a, b, fixed, rot = x0, x1, (y0 + dd / 2 if side == 0 else y1 - dd / 2), (0.0 if side == 0 else math.pi)
-            else:
-                a, b, fixed, rot = y0 + dd, y1 - dd, (x0 + dd / 2 if side == 2 else x1 - dd / 2), (-H if side == 2 else H)
-            t = a
-            while t < b - 0.6:
-                w = min(1.0 + rnd.random() * 0.6, b - t)
-                c = t + w / 2
-                t += w
-                x, y = (c, fixed) if side < 2 else (fixed, c)
-                if corridor(x) or (abs(x) < W / 2 + 0.3 and abs(y) < W / 2 + 0.3):
-                    continue
-                floors = rnd.randint(1, 3)
-                items.append((x, y, TOP - 0.02, w - 0.04, dd, 0.75 + floors * 0.6, 0.5 + rnd.random() * 0.2, rot,
-                              WALLS[rnd.randrange(len(WALLS))], ROOFS[rnd.randrange(len(ROOFS))]))
-        # 안뜰 나무
-        for k in range(rnd.randint(0, 2)):
-            x, y = x0 + 1.9 + rnd.random() * (x1 - x0 - 3.8), y0 + 1.9 + rnd.random() * (y1 - y0 - 3.8)
-            if not corridor(x) and x1 - x0 > 4:
-                spots.append((x, y, TOP - 0.03, 1.6 + rnd.random() * 0.6, LEAF[('green', 'orange', 'green', 'red')[rnd.randrange(4)]]))
-# 먼 종탑 몇 개
-for k, (x, y) in enumerate(((-21.0, 26.0), (30.0, 12.0), (14.0, -31.0), (-33.0, -9.0))):
-    items.append((x, y, TOP - 0.02, 1.0, 1.0, 4.2 + k % 2, 1.6, 0.0, WALLS[6], SLATE))
-# 둘레 길의 가로수, 먼 언덕의 나무
-for k in range(260):
-    a = rnd.random() * math.tau
-    r = CITY_R + 4 + rnd.random() * 30
-    x, y = math.cos(a) * r, math.sin(a) * r
-    if abs(x - MID) > 4:
-        spots.append((x, y, hfar(x, y) - 0.05, (1.8 + rnd.random()) * 1.3, 'pine' if rnd.random() < 0.3 else LEAF['green']))
-print('far houses', len(items), 'trees', len(spots), flush=True)
-tile.far_houses('far_town', items)
-tile.far_trees('far_trees', spots)
-P = []
-for sy in spans:
-    for y in (sy[0] - SW / 2, sy[1] + SW / 2):
-        if abs(y) < CITY_R and abs(y) > W / 2 + 0.1:
-            P.append(box('far_bridge', (CX1 - CX0 + 0.5, SW + 0.1, 0.3), (MID, y, TOP - 0.13), QUAY, bevel=0.02))
-            for s_ in (-1, 1):
-                P.append(box('far_bridge_rail', (CX1 - CX0 + 0.5, 0.1, 0.16), (MID, y + s_ * (SW / 2), TOP + 0.08), PAVE_LIGHT, bevel=0.02))
-bake(P, 'far_bridges')
+# ── 정원의 사이프러스·우산소나무, 가로등 ─────────────────────
 
-# ── 가로등, 공원 나무 ─────────────────────────────────
+
+def cypress(name, x, y, h):
+    z = height(x, y) - 0.03
+    P = [cyl(f'{name}_trunk', 0.04 * h, 0.03 * h, 0.15 * h, (x, y, z + 0.075 * h), TRUNK, seg=6),
+         blob(f'{name}_crown', 0.13 * h, (x, y, z + 0.55 * h), CYPRESS, scale=(1, 1, 3.6), sub=2)]
+    return bake(P, name, origin=(x, y, z))
+
+
+def umbrella_pine(name, x, y, h):
+    z = height(x, y) - 0.03
+    lean = (rnd.random() - 0.5) * 0.25
+    P = [cyl(f'{name}_trunk', 0.045 * h, 0.03 * h, 0.85 * h, (x + lean * 0.4 * h, y, z + 0.42 * h), TRUNK, seg=8, rot=(0, lean, 0))]
+    sph = [((x + lean * 0.85 * h + math.cos(a) * 0.22 * h, y + math.sin(a) * 0.22 * h, z + 0.9 * h), 0.2 * h)
+           for a in [k / 5 * math.tau + rnd.random() for k in range(5)]]
+    sph.append(((x + lean * 0.85 * h, y, z + 0.95 * h), 0.22 * h))
+    P.append(look.lumpy(f'{name}_crown', sph, UMBRELLA, 0.04 * h))
+    return bake(P, name, origin=(x, y, z))
+
+
+trees = 0
+for i in range(4000):
+    if trees >= 34:
+        break
+    x, y = tile.pick(W, D, 0.4)
+    if not garden(x, y) or in_river(x) or abs(x - RX1) < 0.5 or abs(x - RX0) < 0.5:
+        continue
+    h = (1.0 + rnd.random() * 0.4) * 1.3
+    if not tile.free(x, y, 0.3 if trees % 3 else 0.6, W, D, 0.4):
+        continue
+    if trees % 3 == 2:
+        umbrella_pine(f'tree_{trees}', x, y, h * 1.2)
+        block(x, y, 0.65)
+    else:
+        cypress(f'tree_{trees}', x, y, h * 1.25)
+        block(x, y, 0.25)
+    trees += 1
+print('trees', trees, flush=True)
 lamps = []
-for k, p in enumerate(ring_points(RING + RW / 2 + 0.35, 20)):
-    if in_canal(p.x) or not tile.free(p.x, p.y, 0.15, W, D):
+for k, p in enumerate(ring_points(RXR + RW / 2 + 0.3, RYR + RW / 2 + 0.3, 20)):
+    if in_river(p.x) or not tile.free(p.x, p.y, 0.15, W, D):
         continue
     lamps.append(look.lantern(f'lamp_{k}', p.x, p.y))
     lamps[-1].scale = (1.4, 1.4, 1.4)
-trees = 0
-for i in range(4000):
-    if trees >= 26:
-        break
-    x, y = tile.pick(W, D, 0.4)
-    park = (x > RING + 0.8 and y < RING - 1.5) or (y < -RING - 0.8 and x > -RING + 1.5)
-    plaza = (Vector((x, y)) - FT).length > 2.3 and -4.6 < x < -0.2 and -4.6 < y < 4.6
-    if not (park or (plaza and rnd.random() < 0.15)) or in_canal(x) or abs(x - CX0) < 0.5 or abs(x - CX1) < 0.5:
+
+# ── 둘레 시가지: 제각각인 팔라초·탑집, 광장의 성당·돔·종탑, 강 다리, 언덕의 빌라·사이프러스·올리브 ─────
+items, spots = [], []
+Hr = lambda: COTTO[rnd.randrange(3)]
+Wr = lambda: WALLS[rnd.randrange(len(WALLS))]
+plazas = []
+for sx in XS:
+    for sy in YS:
+        if sx == XS[0] and sy == YS[0]:
+            continue
+        x0, x1 = sx
+        y0, y1 = sy
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        if math.hypot(cx, cy) > CITY_R or corridor(cx):
+            continue
+        if (cell(cx, cy, 5) % 9) == 0 and x1 - x0 > 4.5 and y1 - y0 > 4.5:
+            plazas.append((cx, cy))  # 성당 광장
+        for side in range(4):
+            # 길을 따라 집을 잇는다(앞 = 길 쪽), 깊이·높이·지붕이 제각각
+            t = (x0 if side < 2 else y0 + 1.2)
+            b = (x1 if side < 2 else y1 - 1.2)
+            while t < b - 0.6:
+                w = min(1.0 + rnd.random() * 1.6, b - t)
+                c = t + w / 2
+                t += w
+                dd = 1.1 + rnd.random() * 0.8
+                if side < 2:
+                    x, y, rot = c, (y0 + dd / 2 if side == 0 else y1 - dd / 2), (0.0 if side == 0 else math.pi)
+                else:
+                    x, y, rot = (x0 + dd / 2 if side == 2 else x1 - dd / 2), c, (-H if side == 2 else H)
+                if corridor(x) or (abs(x) < W / 2 + 0.3 and abs(y) < D / 2 + 0.3) or belt(x, y):
+                    continue
+                if rnd.random() < 0.04:
+                    items.append((x, y, TOP - 0.02, 0.9, 0.9, 4.0 + rnd.random() * 1.5, 0.3, rot, RUSTIC, Hr(), 'hip'))
+                    continue
+                floors = rnd.randint(2, 5)
+                items.append((x, y, TOP - 0.02, w - 0.04, dd, 0.7 + floors * 0.55, min(w, dd) * 0.28, rot, Wr(), Hr(),
+                              'hip' if rnd.random() < 0.8 else 'gable'))
+        if belt(cx, cy):
+            # 공원: 우산소나무·사이프러스
+            for k in range(int((x1 - x0) * (y1 - y0) / 2.2)):
+                x, y = x0 + 0.7 + rnd.random() * (x1 - x0 - 1.4), y0 + 0.7 + rnd.random() * (y1 - y0 - 1.4)
+                if belt(x, y) and not corridor(x):
+                    spots.append((x, y, TOP - 0.03, 1.6 + rnd.random() * 0.6, ('umbrella', UMBRELLA) if k % 3 else ('cypress', CYPRESS)))
+            continue
+        for k in range(rnd.randint(0, 2)):
+            x, y = x0 + 2.2 + rnd.random() * max(0.1, x1 - x0 - 4.4), y0 + 2.2 + rnd.random() * max(0.1, y1 - y0 - 4.4)
+            spots.append((x, y, TOP - 0.03, 1.6 + rnd.random() * 0.6, ('cypress', CYPRESS) if k % 2 else ('umbrella', UMBRELLA)))
+print('far houses', len(items), 'plazas', len(plazas), flush=True)
+
+# 먼 성당들(광장 가운데): 줄무늬 정면 + 박공 본당 + 종탑, 일부는 돔
+P = []
+for k, (cx, cy) in enumerate(plazas[:7]):
+    rot = (k % 2) * H
+    Q = [box('far_ch_nave', (1.4, 2.6, 1.6), (0, 0, 0.8), MARBLE if k % 2 else WALLS[3], bevel=0),
+         gable_prism('far_ch_roof', 1.4, 2.6, 1.6, 0.42, COTTO[k % 3], o=0.05),
+         box('far_ch_front', (1.6, 0.1, 2.0), (0, -1.33, 1.0), MARBLE, bevel=0),
+         box('far_ch_band', (1.62, 0.12, 0.08), (0, -1.33, 1.3), MARBLE_G, bevel=0),
+         box('far_ch_tower', (0.5, 0.5, 3.4), (0.95, 0.8, 1.7), RUSTIC if k % 2 else MARBLE, bevel=0),
+         cyl('far_ch_spire', 0.3, 0.02, 0.5, (0.95, 0.8, 3.65), COTTO[0], seg=4, rot=(0, 0, math.pi / 4))]
+    if k % 3 == 0:
+        dp = [(max(0.75 * math.cos(p) ** 0.75, 0.15), 2.3 + 1.1 * math.sin(p)) for p in [i / 5 * 1.36 for i in range(6)]]
+        Q += [lathe('far_ch_drum', [(0.75, 1.5), (0.75, 2.3)], 8, MARBLE, R8, cap=False), lathe('far_ch_dome', dp, 8, DOME, R8),
+              lathe('far_ch_lant', [(0.14, dp[-1][1]), (0.12, dp[-1][1] + 0.3)], 8, MARBLE, R8)]
+        Q[-3].location.y = Q[-2].location.y = Q[-1].location.y = 0.9
+    for q in Q:
+        x_, y_ = q.location.x, q.location.y
+        c, s = math.cos(rot), math.sin(rot)
+        q.location = (cx + x_ * c - y_ * s, cy + x_ * s + y_ * c, q.location.z + TOP - 0.02)
+        q.rotation_euler.z += rot
+    P += Q
+bake(P, 'far_churches_distant')
+
+# 강을 건너는 먼 다리(길마다)
+P = []
+for sy in YS:
+    for y in (sy[0] - 0.5, sy[1] + 0.5):
+        if D / 2 + 0.5 < abs(y) < CITY_R:
+            P.append(box('far_bridge', (RX1 - RX0 + 0.5, 1.0, 0.18), (MID, y, TOP - 0.06), QUAY, bevel=0))
+            for s_ in (-1, 1):
+                P.append(box('far_bridge_rail', (RX1 - RX0 + 0.5, 0.08, 0.14), (MID, y + s_ * 0.46, TOP + 0.08), CURB, bevel=0))
+bake(P, 'far_bridges')
+
+# 언덕: 사이프러스 줄, 올리브 숲, 우산소나무, 빌라
+for k in range(1400):
+    a = rnd.random() * math.tau
+    r = CITY_R + 4 + rnd.random() * 34
+    x, y = math.cos(a) * r, math.sin(a) * r
+    if abs(x - MID) < 4:
         continue
-    h = (0.85 + rnd.random() * 0.35) * 1.3
-    if not tile.free(x, y, 0.42 * h, W, D, 0.4):
+    z = hfar(x, y) - 0.05
+    u = rnd.random()
+    if u < 0.5:
+        spots.append((x, y, z, 0.9 + rnd.random() * 0.3, ('bush', OLIVE)))
+    elif u < 0.85:
+        spots.append((x, y, z, 2.2 + rnd.random() * 0.8, ('cypress', CYPRESS)))
+    else:
+        spots.append((x, y, z, 2.4 + rnd.random() * 0.8, ('umbrella', UMBRELLA)))
+for k in range(36):
+    a = rnd.random() * math.tau
+    r = CITY_R + 6 + rnd.random() * 26
+    x, y = math.cos(a) * r, math.sin(a) * r
+    if abs(x - MID) < 5:
         continue
-    look.cloud_tree(f'tree_{trees}', x, y, h, ('orange', 'green', 'red', 'green', 'yellow')[trees % 5])
-    block(x, y, 0.4 * h)
-    trees += 1
-print('trees', trees, flush=True)
-for i in range(16):
-    for _ in range(50):
-        x, y = tile.pick(W, D, 0.4)
-        if (x > RING + 0.8 or y < -RING - 0.8) and not in_canal(x) and tile.free(x, y, 0.25, W, D):
-            bush(f'bush_{i}', x, y, 0.2)
-            block(x, y, 0.25)
-            break
+    rot = rnd.random() * math.tau
+    items.append((x, y, hfar(x, y) - 0.1, 2.2 + rnd.random(), 1.6 + rnd.random() * 0.6, 1.6 + rnd.random() * 0.6, 0.5, rot,
+                  WALLS[rnd.choice((0, 3, 7))], Hr(), 'hip'))
+    # 빌라로 오르는 사이프러스 길
+    c, s = math.cos(rot), math.sin(rot)
+    for j in range(1, 7):
+        for e in (-1, 1):
+            px, py = x + (-s * (1.6 + j * 0.9)) + c * e * 0.7, y + (c * (1.6 + j * 0.9)) + s * e * 0.7
+            spots.append((px, py, hfar(px, py) - 0.05, 2.4, ('cypress', CYPRESS)))
+print('far items', len(items), 'trees', len(spots), flush=True)
+tile.far_houses('far_town', items)
+tile.far_trees('far_trees', spots)
 
 setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
@@ -508,7 +794,7 @@ setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 layout = {
     'ground': tile.heightmap(hfar),
     'paths': {'ring': [three(p, TOP + 0.02) for p in ROUTE[::3]], 'canal': [three(Vector((MID, y)), LEVEL) for y in (-7.2, 0, 7.2)]},
-    'lights': [three(Vector((CH.x, CH.y - 1.05 - 0.9)), 1.0), three(FT, 1.2), three(cafe[0], 1.0)]
+    'lights': [three(Vector((DX, NAVE_Y0 - 0.6)), 1.0), three(FT, 1.2), three(cafe[0], 1.0), three(Vector((MID, PV_Y)), 1.0)]
               + [three(o.location, 1.2) for o in lamps[::3]],
 }
 
