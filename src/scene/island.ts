@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Env } from './env';
 import type { Rng } from '../util';
+import { applyLightmap } from './baked';
 import { trackMaterials } from './props';
 import {
   FLOATING_VIEW, Sway, TOP, Waterfall, addVines, fallAt, islandBob, riverMesh, rimPoint, waterBrightness, type Stage,
@@ -10,7 +11,7 @@ import {
 /**
  * 하늘섬 테마. 섬 바닥·나무·집·풍차·등대·양 같은 모양은 Blender 에서 직접 모델링한 public/models/island.glb
  * (만드는 법: tools/blender/island.py)이고, 여기서는 그 위에 흐르는 강과 폭포, 풍차 날개, 나무 흔들림,
- * 계절 색과 밤 창문 불빛만 입힌다.
+ * 계절 색과 밤 창문 불빛만 입힌다. 빛은 Blender 에서 구운 라이트맵(island_light.webp)에 하늘빛을 곱해 쓴다.
  */
 const FALL_ANGLE = 0.42;
 const SPRING_FALL_ANGLE = 2.25;
@@ -19,6 +20,7 @@ export class Island implements Stage {
   readonly group = new THREE.Group();
   readonly kind = 'floating' as const;
   readonly view = FLOATING_VIEW;
+  readonly baked = true;
   private readonly sway = new Sway();
   private readonly river: THREE.ShaderMaterial;
   private readonly falls: Waterfall[] = [];
@@ -37,6 +39,7 @@ export class Island implements Stage {
     new GLTFLoader().load('models/island.glb', (gltf) => {
       const root = gltf.scene;
       trackMaterials(root, this.seasonal, this.glass);
+      applyLightmap(root, 'models/island_light.webp');
       root.traverse((o) => {
         if (o.name.startsWith('tree_')) this.sway.add(o, rng);
       });
@@ -70,10 +73,10 @@ export class Island implements Stage {
       g.add(wf.group);
     }
 
-    // 밤에 집 앞을 비추는 불빛(모델의 집 자리)
-    for (const [x, z] of [[1.5, -2.4], [-1.6, 2.7], [3.3, -1.9]]) {
-      const light = new THREE.PointLight('#ffb35c', 0, 6, 2);
-      light.position.set(x, 0.9, z);
+    // 밤에 고이는 따뜻한 불빛: 집 두 채 앞과 모닥불(모델의 자리, Blender (x, y) = 여기 (x, -z))
+    for (const [x, z, y] of [[1.9, -2.5, 0.9], [-1.3, 2.5, 0.9], [1.35, 3.35, 0.45]]) {
+      const light = new THREE.PointLight('#ffc46b', 0, 4, 2);
+      light.position.set(x, y, z);
       g.add(light);
       this.lights.push(light);
     }

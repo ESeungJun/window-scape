@@ -14,6 +14,7 @@ export const SEASONAL: Record<string, (env: Env, out: THREE.Color) => void> = {
   leaf_red: (e, c) => c.copy(e.foliageB),
   leaf_yellow: (e, c) => c.copy(e.foliageA).offsetHSL(0.035, 0, 0.07),
   leaf_green: (e, c) => c.copy(e.grass).multiplyScalar(0.8),
+  leaf_rust: (e, c) => c.copy(e.foliageB).offsetHSL(-0.012, 0, -0.07),
   leafA: (e, c) => c.copy(e.foliageA),
   leafB: (e, c) => c.copy(e.foliageB),
   pine: (e, c) => c.copy(e.pine),
@@ -36,7 +37,7 @@ export function trackMaterials(root: THREE.Object3D, list = seasonal, lights = g
     if (seen.has(m)) return;
     seen.add(m);
     if (SEASONAL[m.name]) list.push([m, SEASONAL[m.name]]);
-    if (m.name === 'glass') lights.push(m);
+    if (m.name === 'glass' || m.name === 'fire') lights.push(m);
   });
 }
 

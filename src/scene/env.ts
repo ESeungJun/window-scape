@@ -39,10 +39,11 @@ const TIME: Record<TimeOfDay, {
   skyTop: string; skyBottom: string; sun: string; sunI: number; elev: number;
   hemi: number; hemiSky: string; lights: number; stars: number;
 }> = {
-  morning: { skyTop: '#6f9fdc', skyBottom: '#ffd2ad', sun: '#ffc98f', sunI: 2.6, elev: 0.3, hemi: 1.0, hemiSky: '#d4e2ff', lights: 0.25, stars: 0 },
-  day: { skyTop: '#4a8fdc', skyBottom: '#dcecfb', sun: '#ffe8c8', sunI: 2.8, elev: 0.95, hemi: 1.5, hemiSky: '#dcedff', lights: 0, stars: 0 },
-  evening: { skyTop: '#46499a', skyBottom: '#ff9466', sun: '#ff8a4c', sunI: 2.3, elev: 0.16, hemi: 0.8, hemiSky: '#ffc0a0', lights: 0.8, stars: 0.2 },
-  night: { skyTop: '#060b22', skyBottom: '#1c2a58', sun: '#8ea4ff', sunI: 0.75, elev: 0.75, hemi: 0.45, hemiSky: '#4f63a6', lights: 1, stars: 1 },
+  // 하늘·안개색은 시간대마다 크게 바뀌지만, 장면을 비추는 빛(sun·hemiSky)은 중립에 가깝게 둬 장면 고유색이 덜 흔들리게 한다
+  morning: { skyTop: '#9fb8dc', skyBottom: '#f3dcc6', sun: '#ffdcb6', sunI: 2.3, elev: 0.3, hemi: 1.2, hemiSky: '#e9e6ec', lights: 0.25, stars: 0 },
+  day: { skyTop: '#8db8e0', skyBottom: '#dce6ee', sun: '#fff1dc', sunI: 2.5, elev: 0.95, hemi: 1.5, hemiSky: '#e4eef6', lights: 0, stars: 0 },
+  evening: { skyTop: '#8497c9', skyBottom: '#efd2c0', sun: '#ffc89a', sunI: 1.8, elev: 0.16, hemi: 1.05, hemiSky: '#efdcd2', lights: 0.8, stars: 0.2 },
+  night: { skyTop: '#1a2140', skyBottom: '#34406a', sun: '#9fb2ff', sunI: 0.6, elev: 0.75, hemi: 0.7, hemiSky: '#5a6fb0', lights: 1, stars: 1 },
 };
 
 const WEATHER: Record<Condition, {
@@ -62,10 +63,11 @@ const WEATHER: Record<Condition, {
 };
 
 const SEASON: Record<Season, { grass: string; a: string; b: string; pine: string; snow: number }> = {
-  spring: { grass: '#7cc25a', a: '#93d36b', b: '#f4aecb', pine: '#2f7046', snow: 0 },
-  summer: { grass: '#59a843', a: '#3f9a3c', b: '#2e7d36', pine: '#2a6440', snow: 0 },
-  autumn: { grass: '#82ad4c', a: '#e8902f', b: '#c8452e', pine: '#2f6443', snow: 0 },
-  winter: { grass: '#8e9f78', a: '#b9a98e', b: '#a99b86', pine: '#2f5a46', snow: 1 },
+  // 채도 낮고 따뜻한 색(세이지 잔디, 머스터드·황토 단풍)
+  spring: { grass: '#a3b866', a: '#b9c97a', b: '#e6bcc4', pine: '#557f5b', snow: 0 },
+  summer: { grass: '#8fab5a', a: '#7f9e4e', b: '#6b8f45', pine: '#4f7a57', snow: 0 },
+  autumn: { grass: '#8ea35a', a: '#e2b65a', b: '#cf8a45', pine: '#4f7a57', snow: 0 },
+  winter: { grass: '#9aa287', a: '#bdb39e', b: '#ada28e', pine: '#4a6a55', snow: 1 },
 };
 
 const SNOW = new Color('#eef3f8');

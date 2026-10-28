@@ -126,39 +126,48 @@ def banded(name, colors, axis_scale=3.0, distortion=2.0, bump=0.4, rough=0.9):
     return m
 
 
-GRASS = mat('grass', '#7fb24a', 0.9, 0.18, 3.0, 0.25)
-GRASS_DARK = mat('grass_dark', '#5f9a3c', 0.9, 0.15, 4.0, 0.2)
-DIRT = mat('dirt', '#8a5a38', 0.95, 0.2, 6.0, 0.4)
-CLIFF = banded('cliff', ['#a06c44', '#7e5638', '#b08660', '#6c4a34', '#93694a', '#5e4232'], 1.6, 2.5, 0.8)
-STONE = mat('stone', '#9a9ca4', 0.85, 0.2, 8.0, 0.5)
-PATH = mat('path', '#d8c6a0', 0.95, 0.12, 6.0, 0.2)
-WOOD = mat('wood', '#8a5c3a', 0.75, 0.2, 14.0, 0.3)
-DARKWOOD = mat('darkwood', '#4c3526', 0.75, 0.15, 14.0, 0.3)
-PLASTER = mat('plaster', '#f3e9d8', 0.85, 0.06, 10.0, 0.15)
-TRUNK = mat('trunk', '#6e4a30', 0.85, 0.2, 10.0, 0.5)
-ROOF_RED = banded('roof_red', ['#b8432f', '#d0573e', '#b8432f'], 14.0, 0.3, 0.5, 0.7)
-ROOF_BLUE = banded('roof_blue', ['#41618f', '#5677a8', '#41618f'], 14.0, 0.3, 0.5, 0.7)
-ROOF_BROWN = banded('roof_brown', ['#8a4f2e', '#a2643c', '#8a4f2e'], 14.0, 0.3, 0.5, 0.7)
-GLASS = mat('glass', '#ffd98a', 0.3, 0, emit='#ffcf7a')
-SHUTTER_G = mat('shutter_g', '#5f8f5a', 0.7, 0.05)
-SHUTTER_B = mat('shutter_b', '#4f78a8', 0.7, 0.05)
-SAIL = mat('sail', '#f2ead8', 0.9, 0.08, 6.0)
-WOOL = mat('wool', '#f7f4ec', 1.0, 0.05, 20.0, 0.6)
-SHEEP_FACE = mat('sheep_face', '#3a3234', 0.8, 0.05)
-WATER = mat('water', '#4fb0d8', 0.08, 0.1, 3.0)
-FOAM = mat('foam', '#eaf6ff', 0.6, 0)
-LH_RED = mat('lh_red', '#c8463a', 0.6, 0.05)
-LH_WHITE = mat('lh_white', '#f6f3ec', 0.6, 0.04)
-HAY = mat('hay', '#e2b94a', 0.95, 0.25, 18.0, 0.6)
-PUMPKIN = mat('pumpkin', '#e8822a', 0.6, 0.1)
+# 색상표(모든 테마 공통). 레퍼런스 디오라마의 채도 낮고 따뜻한 색에서 뽑았다
+GRASS = mat('grass', '#9aae62', 0.95, 0.08, 3.0)
+GRASS_DARK = mat('grass_dark', '#6f8a48', 0.95, 0.08, 4.0)
+DIRT = mat('dirt', '#a2653e', 0.95, 0.1, 6.0)
+CLIFF = banded('cliff', ['#a2653e', '#8f5636', '#b07450', '#7f4c31', '#9a603c'], 1.6, 2.0, 0.6)
+STONE = mat('stone', '#a8a29a', 0.9, 0.1, 8.0)
+ROCK = mat('rock', '#9c9c9e', 0.9, 0.1, 3.0)
+PATH = mat('path', '#d9c39a', 0.95, 0.06, 6.0)
+SAND = mat('sand', '#e8d8b6', 0.95, 0.05, 6.0)
+WOOD = mat('wood', '#8a5a3c', 0.85, 0.12, 14.0)
+DARKWOOD = mat('darkwood', '#5e4330', 0.85, 0.1, 14.0)
+PLASTER = mat('plaster', '#eee5d4', 0.9, 0.04, 10.0)
+TRUNK = mat('trunk', '#7a5a42', 0.9, 0.1, 10.0)
+ROOF_RED = banded('roof_red', ['#c8653d', '#d27448', '#bb5c37'], 14.0, 0.3, 0.3, 0.8)
+ROOF_BLUE = banded('roof_blue', ['#6f8496', '#7d93a6', '#677b8c'], 14.0, 0.3, 0.3, 0.8)
+ROOF_BROWN = banded('roof_brown', ['#9a6a48', '#a87656', '#8f6142'], 14.0, 0.3, 0.3, 0.8)
+TILE = mat('tile', '#c8653d', 0.85, 0.1, 9.0)
+GLASS = mat('glass', '#5d6f7c', 0.4, 0, emit='#ffc46b')
+SHUTTER_G = mat('shutter_g', '#7d9670', 0.8, 0.05)
+SHUTTER_B = mat('shutter_b', '#7a8fa3', 0.8, 0.05)
+SAIL = mat('sail', '#efe6d4', 0.95, 0.05, 6.0)
+WOOL = mat('wool', '#f4efe4', 1.0, 0.04, 20.0)
+SHEEP_FACE = mat('sheep_face', '#4a4040', 0.85, 0.05)
+WATER = mat('water', '#6fb4d0', 0.1, 0.05, 3.0)
+FOAM = mat('foam', '#eef6fa', 0.6, 0)
+LH_RED = mat('lh_red', '#c8653d', 0.8, 0.04)
+LH_WHITE = mat('lh_white', '#eee5d4', 0.8, 0.03)
+HAY = mat('hay', '#dcbb6a', 0.95, 0.12, 18.0)
+PUMPKIN = mat('pumpkin', '#d98a3e', 0.7, 0.08)
+CLOTH_R = mat('cloth_r', '#c8653d', 0.95, 0.03)
+CLOTH_W = mat('cloth_w', '#eee5d4', 0.95, 0.03)
+FIRE = mat('fire', '#ffb04a', 0.9, 0, emit='#ffb04a')
+# 잎: 앱에서 계절 색으로 바뀐다(leaf_orange = 머스터드, leaf_red = 황토, leaf_rust = 적갈)
 LEAF = {
-    'orange': mat('leaf_orange', '#ec8f2c', 0.85, 0.22, 4.0, 0.5),
-    'red': mat('leaf_red', '#cf4a2c', 0.85, 0.22, 4.0, 0.5),
-    'yellow': mat('leaf_yellow', '#f0b93a', 0.85, 0.2, 4.0, 0.5),
-    'green': mat('leaf_green', '#5f9e3f', 0.85, 0.2, 4.0, 0.5),
+    'orange': mat('leaf_orange', '#e2b65a', 0.95, 0.08, 4.0),
+    'red': mat('leaf_red', '#cf8a45', 0.95, 0.08, 4.0),
+    'rust': mat('leaf_rust', '#b8673a', 0.95, 0.08, 4.0),
+    'yellow': mat('leaf_yellow', '#e2b65a', 0.95, 0.08, 4.0),
+    'green': mat('leaf_green', '#7f9a50', 0.95, 0.08, 4.0),
 }
-PINE = mat('pine', '#2f6d47', 0.85, 0.18, 5.0, 0.4)
-BUSH = mat('bush', '#4f8f3a', 0.9, 0.2, 5.0, 0.5)
+PINE = mat('pine', '#4f7a57', 0.95, 0.08, 5.0)
+BUSH = mat('bush', '#7f9a50', 0.95, 0.08, 5.0)
 
 # ── 모양 도우미 ───────────────────────────────────────
 
@@ -724,7 +733,79 @@ def setup_render(cam_loc, cam_target):
 
 
 
-def export_glb(path, join=True):
+GROUND_MATS = {'grass', 'grass_dark', 'path', 'cliff', 'dirt', 'sand'}
+GROUND_UV_SCALE = 4.0
+
+
+def bake_lightmap(path, size, samples):
+    """하늘에서만 오는 흰 간접광 + 틈 그늘(AO)을 라이트맵 한 장에 굽는다(해·불빛은 굽지 않는다).
+    앱이 이 값에 시간대·날씨의 하늘색을 곱하고 해는 실시간으로 얹는다. 꽃은 너무 잘아서 뺀다."""
+    objs = [o for o in bpy.data.objects if o.type == 'MESH' and not o.name.startswith('flowers_')]
+    for o in objs:
+        uv = o.data.uv_layers.new(name='lightmap')
+        o.data.uv_layers.active = uv
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in objs:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.0015, area_weight=0.0, scale_to_bounds=False)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    # 넓은 땅(잔디·흙길·절벽)은 화면에서 크게 보이므로 라이트맵 해상도를 더 준다(섬 단위로 같은 배율이라 모양은 그대로)
+    for o in objs:
+        names = [m.name if m else '' for m in o.data.materials]
+        uv = o.data.uv_layers['lightmap'].data
+        for poly in o.data.polygons:
+            if names and names[poly.material_index] in GROUND_MATS:
+                for li in poly.loop_indices:
+                    uv[li].uv *= GROUND_UV_SCALE
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.select_all(action='SELECT')
+    bpy.ops.uv.pack_islands(margin=0.0015, rotate=True)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    img = bpy.data.images.new('lightmap', size, size, float_buffer=True)
+    # 굽는 동안만: 불빛을 끄고, 꼭짓점 색을 바탕색에 곱해 튀는 빛 색이 맞게, 구울 그림을 고른다
+    undo = []
+    for m in {s.material for o in objs for s in o.material_slots if s.material}:
+        nt = m.node_tree
+        b = nt.nodes['Principled BSDF']
+        em = b.inputs['Emission Strength'].default_value
+        b.inputs['Emission Strength'].default_value = 0
+        vc = nt.nodes.new('ShaderNodeVertexColor')
+        vc.layer_name = 'Col'
+        mix = nt.nodes.new('ShaderNodeMix')
+        mix.data_type = 'RGBA'
+        mix.blend_type = 'MULTIPLY'
+        mix.inputs['Factor'].default_value = 1
+        mix.inputs[6].default_value = b.inputs['Base Color'].default_value
+        nt.links.new(vc.outputs['Color'], mix.inputs[7])
+        nt.links.new(mix.outputs[2], b.inputs['Base Color'])
+        tex = nt.nodes.new('ShaderNodeTexImage')
+        tex.image = img
+        nt.nodes.active = tex
+        undo.append((m, b, em, [vc, mix, tex]))
+    world = scene.world or bpy.data.worlds.new('sky')
+    scene.world = world
+    world.use_nodes = True
+    world.node_tree.nodes['Background'].inputs['Color'].default_value = (1, 1, 1, 1)
+    world.node_tree.nodes['Background'].inputs['Strength'].default_value = 1.0
+    scene.cycles.samples = samples
+    scene.render.bake.margin = 6
+    bpy.ops.object.bake(type='DIFFUSE', pass_filter={'DIRECT', 'INDIRECT'}, margin=6, use_clear=True)
+    img.filepath_raw = path
+    img.file_format = 'PNG'
+    img.save()
+    print('lightmap', path, flush=True)
+    for m, b, em, nodes in undo:
+        b.inputs['Emission Strength'].default_value = em
+        for nd in nodes:
+            m.node_tree.nodes.remove(nd)
+
+
+def export_glb(path, join=True, lightmap=None, size=2048, samples=512):
     # 미리보기 전용(물·구름·조명·카메라)은 빼고, 앱에서 바꾸지 않는 물체는 하나로 합친다
     for o in list(bpy.data.objects):
         if o.name.startswith(('water_', 'cloud_')) or o.type in ('LIGHT', 'CAMERA'):
@@ -755,6 +836,29 @@ def export_glb(path, join=True):
         for sock in ('Base Color', 'Normal'):
             for l in list(b.inputs[sock].links):
                 m.node_tree.links.remove(l)
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in bpy.data.objects:
+        o.select_set(o.type == 'MESH')
+    bpy.ops.object.convert(target='MESH')
+    # 안 보이는 면(섬 바닥 층들이 맞닿는 덮개)은 지운다. 라이트맵 자리를 아낀다
+    hidden = {'ground_grass': lambda n: n.z < -0.9, 'ground_dirt': lambda n: abs(n.z) > 0.9, 'ground_cliff': lambda n: n.z > 0.9}
+    for name, test in hidden.items():
+        o = bpy.data.objects.get(name)
+        if not o:
+            continue
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        bmesh.ops.delete(bm, geom=[f for f in bm.faces if test(f.normal)], context='FACES')
+        bm.to_mesh(o.data)
+        bm.free()
+    # 언덕은 땅 속에 묻힌 아래쪽을 지운다
+    o = bpy.data.objects.get('ground_hill')
+    if o:
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        bmesh.ops.delete(bm, geom=[f for f in bm.faces if (o.matrix_world @ f.calc_center_median()).z < TOP - 0.06], context='FACES')
+        bm.to_mesh(o.data)
+        bm.free()
     if join:
         keep = lambda o: o.name.startswith(('tree_', 'mill_', 'flowers_')) or o.parent is not None
         rest = [o for o in bpy.data.objects if o.type == 'MESH' and not keep(o)]
@@ -791,6 +895,8 @@ def export_glb(path, join=True):
                     c = (v, v, v)
                 attr.data[li].color = (*c, 1)
         me.color_attributes.active_color = attr
+    if lightmap:
+        bake_lightmap(lightmap, size, samples)
     bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=False, export_apply=True,
                               export_vertex_color='ACTIVE')
     print('exported', path, flush=True)

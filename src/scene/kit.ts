@@ -377,11 +377,13 @@ export interface Stage {
   focus?(out: THREE.Vector3): THREE.Vector3;
   /** 그 위치의 땅 높이(땅 테마). 카메라가 언덕 속으로 들어가지 않게 쓴다 */
   groundHeight?(x: number, z: number): number;
+  /** 빛을 구운 장면(라이트맵 + 하늘빛). 실시간 반구광·오클루전 대신 구운 빛을 쓴다 */
+  readonly baked?: boolean;
   update(dt: number, t: number, env: Env): void;
 }
 
 /** 떠 있는 섬 테마의 기본 카메라 */
-export const FLOATING_VIEW = { target: new THREE.Vector3(0, -1.5, 0), distance: 25.5 };
+export const FLOATING_VIEW = { target: new THREE.Vector3(0, 0.4, 0), distance: 26 };
 
 /** 공용 재질에 계절과 밤 불빛을 반영한다. 테마와 상관없이 프레임마다 한 번 부른다. */
 export function updateSharedMaterials(env: Env): void {
