@@ -4,6 +4,10 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { HorizontalTiltShiftShader } from 'three/addons/shaders/HorizontalTiltShiftShader.js';
+import { VerticalTiltShiftShader } from 'three/addons/shaders/VerticalTiltShiftShader.js';
 import type { Condition, Season, TimeOfDay } from '../data/weather';
 import { mulberry32, lerp } from '../util';
 import { Clouds } from './clouds';
@@ -11,12 +15,51 @@ import { composeEnv, copyEnv, createEnv, lerpEnv, type Env, type LiveWeather } f
 import { Floaters, updateSharedMaterials, type Stage } from './kit';
 import { createStage, type Theme } from './themes';
 import { Precipitation } from './precipitation';
-import { SkyDome } from './sky';
+import { SkyDome, SkyLight } from './sky';
 
 export type Quality = 'auto' | 'low' | 'medium' | 'high';
 
 const SUN_AZIMUTH = 0.9;
 const AUTO_ROTATE_DELAY_MS = 6000;
+/** 화면 위아래가 흐려지는 정도(틸트시프트). 클수록 미니어처처럼 보인다 */
+const TILT_BLUR = 2.2;
+
+/** three 의 틸트시프트는 화면 전체가 조금씩 흐려지므로, 가운데 띠는 또렷하게 두고 위아래로 갈수록만 흐리게 바꾼다 */
+function tiltShift(shader: typeof HorizontalTiltShiftShader | typeof VerticalTiltShiftShader, axis: 'h' | 'v'): ShaderPass {
+  const fragmentShader = shader.fragmentShader.replace(
+    `float ${axis}${axis} = ${axis} * abs( r - vUv.y );`,
+    `float ${axis}${axis} = ${axis} * smoothstep( 0.2, 0.55, abs( r - vUv.y ) );`,
+  );
+  if (fragmentShader === shader.fragmentShader) console.warn('틸트시프트 셰이더를 고치지 못했어요');
+  const pass = new ShaderPass({ ...shader, fragmentShader });
+  return pass;
+}
+
+/** 마지막 색 보정: 채도·대비를 조금 올리고, 그늘은 푸르게 밝은 곳은 따뜻하게, 가장자리는 살짝 어둡게 */
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      vec3 col = c.rgb;
+      float l = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(vec3(l), col, 1.08);
+      col = (col - 0.5) * 1.05 + 0.5;
+      col += vec3(0.012, 0.004, -0.012) * smoothstep(0.4, 1.0, l) + vec3(-0.008, 0.0, 0.014) * (1.0 - smoothstep(0.0, 0.5, l));
+      col *= mix(0.88, 1.0, smoothstep(0.95, 0.35, length(vUv - 0.5)));
+      gl_FragColor = vec4(col, c.a);
+    }
+  `,
+};
 
 /** 렌더러·카메라·조명과 장면 구성 요소를 묶고 매 프레임 연출 값을 반영한다. */
 export class World {
@@ -28,6 +71,10 @@ export class World {
   /** 맞닿은 곳·틈을 은은하게 어둡게(앰비언트 오클루전) 해 장난감 디오라마 같은 깊이를 준다. 화질 '낮음'에서는 끈다 */
   private readonly composer: EffectComposer;
   private readonly ao: GTAOPass;
+  /** 밤 창문·가로등이 은은하게 번지게. 화질 '높음'에서만 */
+  private readonly bloom: UnrealBloomPass;
+  private readonly tiltH = tiltShift(HorizontalTiltShiftShader, 'h');
+  private readonly tiltV = tiltShift(VerticalTiltShiftShader, 'v');
   private useComposer = false;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(38, 1, 0.1, 1000);
@@ -36,6 +83,7 @@ export class World {
   private readonly hemi = new THREE.HemisphereLight('#ffffff', '#b9c3cc', 1);
   private readonly fog = new THREE.Fog('#ffffff', 45, 150);
   private readonly sky = new SkyDome();
+  private readonly skyLight: SkyLight;
   private readonly clouds: Clouds;
   private readonly floaters: Floaters;
   /** 한 번 만든 테마는 보관해 두고 다시 고를 때 재사용한다 */
@@ -59,6 +107,7 @@ export class World {
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     container.appendChild(this.renderer.domElement);
+    this.skyLight = new SkyLight(this.renderer);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.ao = new GTAOPass(this.scene, this.camera);
@@ -74,7 +123,13 @@ export class World {
       }
     });
     this.composer.addPass(this.ao);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.05, 0.1, 1.5);
+    this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    // 틸트시프트·색 보정은 화면 색(sRGB)으로 바뀐 뒤에 건다
+    this.composer.addPass(this.tiltH);
+    this.composer.addPass(this.tiltV);
+    this.composer.addPass(new ShaderPass(GradeShader));
 
     const narrow = container.clientWidth < container.clientHeight;
     this.camera.position.set(16, 11, 18).multiplyScalar(narrow ? 1.45 : 1);
@@ -149,6 +204,8 @@ export class World {
     const floating = this.stage.kind === 'floating';
     this.clouds.setSea(floating);
     this.floaters.group.visible = floating;
+    // 또렷한 띠: 떠 있는 섬은 화면 위쪽에 걸쳐 있어 띠를 조금 올린다
+    this.tiltH.uniforms.r.value = this.tiltV.uniforms.r.value = floating ? 0.6 : 0.5;
     const c = this.controls;
     c.minDistance = floating ? 14 : 7;
     c.maxDistance = floating ? 45 : 40;
@@ -194,6 +251,7 @@ export class World {
     const shadows = level !== 'low';
     const size = level === 'high' ? 2048 : 1024;
     // 창 크기를 바꿀 때마다 불리므로 값이 그대로면 손대지 않는다(픽셀 비율을 다시 넣으면 화면이 지워져 깜빡인다)
+    this.bloom.enabled = level === 'high';
     const key = `${ratio}:${shadows}:${size}`;
     if (key === this.qualityKey) return;
     this.qualityKey = key;
@@ -221,6 +279,8 @@ export class World {
     if (!w || !h) return;
     this.renderer.setSize(w, h, false);
     this.composer.setSize(w, h);
+    this.tiltH.uniforms.h.value = TILT_BLUR / w;
+    this.tiltV.uniforms.v.value = TILT_BLUR / h;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     // 크기를 바꾸면 캔버스가 비워진다. 다음 프레임(위젯은 30fps)까지 빈 화면이 보이지 않게 바로 다시 그린다
@@ -256,7 +316,10 @@ export class World {
     this.sun.color.copy(env.sunColor);
     this.sun.intensity = env.sunIntensity;
     this.hemi.color.copy(env.hemiSky);
-    this.hemi.intensity = env.hemiIntensity + flash * 2.5;
+    // 그늘 쪽 밝기는 환경광(하늘 그라데이션)이 대부분 맡고, 반구광은 거들기만 한다
+    this.hemi.intensity = env.hemiIntensity * 0.5 + flash * 2.5;
+    const envMap = this.skyLight.update(dt, env);
+    if (envMap) this.scene.environment = envMap;
 
     this.fog.color.copy(env.skyBottom);
     // 땅 테마는 지평선이 하늘에 녹아들도록 안개를 가깝게 둔다

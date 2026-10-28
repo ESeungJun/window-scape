@@ -186,6 +186,10 @@ def finish(o, m, smooth=True, bevel=0.0, seg=3, sub=0, disp=0.0, disp_size=0.5):
         b.segments = seg
         b.limit_method = 'ANGLE'
         b.harden_normals = True
+        # 넓은 면은 평평하게 두고 둥근 모서리에만 빛이 맺히도록 법선을 면 넓이로 가중한다
+        wn = o.modifiers.new('wn', 'WEIGHTED_NORMAL')
+        wn.keep_sharp = True
+        wn.weight = 100
     if sub:
         s = o.modifiers.new('sub', 'SUBSURF')
         s.levels = s.render_levels = sub
@@ -755,26 +759,37 @@ def export_glb(path, join=True):
         for sock in ('Base Color', 'Normal'):
             for l in list(b.inputs[sock].links):
                 m.node_tree.links.remove(l)
-    if join:
-        keep = lambda o: o.name.startswith(('tree_', 'mill_', 'flowers_')) or o.parent is not None
-        rest = [o for o in bpy.data.objects if o.type == 'MESH' and not keep(o)]
-        bake(rest, 'static')
     bpy.ops.object.select_all(action='DESELECT')
     for o in bpy.data.objects:
         o.select_set(o.type in ('MESH', 'EMPTY'))
     bpy.ops.object.convert(target='MESH')
     from mathutils import noise as mnoise
+
+    def smooth(a, b, x):
+        t = min(1.0, max(0.0, (x - a) / (b - a)))
+        return t * t * (3 - 2 * t)
+
     for o in bpy.data.objects:
         if o.type != 'MESH':
             continue
         me = o.data
         attr = me.color_attributes.new('Col', 'BYTE_COLOR', 'CORNER')
         mw = o.matrix_world
+        names = [m.name if m else '' for m in me.materials]
+        foliage = {i for i, n in enumerate(names) if n.startswith(('leaf', 'pine', 'bush'))}
+        world = [mw @ v.co for v in me.vertices]
+        # 물체 높이 안에서의 위치(벽: 아래 어둡게 위 밝게)와 잎 덩어리 중심(잎: 안쪽 어둡게)
+        zmin = min((c.z for c in world), default=0.0)
+        zh = max(1e-3, max((c.z for c in world), default=1.0) - zmin)
+        leaf_v = {me.loops[li].vertex_index for poly in me.polygons if poly.material_index in foliage for li in poly.loop_indices}
+        center = sum((world[i] for i in leaf_v), Vector()) / max(1, len(leaf_v))
+        reach = max((((world[i] - center) * Vector((1, 1, 1.3))).length for i in leaf_v), default=1.0)
+        shade = not o.name.startswith('ground_')
         for poly in me.polygons:
-            mname = me.materials[poly.material_index].name if me.materials else ''
-            rule = paint.get(mname)
+            rule = paint.get(names[poly.material_index] if names else '')
             for li in poly.loop_indices:
-                co = mw @ me.vertices[me.loops[li].vertex_index].co
+                vi = me.loops[li].vertex_index
+                co = world[vi]
                 if not rule:
                     c = (1, 1, 1)
                 elif rule[0] == 'band':
@@ -789,8 +804,20 @@ def export_glb(path, join=True):
                     n = mnoise.noise(co * sc * 0.5)
                     v = 0.9 + n * min(0.12, var * 0.9)
                     c = (v, v, v)
+                if shade:
+                    t = (co.z - zmin) / zh
+                    if poly.material_index in foliage:
+                        d = ((co - center) * Vector((1, 1, 1.3))).length / max(1e-3, reach)
+                        g = (0.62 + 0.46 * smooth(0.3, 1.0, d)) * (0.88 + 0.14 * t)
+                    else:
+                        g = 0.74 + 0.36 * smooth(0.0, 0.55, t)
+                    c = tuple(min(1.0, x * g) for x in c)
                 attr.data[li].color = (*c, 1)
         me.color_attributes.active_color = attr
+    if join:
+        keep = lambda o: o.name.startswith(('tree_', 'mill_', 'flowers_')) or o.parent is not None
+        rest = [o for o in bpy.data.objects if o.type == 'MESH' and not keep(o)]
+        bake(rest, 'static')
     bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=False, export_apply=True,
                               export_vertex_color='ACTIVE')
     print('exported', path, flush=True)

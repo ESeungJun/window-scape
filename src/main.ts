@@ -53,6 +53,16 @@ const state = {
     frame: new URLSearchParams(location.search).has('showcase') ? 'showcase' : 'full',
   } as ViewOptions,
 };
+// 개발 서버에서만: 화면 비교용으로 시간·날씨·계절·화질을 바꾼다(예: __view({ time: 'night', cond: 'rain' }))
+if (import.meta.env.DEV) {
+  Object.assign(window, {
+    __view: (o: Partial<ViewOptions>) => {
+      Object.assign(state.view, o);
+      if (o.quality) world.setQuality(o.quality);
+      refresh();
+    },
+  });
+}
 
 const now = {
   badge: $('badge'), place: $('place'), temp: $('temp'), cond: $('cond'), condIcon: $('condIcon'), range: $('range'), cards: $('cards'),
