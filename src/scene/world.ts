@@ -160,8 +160,10 @@ export class World {
     // 땅 테마는 땅 밑을 보지 않게 수평선 위로만
     c.maxPolarAngle = Math.PI * (floating ? 0.64 : 0.47);
     // 구운 장면은 그늘·틈이 이미 라이트맵에 있으니 해 그림자만 아주 넓게 흐린다
-    this.sun.shadow.radius = this.stage.baked ? 6 : 5;
-    this.sun.shadow.blurSamples = this.stage.baked ? 16 : 12;
+    // 모든 테마: 그림자는 넓게 흐리고 옅게(새 룩의 부드러운 그늘). 구운 장면은 틈 그늘이 라이트맵에 있어 더 옅게
+    this.sun.shadow.radius = 6;
+    this.sun.shadow.blurSamples = 16;
+    this.sun.shadow.intensity = this.stage.baked ? 1 : 0.7;
     // 기본보다 큰 섬(기본 거리보다 멀리서 보는 섬)은 그림자·안개·떠다니는 섬을 그만큼 넓힌다
     this.viewScale = floating ? this.stage.view.distance / FLOATING_VIEW.distance : 1;
     this.floaters.spread(this.viewScale);
@@ -269,13 +271,14 @@ export class World {
     this.sun.color.copy(env.sunColor);
     const baked = this.stage.baked === true;
     // 구운 장면은 그늘을 라이트맵이 밝혀 주므로 해를 조금 줄여 밝은 면이 하얗게 날지 않게
-    this.sun.intensity = env.sunIntensity * (baked ? 0.72 : 1);
+    this.sun.intensity = env.sunIntensity * (baked ? 0.72 : 0.85);
     this.hemi.color.copy(env.hemiSky);
-    this.hemi.intensity = baked ? 0 : env.hemiIntensity + flash * 2.5;
+    // 구운 장면은 라이트맵이, 나머지는 하늘 환경광이 그늘을 채우므로 반구광은 약하게
+    this.hemi.intensity = baked ? 0 : env.hemiIntensity * 0.45 + flash * 2.5;
     updateSkyTint(env, flash);
-    const skyEnv = baked ? this.skyLight.update(dt, env) : null;
+    const skyEnv = this.skyLight.update(dt, env);
     if (skyEnv) this.skyEnv = skyEnv;
-    this.scene.environment = baked ? this.skyEnv : null;
+    this.scene.environment = this.skyEnv ?? null;
 
     this.fog.color.copy(env.skyBottom);
     // 구운 장면: 섬 아래(구름바다·먼 안개)는 하늘 윗색 쪽 푸른 기를 띠게. 레퍼런스의 "위는 노을, 아래는 푸른 바다" 구도
