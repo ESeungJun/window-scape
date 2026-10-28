@@ -274,13 +274,15 @@ export class World {
     this.scene.environment = baked ? this.skyEnv : null;
 
     this.fog.color.copy(env.skyBottom);
+    // 구운 장면: 섬 아래(구름바다·먼 안개)는 하늘 윗색 쪽 푸른 기를 띠게. 레퍼런스의 "위는 노을, 아래는 푸른 바다" 구도
+    if (baked) this.fog.color.lerp(env.skyTop, 0.75);
     // 땅 테마는 지평선이 하늘에 녹아들도록 안개를 가깝게 둔다
     // 구운 장면: 우윳빛 안개를 짙게 깔아 먼 것이 하늘에 녹아들게(대비 낮은 하이키)
     this.fog.near = lerp(baked ? 18 : floating ? 30 : 22, 6, env.fog);
     this.fog.far = lerp(baked ? 80 : floating ? 150 : 72, floating ? 34 : 30, env.fog);
 
-    this.sky.update(env, this.sunDir, flash);
-    this.clouds.update(dt, env);
+    this.sky.update(env, this.sunDir, flash, baked ? 0.9 : 0);
+    this.clouds.update(dt, env, baked);
     updateSharedMaterials(env);
     this.stage.update(dt, this.time, env);
     this.floaters.update(dt, this.time);

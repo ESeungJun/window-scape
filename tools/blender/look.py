@@ -5,7 +5,13 @@ import bmesh
 from mathutils import Matrix, Vector
 import lib
 from lib import (CLOTH_R, CLOTH_W, DARKWOOD, FIRE, GLASS, HAY, LEAF, PATH, PINE, PLASTER, PUMPKIN, ROCK, STONE, TILE, TRUNK, WOOD,
-                 bake, blob, block, box, catmull, cyl, finish, new_obj, rnd)
+                 bake, blob, block, box, catmull, cyl, finish, mat, new_obj, rnd)
+
+SKIN = mat('skin', '#e9b994', 0.8, 0.03)
+HAIR = mat('hair', '#5a3a28', 0.85, 0.05)
+CLOTH_B = mat('cloth_b', '#5f7f9c', 0.95, 0.03)
+CLOTH_G = mat('cloth_g', '#7d9670', 0.95, 0.03)
+PANTS = mat('pants', '#4d4640', 0.95, 0.03)
 
 
 def surface(x, y):
@@ -331,3 +337,70 @@ def lookout(x, y, ang):
     o.rotation_euler = (0, 0, ang)
     block(x, y, 0.5)
     return o
+
+
+def villager(name, x, y, rot, shirt=CLOTH_B, hat=False, pose='stand'):
+    """마을 사람: 다리 둘, 통통한 몸통, 팔, 둥근 머리(모자 또는 머리카락). pose: stand·sit·wave"""
+    sit = pose == 'sit'
+    z0 = 0.2 if sit else 0.0
+    P = []
+    for s in (-1, 1):
+        if sit:
+            P.append(cyl(f'{name}_thigh', 0.032, 0.03, 0.16, (0.07, s * 0.045, 0.21), PANTS, seg=8, rot=(0, math.pi / 2, 0)))
+            P.append(cyl(f'{name}_shin', 0.03, 0.028, 0.2, (0.15, s * 0.045, 0.1), PANTS, seg=8))
+        else:
+            P.append(cyl(f'{name}_leg', 0.032, 0.028, 0.2, (0, s * 0.045, 0.1), PANTS, seg=8))
+    P.append(cyl(f'{name}_body', 0.075, 0.095, 0.24, (0, 0, z0 + 0.32), shirt, seg=14, bevel=0.03))
+    for s in (-1, 1):
+        up = pose == 'wave' and s > 0
+        P.append(cyl(f'{name}_arm', 0.024, 0.022, 0.19, (0, s * 0.11, z0 + (0.46 if up else 0.32)), shirt, seg=8,
+                     rot=(s * (2.6 if up else 0.18), 0, 0)))
+        P.append(blob(f'{name}_hand', 0.026, (0, s * (0.14 if up else 0.125), z0 + (0.56 if up else 0.22)), SKIN, sub=1))
+    P.append(blob(f'{name}_head', 0.075, (0, 0, z0 + 0.53), SKIN, sub=2))
+    if hat:
+        P.append(cyl(f'{name}_brim', 0.11, 0.11, 0.015, (0, 0, z0 + 0.58), HAY, seg=14))
+        P.append(cyl(f'{name}_crown', 0.06, 0.07, 0.06, (0, 0, z0 + 0.61), HAY, seg=12, bevel=0.01))
+    else:
+        P.append(blob(f'{name}_hair', 0.078, (-0.012, 0, z0 + 0.56), HAIR, scale=(1, 1, 0.75), sub=2))
+    o = bake(P, name, origin=(0, 0, 0))
+    o.location = (x, y, surface(x, y) - 0.01)
+    o.rotation_euler = (0, 0, rot)
+    return o
+
+
+def rowboat(name, x, y, z, rot):
+    """나룻배: 둥근 선체, 안쪽 바닥, 가로 좌석, 노 둘"""
+    P = [blob(f'{name}_hull', 0.3, (0, 0, 0.06), WOOD, scale=(1.6, 0.62, 0.38), sub=3)]
+    P.append(blob(f'{name}_in', 0.27, (0, 0, 0.11), DARKWOOD, scale=(1.55, 0.55, 0.22), sub=3))
+    P.append(box(f'{name}_seat', (0.06, 0.34, 0.03), (0.05, 0, 0.14), WOOD, bevel=0.008))
+    for s in (-1, 1):
+        P.append(cyl(f'{name}_oar', 0.012, 0.012, 0.6, (-0.05, s * 0.2, 0.13), WOOD, seg=6, rot=(0, math.pi / 2, s * 0.35)))
+    o = bake(P, name, origin=(0, 0, 0))
+    o.location = (x, y, z)
+    o.rotation_euler = (0, 0, rot)
+    return o
+
+
+def jetty(x, y, rot, n=5):
+    """물가 나무 선착장: 판자 n장, 말뚝, 끝에 낚싯대 통"""
+    P = []
+    for k in range(n):
+        P.append(box('jetty_plank', (0.13, 0.5, 0.04), (k * 0.14, 0, 0.06), WOOD, bevel=0.012, seg=1))
+    for k in (0, n - 1):
+        for s in (-1, 1):
+            P.append(cyl('jetty_pile', 0.035, 0.035, 0.3, (k * 0.14, s * 0.24, 0.0), DARKWOOD, seg=8))
+    P += crate('jetty_box', (0.1, 0.12, 0.16), 0.14)
+    o = bake(P, 'jetty', origin=(0, 0, 0))
+    o.location = (x, y, surface(x, y))
+    o.rotation_euler = (0, 0, rot)
+    block(x, y, 0.4)
+    return o
+
+
+def lantern(name, x, y):
+    """길가 등불: 돌 받침, 가는 기둥, 지붕 있는 등(밤에 불빛)"""
+    P = [cyl(f'{name}_base', 0.07, 0.08, 0.08, (0, 0, 0.04), STONE, seg=10, bevel=0.015),
+         cyl(f'{name}_post', 0.022, 0.026, 0.7, (0, 0, 0.42), DARKWOOD, seg=8),
+         box(f'{name}_lamp', (0.1, 0.1, 0.13), (0, 0, 0.82), GLASS, bevel=0.012),
+         cyl(f'{name}_roof', 0.1, 0.02, 0.09, (0, 0, 0.93), DARKWOOD, seg=4, rot=(0, 0, math.pi / 4))]
+    return place(bake(P, name, origin=(0, 0, 0)), x, y, 0, 0.15)

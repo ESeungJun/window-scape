@@ -46,5 +46,6 @@ const white = new THREE.Color(1, 1, 1);
 
 /** 하늘빛을 시간대·날씨에 맞춘다. 장면 고유색이 덜 흔들리게 하늘색을 하양 쪽으로 반쯤 당긴다. 프레임마다 한 번 */
 export function updateSkyTint(env: Env, flash: number): void {
-  skyTint.value.copy(env.hemiSky).lerp(white, 0.45).multiplyScalar(env.hemiIntensity * 0.3 + flash * 0.8);
+  // 밤에는 하양으로 덜 당겨 푸른 달빛 느낌을 살린다
+  skyTint.value.copy(env.hemiSky).lerp(white, 0.45 - env.stars * 0.3).multiplyScalar(env.hemiIntensity * 0.3 + flash * 0.8);
 }
