@@ -4,7 +4,7 @@ import type { Rng } from '../util';
 import { applyLightmap } from './baked';
 import { gltfLoader, trackMaterials } from './props';
 import {
-  FLOATING_VIEW, Sway, TOP, Waterfall, addVines, fallAt, islandBob, riverMesh, rimPoint, waterBrightness, type Stage,
+  FLOATING_VIEW, R, Sway, TOP, Waterfall, addVines, fallAt, islandBob, riverMesh, rimPoint, waterBrightness, type Stage,
 } from './kit';
 
 /**
@@ -14,11 +14,16 @@ import {
  */
 const FALL_ANGLE = 0.42;
 const SPRING_FALL_ANGLE = 2.25;
+/** 이 섬은 다른 떠 있는 테마(반지름 R)보다 1.5 배 넓다(Blender lib.R = 9) */
+const RS = 1.5;
+// 아래 자리들은 tools/blender/island.py 가 끝에 찍는 값(Blender (x, y) = 여기 (x, -z))
+const RIVER: [number, number][] = [[-4.092, 3.851], [-1.452, 2.988], [-0.149, 1.071], [2.067, 0.232], [4.723, -0.349]];
+const LAKE = { x: 4.723, y: -0.349, rx: 2.0, ry: 1.5, rot: 0.7266 };
 
 export class Island implements Stage {
   readonly group = new THREE.Group();
   readonly kind = 'floating' as const;
-  readonly view = FLOATING_VIEW;
+  readonly view = { target: FLOATING_VIEW.target, distance: 30 };
   readonly baked = true;
   private readonly sway = new Sway();
   private readonly river: THREE.ShaderMaterial;
@@ -51,12 +56,9 @@ export class Island implements Stage {
     });
 
     // 강: 샘에서 가장자리 폭포까지(모델의 강바닥 경로와 같다)
-    const edge = rimPoint(FALL_ANGLE);
+    const edge = rimPoint(FALL_ANGLE, RS);
     const river = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-0.4, TOP, 0.3),
-      new THREE.Vector3(0.9, TOP, 0.9),
-      new THREE.Vector3(2.3, TOP, 0.6),
-      new THREE.Vector3(3.6, TOP, 1.4),
+      ...RIVER.map(([x, y]) => new THREE.Vector3(x, TOP, -y)),
       edge.clone().multiplyScalar(0.9).setY(TOP),
       edge.clone(),
     ]);
@@ -64,27 +66,40 @@ export class Island implements Stage {
     this.river = rm.mat;
     g.add(rm.mesh);
 
+    // 호수: 강이 지나가는 앞쪽 타원 물. 강물 재질을 쓰되 폭 방향(vUv.x)을 중심에서 둘레까지로 줘 물가가 밝게
+    const lakeGeo = new THREE.CircleGeometry(1, 48);
+    const lp = lakeGeo.getAttribute('position');
+    const luv = lakeGeo.getAttribute('uv');
+    for (let i = 0; i < lp.count; i++) {
+      const x = lp.getX(i) * LAKE.rx, y = lp.getY(i) * LAKE.ry;
+      luv.setXY(i, 0.5 + 0.5 * Math.hypot(lp.getX(i), lp.getY(i)), (x + y) * 0.3);
+    }
+    lakeGeo.scale(LAKE.rx, LAKE.ry, 1).rotateZ(LAKE.rot).rotateX(-Math.PI / 2).translate(LAKE.x, TOP + 0.03, -LAKE.y);
+    const lake = new THREE.Mesh(lakeGeo, this.river);
+    lake.receiveShadow = true;
+    g.add(lake);
+
     // 폭포: 강 끝의 큰 폭포 + 반대편 흙벽에서 나오는 작은 폭포
-    const springFall = fallAt(SPRING_FALL_ANGLE, { width: 0.32, length: 11, reach: 0.7, y: -0.55, inset: 0.99 });
-    for (const f of [fallAt(FALL_ANGLE, { width: 0.72, length: 15, reach: 1.4 }), springFall]) {
+    const springFall = fallAt(SPRING_FALL_ANGLE, { width: 0.32, length: 12, reach: 0.7, y: -0.55, inset: 0.99 * RS });
+    for (const f of [fallAt(FALL_ANGLE, { width: 0.72, length: 17, reach: 1.4, inset: RS }), springFall]) {
       const wf = new Waterfall(f, rng, f === springFall ? 0 : 150);
       this.falls.push(wf);
       g.add(wf.group);
     }
 
-    // 밤에 고이는 따뜻한 불빛: 집 두 채 앞과 모닥불(모델의 자리, Blender (x, y) = 여기 (x, -z))
-    for (const [x, z, y] of [[1.9, -2.6, 1.0], [-1.4, 2.6, 1.0], [1.35, 3.35, 0.5]]) {
-      const light = new THREE.PointLight('#ffc46b', 0, 4, 2);
+    // 밤에 고이는 따뜻한 불빛: 앞쪽 집 셋의 문 앞, 모닥불, 낚시 오두막(뒤쪽 집은 생략해 불빛 수를 아낀다)
+    for (const [x, y, z] of [[-2.51, 1.0, 4.1], [0.19, 1.0, 5.18], [2.14, 1.0, 3.31], [4.33, 0.5, 3.37], [6.1, 1.1, -1.34]]) {
+      const light = new THREE.PointLight('#ffc46b', 0, 4.5, 2);
       light.position.set(x, y, z);
       g.add(light);
       this.lights.push(light);
     }
 
-    addVines(g, rng, this.sway, [FALL_ANGLE, SPRING_FALL_ANGLE]);
+    addVines(g, rng, this.sway, [FALL_ANGLE, SPRING_FALL_ANGLE], 34, R * RS);
   }
 
   update(dt: number, t: number, env: Env): void {
-    for (const l of this.lights) l.intensity = env.nightLights * 6;
+    for (const l of this.lights) l.intensity = env.nightLights * 3.5;
     for (const [m, fn] of this.seasonal) fn(env, m.color);
     for (const m of this.glass) m.emissiveIntensity = 0.15 + env.nightLights * 2.6;
     const bright = waterBrightness(env);

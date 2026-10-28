@@ -8,7 +8,7 @@ import type { Condition, Season, TimeOfDay } from '../data/weather';
 import { mulberry32, lerp } from '../util';
 import { Clouds } from './clouds';
 import { composeEnv, copyEnv, createEnv, lerpEnv, type Env, type LiveWeather } from './env';
-import { Floaters, updateSharedMaterials, type Stage } from './kit';
+import { FLOATING_VIEW, Floaters, updateSharedMaterials, type Stage } from './kit';
 import { createStage, type Theme } from './themes';
 import { Precipitation } from './precipitation';
 import { SkyDome, SkyLight } from './sky';
@@ -42,6 +42,7 @@ export class World {
   private skyEnv: THREE.Texture | null = null;
   private readonly clouds: Clouds;
   private readonly floaters: Floaters;
+  private viewScale = 1;
   /** 한 번 만든 테마는 보관해 두고 다시 고를 때 재사용한다 */
   private readonly stages = new Map<Theme, Stage>();
   private stage: Stage;
@@ -152,7 +153,6 @@ export class World {
   /** 테마 종류에 맞춰 구름바다·떠다니는 섬·카메라 범위·그림자 범위를 바꾼다 */
   private applyStageView(): void {
     const floating = this.stage.kind === 'floating';
-    this.clouds.setSea(floating);
     this.floaters.group.visible = floating;
     const c = this.controls;
     c.minDistance = floating ? 14 : 7;
@@ -162,7 +162,11 @@ export class World {
     // 구운 장면은 그늘·틈이 이미 라이트맵에 있으니 해 그림자만 아주 넓게 흐린다
     this.sun.shadow.radius = this.stage.baked ? 6 : 5;
     this.sun.shadow.blurSamples = this.stage.baked ? 16 : 12;
-    const half = floating ? 10 : 16;
+    // 기본보다 큰 섬(기본 거리보다 멀리서 보는 섬)은 그림자·안개·떠다니는 섬을 그만큼 넓힌다
+    this.viewScale = floating ? this.stage.view.distance / FLOATING_VIEW.distance : 1;
+    this.floaters.spread(this.viewScale);
+    this.clouds.setSea(floating, this.viewScale);
+    const half = (floating ? 10 : 16) * this.viewScale;
     const sc = this.sun.shadow.camera;
     sc.left = sc.bottom = -half;
     sc.right = sc.top = half;
@@ -278,8 +282,8 @@ export class World {
     if (baked) this.fog.color.lerp(env.skyTop, 0.75);
     // 땅 테마는 지평선이 하늘에 녹아들도록 안개를 가깝게 둔다
     // 구운 장면: 우윳빛 안개를 짙게 깔아 먼 것이 하늘에 녹아들게(대비 낮은 하이키)
-    this.fog.near = lerp(baked ? 18 : floating ? 30 : 22, 6, env.fog);
-    this.fog.far = lerp(baked ? 80 : floating ? 150 : 72, floating ? 34 : 30, env.fog);
+    this.fog.near = lerp((baked ? 18 : floating ? 30 : 22) * this.viewScale, 6, env.fog);
+    this.fog.far = lerp((baked ? 80 : floating ? 150 : 72) * this.viewScale, (floating ? 34 : 30) * this.viewScale, env.fog);
 
     this.sky.update(env, this.sunDir, flash, baked ? 0.9 : 0);
     this.clouds.update(dt, env, baked);

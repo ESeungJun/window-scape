@@ -404,3 +404,63 @@ def lantern(name, x, y):
          box(f'{name}_lamp', (0.1, 0.1, 0.13), (0, 0, 0.82), GLASS, bevel=0.012),
          cyl(f'{name}_roof', 0.1, 0.02, 0.09, (0, 0, 0.93), DARKWOOD, seg=4, rot=(0, 0, math.pi / 4))]
     return place(bake(P, name, origin=(0, 0, 0)), x, y, 0, 0.15)
+
+
+def stilt_hut(x, y, rot):
+    """물가 낚시 오두막: 말뚝 위 판자 마루, 판자 벽, 기와 지붕, 문·창, 사다리, 통"""
+    P = []
+    deck = 0.32
+    for i in range(10):
+        P.append(box('hut_plank', (0.14, 1.3, 0.04), (-0.7 + i * 0.155, 0, deck), WOOD, bevel=0.012, seg=1))
+    for sx in (-0.7, 0.0, 0.7):
+        for sy in (-0.58, 0.58):
+            P.append(cyl('hut_pile', 0.045, 0.05, 0.6, (sx, sy, deck - 0.3), DARKWOOD, seg=8))
+    w, d, h = 0.95, 0.8, 0.62
+    P.append(box('hut_core', (w - 0.04, d - 0.04, h), (0.15, 0.1, deck + h / 2), WOOD, bevel=0.02))
+    for k in range(7):
+        P.append(box('hut_board', (0.12, 0.03, h), (0.15 - w / 2 + 0.07 + k * 0.135, 0.1 - d / 2, deck + h / 2), DARKWOOD if k % 3 == 0 else WOOD,
+                     bevel=0.008, seg=1))
+    Q = []
+    rise = tile_roof(Q, 'hut', w + 0.1, d + 0.1, h, math.radians(38))
+    for q in Q:
+        q.location.x += 0.15
+        q.location.y += 0.1
+        q.location.z += deck
+    P += Q
+    for sy in (-1, 1):
+        bm = bmesh.new()
+        vs = [bm.verts.new(v) for v in ((-(w + 0.1) / 2, 0, 0), ((w + 0.1) / 2, 0, 0), (0, 0, rise))]
+        bmesh.ops.solidify(bm, geom=[bm.faces.new(vs)], thickness=0.04)
+        g = new_obj('hut_gable', bm)
+        g.location = (0.15, 0.1 + sy * (d + 0.1) / 2, deck + h)
+        P.append(finish(g, WOOD, smooth=False))
+    P.append(box('hut_door', (0.26, 0.04, 0.44), (-0.05, 0.1 - d / 2 - 0.03, deck + 0.22), DARKWOOD, bevel=0.01))
+    P.append(box('hut_glass', (0.18, 0.03, 0.16), (0.38, 0.1 - d / 2 - 0.035, deck + 0.4), GLASS, bevel=0.005))
+    P.append(box('hut_frame', (0.24, 0.025, 0.22), (0.38, 0.1 - d / 2 - 0.025, deck + 0.4), DARKWOOD, bevel=0.006))
+    for k in range(4):
+        P.append(box('hut_rung', (0.3, 0.03, 0.03), (-0.75, -0.62, deck - 0.08 - k * 0.1), WOOD, bevel=0.005))
+    P += crate('hut_crate', (-0.5, -0.4, deck + 0.09), 0.16)
+    P.append(cyl('hut_barrel', 0.1, 0.1, 0.24, (-0.5, 0.35, deck + 0.12), WOOD, seg=12, bevel=0.025))
+    o = bake(P, 'stilt_hut', origin=(0, 0, 0))
+    o.location = (x, y, surface(x, y))
+    o.rotation_euler = (0, 0, rot)
+    block(x, y, 1.0)
+    return o
+
+
+CROP = mat('crop', '#7f9a50', 0.95, 0.08, 6.0)
+
+
+def crop_field(name, x, y, rot, rows=5, cols=7):
+    """밭: 흙 바닥 위 이랑마다 채소 포기, 한 줄은 호박"""
+    P = [box(f'{name}_soil', (cols * 0.32 + 0.2, rows * 0.36 + 0.1, 0.06), (0, 0, 0.0), lib.DIRT, bevel=0.03)]
+    for r in range(rows):
+        yy = (r - (rows - 1) / 2) * 0.36
+        P.append(box(f'{name}_ridge', (cols * 0.32, 0.16, 0.05), (0, yy, 0.04), lib.DIRT, bevel=0.025))
+        for c in range(cols):
+            xx = (c - (cols - 1) / 2) * 0.32
+            if r == 2:
+                P.append(blob(f'{name}_pump', 0.09, (xx, yy, 0.12), PUMPKIN, scale=(1.15, 1.15, 0.85), sub=2))
+            else:
+                P.append(blob(f'{name}_leaf', 0.1, (xx, yy, 0.12), CROP, scale=(1, 1, 0.8), sub=2))
+    return place(bake(P, name, origin=(0, 0, 0)), x, y, rot, max(rows * 0.36, cols * 0.32) * 0.6)
