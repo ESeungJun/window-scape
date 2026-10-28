@@ -156,12 +156,10 @@ function miniIsland(rng: Rng, size: number): THREE.Group {
 /** 테마 하나 = 풍경 하나(떠 있는 섬 또는 지평선까지 이어진 땅). 하늘·구름·날씨·조명은 World 가 공통으로 맡는다. */
 export interface Stage {
   readonly group: THREE.Group;
-  /** floating: 구름바다 위에 뜬 섬 / ground: 지평선까지 이어진 땅 */
+  /** floating: 구름바다 위에 뜬 섬 / ground: 지평선까지 이어진 땅(또는 바다) */
   readonly kind: 'floating' | 'ground';
   /** 카메라가 바라볼 점과 처음 거리 */
   readonly view: { target: THREE.Vector3; distance: number };
-  /** 카메라가 따라갈 점(움직이는 주인공이 있는 테마만) */
-  focus?(out: THREE.Vector3): THREE.Vector3;
   /** 그 위치의 땅 높이(땅 테마). 카메라가 언덕 속으로 들어가지 않게 쓴다 */
   groundHeight?(x: number, z: number): number;
   /** 빛을 구운 장면(라이트맵 + 하늘빛). 실시간 반구광·오클루전 대신 구운 빛을 쓴다 */

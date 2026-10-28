@@ -22,7 +22,15 @@ export const SEASONAL: Record<string, (env: Env, out: THREE.Color) => void> = {
 };
 
 /** 모델 불러오기(Blender 에서 draco 로 압축해 내보낸다. 해독기는 public/draco) */
-export const gltfLoader = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath('draco/'));
+const gltfLoader = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath('draco/'));
+
+/** 모델을 불러온다. 못 불러오면(잠깐 끊긴 네트워크·바쁜 디스크) 간격을 늘려 가며 몇 번 더 해 본다 */
+export function loadModel(url: string, onLoad: (root: THREE.Group) => void, tries = 4): void {
+  gltfLoader.load(url, (gltf) => onLoad(gltf.scene), undefined, (e) => {
+    if (tries <= 1) console.error(`모델을 못 불러왔습니다: ${url}`, e);
+    else setTimeout(() => loadModel(url, onLoad, tries - 1), (5 - tries) * 1500);
+  });
+}
 
 /** 모델의 재질 중 계절 색·밤 불빛을 따라야 하는 것을 등록한다 */
 export function trackMaterials(

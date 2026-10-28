@@ -1,7 +1,7 @@
 # 움직이는 성 테마: 네 다리로 초원을 걷는 성 디오라마. 앱: public/models/castle.glb + castle_light.png(라이트맵)
 #   blender -b -P tools/blender/castle.py -- public/models glb 384
 #   ffmpeg -i public/models/castle_light.png -c:v libwebp -quality 90 public/models/castle_light.webp  (png 는 지운다)
-# 네모난 땅 조각: 완만한 초원 언덕, 가운데를 크게 도는 흙길(성이 걷는다), 연못과 갈대, 붉은 헛간과 곡물 창고, 양 우리, 밭, 오두막.
+# 지평선까지 트인 초원(둘레는 밭 조각보·산울타리·나무숲·먼 언덕, far_*) 한가운데: 완만한 초원 언덕, 가운데를 크게 도는 흙길(성이 걷는다), 연못과 갈대, 붉은 헛간과 곡물 창고, 양 우리, 밭, 오두막.
 # 성은 특정 작품의 디자인을 옮기지 않은 독자 디자인: 구리 선체 위에 돌 탑과 반목조 오두막을 얹고, 프로펠러와 빨랫줄, 새 다리 넷.
 # 성(mover_castle)과 다리·몸통은 앱이 움직인다(src/scene/castle.ts).
 import os, sys
@@ -72,7 +72,44 @@ def paint(x, y, z):
     return GRASS
 
 
-tile.build(W, D, height, paint, water=None)
+tile.build(W, D, height, paint, water=None, ground=True)
+
+
+def far_land(x, y):
+    """먼 땅: 완만한 구릉, 더 멀리 둥근 언덕 능선"""
+    r = math.hypot(x, y)
+    a = math.atan2(y, x)
+    ridge = 0.6 + 0.25 * math.sin(a * 2 + 0.7) + 0.15 * math.sin(a * 5 + 2.1)
+    return (TOP + 0.3 + 0.7 * math.sin(x * 0.12 + 0.6) * math.cos(y * 0.1 - 0.3) * smooth(8, 20, r)
+            + 1.5 * smooth(-3.0, -10.5, (x - y) / math.sqrt(2)) + 7 * ridge * smooth(30, 80, r))
+
+
+def hfar(x, y):
+    t = smooth(0, 12, max(abs(x), abs(y)) - W / 2)
+    return height(x, y) * (1 - t) + far_land(x, y) * t
+
+
+# 밭 조각보: 축에 맞춘 네모 밭(가장자리가 격자 선에 붙어 곧게 나온다)
+FW, FD = 5.2, 4.6
+WHEAT = mat('wheat', '#dcc372', 0.95, 0.1, 8.0)
+PLOWED = mat('plowed', '#a07a55', 0.95, 0.1, 10.0)
+FIELD_GREEN = mat('field_green', '#8fae58', 0.95, 0.08, 6.0)
+FIELDS = [GRASS, GRASS, FIELD_GREEN, WHEAT, GRASS_DARK, PLOWED, GRASS, WHEAT]
+
+
+def field_of(x, y):
+    i, j = math.floor((x + 1.3) / FW), math.floor((y - 0.7) / FD)
+    return FIELDS[int(tile.speckle(i * 1.7, j * 2.3) * len(FIELDS))]
+
+
+def paint_far(x, y, z):
+    d = max(abs(x), abs(y)) - W / 2
+    if d < 2.5 or z > TOP + 5.0:
+        return GRASS
+    return field_of(x, y)
+
+
+tile.surround('far_ground', W, D, 0.2, hfar, paint_far)
 tile.liquid_plane('liquid_pond', W, D, lambda x, y: height(x, y) if (Vector((x, y)) - POND).length < POND_R + 0.8 else 9.0, LEVEL, step=0.2)
 block(POND.x, POND.y, POND_R + 0.4)
 
@@ -358,6 +395,31 @@ for i in range(30):
             bush(f'bush_{i}', x, y, 0.22)
             block(x, y, 0.22)
             break
+# ── 둘레: 밭 가장자리 산울타리, 나무숲 ─────────────────────
+spots = []
+for axis_, size, off in ((0, FW, -1.3), (1, FD, 0.7)):
+    for k in range(-12, 13):
+        c = k * size + off
+        if tile.speckle(k, axis_ + 0.5) < 0.35:
+            continue
+        t = -60.0
+        while t < 60.0:
+            x, y = (c, t) if axis_ == 0 else (t, c)
+            t += 0.42 + rnd.random() * 0.12
+            if max(abs(x), abs(y)) - W / 2 < 2.5 or math.hypot(x, y) > 48 or rnd.random() < 0.08:
+                continue
+            spots.append((x, y, hfar(x, y) - 0.05, 0.6 + rnd.random() * 0.25, ('bush', BUSH)))
+for g in range(70):
+    cx_, cy_ = (rnd.random() - 0.5) * 120, (rnd.random() - 0.5) * 120
+    if max(abs(cx_), abs(cy_)) - W / 2 < 4 or math.hypot(cx_, cy_) > 60:
+        continue
+    for j in range(rnd.randint(3, 9)):
+        x, y = cx_ + (rnd.random() - 0.5) * 4, cy_ + (rnd.random() - 0.5) * 4
+        spots.append((x, y, hfar(x, y) - 0.05, (1.6 + rnd.random() * 0.9) * 1.35,
+                      'pine' if rnd.random() < 0.25 else LEAF[('green', 'orange', 'red', 'yellow', 'green')[rnd.randrange(5)]]))
+print('far spots', len(spots), flush=True)
+tile.far_trees('far_trees', spots)
+
 cols = ['#ffffff', '#f2d14a', '#f29ab8', '#b9a2ff', '#ef6a5a']
 bms = [bmesh.new() for _ in cols]
 for c in range(40):
@@ -378,9 +440,10 @@ for k, c in enumerate(cols):
 if os.environ.get('CLOSE'):
     setup_render((start.x + 6.5, start.y - 7.5, 5.0), (start.x, start.y, 2.0))
 else:
-    setup_render((12.8 * 1.2, -14.4 * 1.2, 9.6 * 1.2), (0, 0, -0.6))
+    setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
 layout = {
+    'ground': tile.heightmap(hfar),
     'paths': {'loop': [three(p, z) for p, z in list(zip(LOOP, LOOPZ))[::3]]},
     'lights': [three(bp + CAM * 1.4, 1.2)] + [three(bpy.data.objects[f'house_{k}'].location.xy + CAM * 0.95, 1.2) for k in range(2)],
 }

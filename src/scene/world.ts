@@ -54,8 +54,6 @@ export class World {
   private quality: Quality = 'auto';
   private minFrameTime = 0;
   private qualityKey = '';
-  private readonly focusPoint = new THREE.Vector3();
-  private readonly focusDelta = new THREE.Vector3();
   private readonly shadowCenter = new THREE.Vector3();
   private static readonly ORIGIN = new THREE.Vector3();
 
@@ -140,7 +138,7 @@ export class World {
     composeEnv(time, cond, season, this.target, live);
   }
 
-  /** 섬 위 장면을 바꾼다. 하늘·구름·날씨는 그대로 이어진다. */
+  /** 테마(풍경)를 바꾼다. 하늘·구름·날씨는 그대로 이어진다. */
   setTheme(theme: Theme): void {
     const next = this.stageFor(theme);
     if (next === this.stage) return;
@@ -155,10 +153,10 @@ export class World {
     const floating = this.stage.kind === 'floating';
     this.floaters.group.visible = floating;
     const c = this.controls;
-    c.minDistance = floating ? 14 : 7;
-    c.maxDistance = floating ? 45 : 40;
+    c.minDistance = floating ? 14 : 10;
+    c.maxDistance = floating ? 45 : 42;
     // 땅 테마는 땅 밑을 보지 않게 수평선 위로만
-    c.maxPolarAngle = Math.PI * (floating ? 0.64 : 0.47);
+    c.maxPolarAngle = Math.PI * (floating ? 0.64 : 0.46);
     // 모든 테마: 그림자는 넓게 흐린다. 구운 장면은 틈 그늘만 라이트맵에 있고 해 그림자는 실시간이라 그대로(1),
     // 실시간 장면은 그늘이 탁해지지 않게 옅게(0.7)
     this.sun.shadow.radius = 6;
@@ -176,13 +174,11 @@ export class World {
 
     // 지금 보는 방향은 유지하고, 테마의 기준점과 거리로 옮긴다
     const dir = this.camera.position.clone().sub(c.target);
-    // 떠 있는 섬은 내려다보는 각도(약 35°)로 시작해 섬 윗면이 잘 보이게
-    dir.y = Math.max(dir.y, dir.length() * (floating ? 0.58 : 0.3));
+    // 내려다보는 각도로 시작해 땅 윗면이 잘 보이게(떠 있는 섬 약 35°, 땅 약 27°)
+    dir.y = Math.max(dir.y, dir.length() * (floating ? 0.58 : 0.45));
     dir.normalize();
     const narrow = this.container.clientWidth < this.container.clientHeight;
-    // 움직이는 주인공이 있으면 처음부터 그쪽을 비춘다
-    if (this.stage.focus) this.stage.focus(c.target);
-    else c.target.copy(this.stage.view.target);
+    c.target.copy(this.stage.view.target);
     this.camera.position.copy(c.target).addScaledVector(dir, this.stage.view.distance * (narrow ? 1.45 : 1));
     c.update();
   }
@@ -281,25 +277,19 @@ export class World {
     this.scene.environment = this.skyEnv ?? null;
 
     this.fog.color.copy(env.skyBottom);
-    // 구운 장면: 섬 아래(구름바다·먼 안개)는 하늘 윗색 쪽 푸른 기를 띠게. 레퍼런스의 "위는 노을, 아래는 푸른 바다" 구도
-    if (baked) this.fog.color.lerp(env.skyTop, 0.75);
-    // 땅 테마는 지평선이 하늘에 녹아들도록 안개를 가깝게 둔다
-    // 구운 장면: 우윳빛 안개를 짙게 깔아 먼 것이 하늘에 녹아들게(대비 낮은 하이키)
-    this.fog.near = lerp((baked ? 18 : floating ? 30 : 22) * this.viewScale, 6, env.fog);
-    this.fog.far = lerp((baked ? 80 : floating ? 150 : 72) * this.viewScale, (floating ? 34 : 30) * this.viewScale, env.fog);
+    // 구운 섬: 섬 아래(구름바다·먼 안개)는 하늘 윗색 쪽 푸른 기를 띠게. 레퍼런스의 "위는 노을, 아래는 푸른 바다" 구도.
+    // 땅 테마는 지평선이 하늘 아랫색에 녹아들게 둔다
+    if (baked && floating) this.fog.color.lerp(env.skyTop, 0.75);
+    // 구운 섬: 우윳빛 안개를 짙게 깔아 먼 것이 하늘에 녹아들게(대비 낮은 하이키).
+    // 땅 테마: 가운데 땅은 또렷하게 두고 지평선 쪽 먼 풍경만 하늘에 녹인다
+    this.fog.near = lerp((floating ? (baked ? 18 : 30) : 30) * this.viewScale, 6, env.fog);
+    this.fog.far = lerp((floating ? (baked ? 80 : 150) : 105) * this.viewScale, (floating ? 34 : 30) * this.viewScale, env.fog);
 
     this.sky.update(env, this.sunDir, flash, baked ? 0.9 : 0);
     this.clouds.update(dt, env, baked);
     updateSharedMaterials(env);
     this.stage.update(dt, this.time, env);
     this.floaters.update(dt, this.time);
-    // 움직이는 주인공이 있으면 카메라가 부드럽게 따라간다(보는 각도는 유지)
-    if (this.stage.focus) {
-      this.stage.focus(this.focusPoint);
-      this.focusDelta.subVectors(this.focusPoint, this.controls.target).multiplyScalar(1 - Math.exp(-dt * 1.2));
-      this.controls.target.add(this.focusDelta);
-      this.camera.position.add(this.focusDelta);
-    }
     this.controls.update(dt);
     // 땅 테마: 카메라가 언덕 속으로 들어가지 않게 땅 위로 밀어 올린다
     if (this.stage.groundHeight) {

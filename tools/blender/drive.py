@@ -1,8 +1,9 @@
 # 드라이브 테마: 바닷가 해안도로 디오라마. 앱: public/models/drive.glb + drive_light.png(라이트맵)
 #   blender -b -P tools/blender/drive.py -- public/models glb 384
 #   ffmpeg -i public/models/drive_light.png -c:v libwebp -quality 90 public/models/drive_light.webp  (png 는 지운다)
-# 네모난 땅 조각: 양쪽 바위 곶의 터널을 잇는 해안도로(자동차가 터널에서 나와 다른 터널로 들어간다),
-# 앞쪽은 모래사장과 바다(파라솔·탈의실·선착장), 바위섬 등대와 돛단배, 뒤쪽 언덕엔 하얀 집들·휴게소·풍력 발전기.
+# 해안도로 한 구간: 양쪽 바위 곶의 터널을 잇는 길(자동차가 터널에서 나와 다른 터널로 들어간다),
+# 앞쪽은 모래사장과 바다(파라솔·탈의실·선착장), 돛단배, 뒤쪽 언덕엔 하얀 집들·휴게소·풍력 발전기.
+# 둘레(far_*)는 수평선까지 트인 바다와 바위섬 등대, 곶 너머로 이어지는 해안도로, 뒤쪽 산과 바닷가 마을.
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import *  # noqa: F401,F403
@@ -16,9 +17,11 @@ H = math.pi / 2
 FACE = math.atan2(CAM.x, -CAM.y)
 LEVEL = TOP - 0.06
 ROADZ = TOP + 0.3
-ROAD = [Vector(p) for p in ((-9.2, -8.0), (-6.6, -5.9), (-3.6, -3.5), (-0.6, -0.9), (2.4, 1.3), (5.0, 3.7), (7.0, 6.0), (9.2, 8.0))]
+ROAD = [Vector(p) for p in ((-70.0, -64.0), (-42.0, -38.5), (-26.0, -24.5), (-15.0, -13.0), (-9.2, -8.0), (-6.6, -5.9), (-3.6, -3.5),
+                            (-0.6, -0.9), (2.4, 1.3), (5.0, 3.7), (7.0, 6.0), (9.2, 8.0), (15.5, 13.0), (26.0, 23.0), (42.0, 38.0), (70.0, 63.0))]
 CAPES = [Vector((-7.6, -7.6)), Vector((7.7, 7.6))]
-ISLET = Vector((1.3, -6.5))
+ISLET = Vector((16.3, 0.7))  # 등대 바위섬(타일 밖 바다, 옆으로 비켜 앞을 가리지 않게)
+ISLES = [Vector((26.0, -20.0)), Vector((40.0, -6.0)), Vector((15.0, -34.0))]  # 먼 바위섬
 PORTAL = 2.2  # 곶 중심에서 터널 입구까지
 
 
@@ -54,38 +57,67 @@ def height(x, y):
         ch = ch + (ROADZ - ch) * smooth(1.0, 0.7, rd)
     if cd < 3.4:
         h = max(h, ch)
-    # 등대 바위섬
-    d = (Vector((x, y)) - ISLET).length
-    h = max(h, TOP - 1.0 + 1.55 * smooth(1.7, 0.6, d))
     return h
 
 
-lib.surface = height
-look.surface = height
+def far_land(x, y):
+    """먼 땅: 뒤쪽은 산 능선, 앞쪽은 깊어지는 바다(해안선은 그대로 이어진다)"""
+    s, sc = coast(x, y)
+    a = math.atan2(y, x)
+    ridge = 0.6 + 0.3 * math.sin(a * 4 + 0.9) + 0.1 * math.sin(x * 0.2) * math.cos(y * 0.17)
+    return 9.0 * ridge * smooth(-10, -40, s)
+
+
+def hfar(x, y):
+    t = smooth(0, 12, max(abs(x), abs(y)) - W / 2)
+    h = height(x, y) + far_land(x, y) * t
+    # 바위섬(등대 섬과 먼 섬들)
+    for c, r, top in [(ISLET, 1.7, 1.55)] + [(c, 2.6, 2.4) for c in ISLES]:
+        d = (Vector((x, y)) - c).length
+        h = max(h, TOP - 1.0 + top * smooth(r, r * 0.35, d))
+    return h
+
+
+lib.surface = hfar
+look.surface = hfar
 
 
 def slope(x, y):
     e = 0.15
-    return math.hypot(height(x + e, y) - height(x - e, y), height(x, y + e) - height(x, y - e)) / (2 * e)
+    return math.hypot(hfar(x + e, y) - hfar(x - e, y), hfar(x, y + e) - hfar(x, y - e)) / (2 * e)
 
 
 def paint(x, y, z):
     s, sc = coast(x, y)
-    if (cape(x, y) < 3.0 and z > ROADZ + 0.5) or (Vector((x, y)) - ISLET).length < 1.4 or slope(x, y) > 1.3:
+    if ((cape(x, y) < 3.0 and z > ROADZ + 0.5) or min((Vector((x, y)) - c).length for c in [ISLET] + ISLES) < 1.8 or slope(x, y) > 1.3
+            or z > ROADZ + 5.5):
         return ROCK
     if s > sc - 0.6 and z < ROADZ - 0.05:
         return SAND
     return GRASS
 
 
-tile.build(W, D, height, paint, water=LEVEL)
+tile.build(W, D, height, paint, water=LEVEL, ground=True)
 tile.liquid_plane('liquid_sea', W, D, height, LEVEL)
+def paint_far(x, y, z):
+    """먼 땅: 기울기 대신 높이로만 고른다(길쭉한 먼 칸에서 기울기 판정이 들쭉날쭉해진다)"""
+    s_, sc_ = coast(x, y)
+    if (cape(x, y) < 3.0 and z > ROADZ + 0.5) or min((Vector((x, y)) - c).length for c in [ISLET] + ISLES) < 1.8 or z > ROADZ + 5.5:
+        return ROCK
+    if s_ > sc_ - 0.6 and z < ROADZ - 0.05:
+        return SAND
+    return GRASS
+
+
+tile.surround('far_ground', W, D, 0.2, hfar, paint_far)
+tile.liquid_far('liquid_sea_far', W, D, hfar, LEVEL)
 
 # ── 도로: 아스팔트, 가운데 점선, 바다 쪽 가드레일 ─────────────
 ASPHALT = mat('road', '#5d5f66', 0.9, 0.05, 10.0)
 PAINT_W = mat('paint', '#f1ece0', 0.8, 0.02)
 RAIL = mat('rail', '#d8dadf', 0.5, 0.03)
-pts = [p for p in catmull(ROAD, 12) if abs(p.x) < 7.95 and abs(p.y) < 7.95]
+full = catmull(ROAD, 12)
+pts = [p for p in full if abs(p.x) < 7.95 and abs(p.y) < 7.95]
 bm = bmesh.new()
 L, R_ = [], []
 for i, p in enumerate(pts):
@@ -98,6 +130,18 @@ for i in range(len(pts) - 1):
 finish(new_obj('road', bm), ASPHALT)
 for p in pts:
     block(p.x, p.y, 0.95)
+# 곶 너머로 이어지는 길(먼 풍경)
+for k, part in enumerate(([p for p in full if p.x < -7.6 and p.y < -7.6], [p for p in full if p.x > 7.6 and p.y > 7.6])):
+    bm = bmesh.new()
+    L, R_ = [], []
+    for i, p in enumerate(part):
+        tan = (part[min(i + 1, len(part) - 1)] - part[max(i - 1, 0)]).normalized()
+        side = Vector((-tan.y, tan.x)) * 0.62
+        L.append(bm.verts.new((p.x + side.x, p.y + side.y, ROADZ + 0.015)))
+        R_.append(bm.verts.new((p.x - side.x, p.y - side.y, ROADZ + 0.015)))
+    for i in range(len(part) - 1):
+        bm.faces.new([L[i], R_[i], R_[i + 1], L[i + 1]])
+    finish(new_obj(f'far_road_{k}', bm), ASPHALT)
 dist = 0.0
 P = []
 for i in range(1, len(pts)):
@@ -133,10 +177,12 @@ bake(P, 'guardrail')
 # 터널 입구: 곶 둘레를 지나는 곳에 돌 아치(안은 어둡게)
 TUNNEL = mat('tunnel', '#2a2a2e', 1.0, 0.0)
 portals = []
-for c in CAPES:
-    i = min(range(len(pts)), key=lambda k: abs((pts[k] - c).length - PORTAL))
-    p = pts[i]
-    tan = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
+for c, far in [(c, f) for c in CAPES for f in (False, True)]:
+    # 타일 쪽 입구와 곶 너머(먼 풍경 쪽) 출구
+    side = [k for k in range(1, len(full) - 1) if ((full[k] - c).dot(c) > 0) == far]
+    i = min(side, key=lambda k: abs((full[k] - c).length - PORTAL))
+    p = full[i]
+    tan = (full[i + 1] - full[i - 1]).normalized()
     if (c - p).dot(tan) < 0:
         tan = -tan
     face = box('portal', (0.5, 1.95, 1.6), (0, 0, 0.75), STONE, bevel=0.03)
@@ -157,7 +203,7 @@ for c in CAPES:
         a = math.pi * k / 10
         PP.append(box('portal_vous', (0.54, 0.12, 0.16), (-0.02, math.cos(a) * 0.68, 0.65 + math.sin(a) * 0.68), CLIFF_LEDGE[1],
                       rot=(-a + H, 0, 0), bevel=0.012))
-    o = bake(PP, f'portal_{len(portals)}', origin=(0, 0, 0))
+    o = bake(PP, f'{"far_" if far else ""}portal_{len(portals)}', origin=(0, 0, 0))
     o.location = (p.x, p.y, ROADZ)
     o.rotation_euler = (0, 0, math.atan2(tan.y, tan.x))
     o.scale = (1.1, 1.1, 1.1)
@@ -228,7 +274,7 @@ for k, (t, off, rot, shirt, pose) in enumerate(((-3.2, 0.45, FACE, CLOTH_R, 'sit
     grow(look.villager(f'man_{k}', p.x, p.y, rot, shirt, hat=k % 2 == 0, pose=pose), 1.3)
 
 # 바위섬 등대
-grow(lighthouse(ISLET.x, ISLET.y + 0.1), 1.3)
+grow(lighthouse(ISLET.x, ISLET.y + 0.1), 1.05)
 for k in range(10):
     a = k / 10 * math.tau
     p = ISLET + Vector((math.cos(a), math.sin(a))) * (1.1 + rnd.random() * 0.45)
@@ -329,9 +375,32 @@ for c in CAPES:
         if abs(p.x) < 7.7 and abs(p.y) < 7.7 and poly_dist(p, ROAD) > 0.9:
             look.boulder(f'cape_rock_{k}_{c.x:.0f}', p.x, p.y, 0.3 + rnd.random() * 0.35)
 
-setup_render((12.8 * 1.2, -14.4 * 1.2, 9.6 * 1.2), (0, 0, -0.6))
+# ── 둘레: 언덕의 나무, 해안 마을 둘 ───────────────────────
+spots, items = [], []
+for k in range(1400):
+    x, y = (rnd.random() - 0.5) * 120, (rnd.random() - 0.5) * 120
+    s_, sc_ = coast(x, y)
+    if max(abs(x), abs(y)) - W / 2 < 2.0 or s_ > sc_ - 1.6 or math.hypot(x, y) > 62 or poly_dist((x, y), ROAD) < 1.4 or cape(x, y) < 2.5:
+        continue
+    z = hfar(x, y)
+    if z > ROADZ + 7.5:
+        continue
+    spots.append((x, y, z - 0.05, (1.5 + rnd.random() * 0.8) * 1.3, 'pine' if rnd.random() < 0.55 else LEAF[('green', 'orange', 'green')[k % 3]]))
+for vc in (Vector((-20.0, -14.0)), Vector((17.0, 24.0))):
+    for k in range(16):
+        p = vc + Vector(((rnd.random() - 0.5) * 7, (rnd.random() - 0.5) * 7))
+        if poly_dist(p, ROAD) < 1.3 or coast(p.x, p.y)[0] > coast(p.x, p.y)[1] - 1.4:
+            continue
+        items.append((p.x, p.y, hfar(p.x, p.y) - 0.05, 0.9 + rnd.random() * 0.4, 0.9, 0.75 + 0.6 * rnd.randint(0, 1), 0.45, FACE + (rnd.random() - 0.5) * 0.3,
+                      WHITE, (TILE, ROOF_RED)[k % 2]))
+print('far trees', len(spots), 'houses', len(items), flush=True)
+tile.far_trees('far_trees', spots)
+tile.far_houses('far_town', items)
+
+setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
 layout = {
+    'ground': tile.heightmap(hfar),
     # 길 중심선(터널 안에서 시작해 반대편 터널 안에서 끝난다)
     'paths': {'road': [three(p, ROADZ + 0.02) for p in pts[::2]],
               'sea': [three(Vector((5.9 + math.cos(a) * 1.5 + math.sin(a) * 0.2, -2.9 + math.sin(a) * 1.1 + math.cos(a) * 0.9)), LEVEL)

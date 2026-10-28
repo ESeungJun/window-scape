@@ -1,7 +1,8 @@
 # 숲 테마: 숲속 호숫가 통나무집 디오라마. 앱: public/models/forest.glb + forest_light.png(라이트맵)
 #   blender -b -P tools/blender/forest.py -- public/models glb 384
 #   ffmpeg -i public/models/forest_light.png -c:v libwebp -quality 90 public/models/forest_light.webp  (png 는 지운다)
-# 네모난 땅 조각: 뒤쪽 바위 언덕과 빽빽한 전나무 숲, 언덕 밑 샘에서 시작한 개울이 앞쪽 호수로 흘러 가장자리에서 폭포로 떨어진다.
+# 숲 한가운데 빈터: 뒤쪽 바위 언덕과 빽빽한 전나무 숲, 언덕 밑 샘에서 시작한 개울이 호수로 들고, 호수 물은 강이 되어 숲 밖으로 흘러간다.
+# 둘레는 지평선까지 이어진 전나무 숲과 먼 산(far_*).
 # 호숫가 통나무집(돌 굴뚝·현관), 선착장과 카누, 모닥불과 텐트, 장작더미.
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -19,7 +20,8 @@ H = math.pi / 2
 LAKE, LRX, LRY = Vector((4.3, -2.9)), 3.0, 2.3
 LEVEL = TOP - 0.08
 STREAM = [Vector(p) for p in ((-4.6, 3.4), (-3.0, 2.2), (-1.2, 1.7), (0.4, 0.9), (1.6, -0.6), (2.6, -1.8))]
-OUTLET = [Vector(p) for p in ((7.0, -2.6), (8.3, -2.5))]
+# 호수에서 나가는 강(타일 밖 멀리까지)
+RIVER = [Vector(p) for p in ((6.4, -2.7), (8.3, -2.4), (12.0, -1.4), (17.0, -2.9), (25.0, -1.2), (40.0, -4.0), (70.0, 0.0), (120.0, 3.0))]
 HILL = Vector((-6.6, 6.4))
 
 
@@ -29,7 +31,7 @@ def lake_q(x, y):
     return math.hypot((x - LAKE.x) / LRX, (y - LAKE.y) / LRY) / wob
 
 
-def height(x, y):
+def terrain(x, y):
     h = TOP
     # 뒤쪽 바위 언덕
     d = (Vector((x, y)) - HILL).length
@@ -37,13 +39,45 @@ def height(x, y):
     # 잔물결 같은 땅 기복
     h += 0.06 * math.sin(x * 0.9 + 1) * math.sin(y * 0.8)
     # 호수와 물길
-    q = min(lake_q(x, y), 1.0 + poly_dist((x, y), OUTLET) / 0.6)
+    q = lake_q(x, y)
     if q < 1.18:
         h = min(h, TOP - 0.62 * smooth(1.18, 0.55, q))
     # 개울 바닥
     sd = poly_dist((x, y), STREAM)
     h -= 0.2 * smooth(0.55, 0.15, sd) * smooth(5.5, 3.0, d)
     return h
+
+
+def carve(x, y, h):
+    """강 바닥"""
+    rd = poly_dist((x, y), RIVER)
+    if rd < 1.0:
+        h = min(h, h + (TOP - 0.45 - h) * smooth(1.0, 0.4, rd))
+    return h
+
+
+def height(x, y):
+    return carve(x, y, terrain(x, y))
+
+
+def far_land(x, y):
+    """먼 땅: 낮은 구릉, 더 멀리 바위산 능선"""
+    r = math.hypot(x, y)
+    a = math.atan2(y, x)
+    ridge = 0.55 + 0.3 * math.sin(a * 3 + 1.3) + 0.15 * math.sin(a * 7 + 0.4)
+    return (TOP + 0.6 * (0.5 + 0.5 * math.sin(x * 0.17 + 1) * math.cos(y * 0.15)) * smooth(10, 20, r)
+            + 13 * ridge * smooth(32, 75, r) * (0.8 + 0.2 * math.sin(x * 0.3) * math.sin(y * 0.27)))
+
+
+def clear(x, y):
+    """빈터 가장자리에서 바깥으로 거리(둥근 네모 + 들쭉날쭉)"""
+    a = math.atan2(y, x)
+    return (abs(x) ** 3 + abs(y) ** 3) ** (1 / 3) - W / 2 + 0.8 * math.sin(a * 5 + 1) + 0.5 * math.sin(a * 11)
+
+
+def hfar(x, y):
+    t = smooth(0, 12, max(abs(x), abs(y)) - W / 2)
+    return carve(x, y, terrain(x, y) * (1 - t) + far_land(x, y) * t)
 
 
 lib.surface = height
@@ -58,15 +92,29 @@ def paint(x, y, z):
     if z > TOP + 1.1:
         return ROCK if (Vector((x, y)) - HILL).length < 2.4 else FOREST_FLOOR
     q = lake_q(x, y)
-    if q < 1.35 or poly_dist((x, y), STREAM) < 0.5:
+    if q < 1.35 or poly_dist((x, y), STREAM) < 0.5 or poly_dist((x, y), RIVER) < 0.95:
         return SAND
-    if x - y < -4.5:
+    # 빈터 잔디가 가장자리로 갈수록 숲 바닥에 점점이 섞여 든다(바깥 먼 땅은 숲 바닥)
+    if x - y < -4.5 or tile.speckle(x, y) < smooth(5.0, 7.9, max(abs(x), abs(y))):
         return FOREST_FLOOR
     return GRASS
 
 
-tile.build(W, D, height, paint, water=LEVEL)
+tile.build(W, D, height, paint, water=LEVEL, ground=True)
 tile.liquid_plane('liquid_lake', W, D, height, LEVEL)
+
+
+def paint_far(x, y, z):
+    if z > TOP + 6.5:
+        return ROCK
+    if poly_dist((x, y), RIVER) < 0.95:
+        return SAND
+    # 빈터 잔디가 숲 바닥으로 점점이 섞여 든다
+    return FOREST_FLOOR
+
+
+tile.surround('far_ground', W, D, 0.2, hfar, paint_far)
+tile.liquid_far('liquid_river_far', W, D, lambda x, y: hfar(x, y) if poly_dist((x, y), RIVER) < 1.2 else 9.0, LEVEL)
 pts = catmull(STREAM, 10)
 tile.liquid_ribbon('liquid_stream', pts, 0.5, lambda p, i: height(p.x, p.y) + 0.14 if i < 3 else LEVEL + 0.004)
 for p in pts:
@@ -74,7 +122,8 @@ for p in pts:
 for x in range(-4, 9):
     block(LAKE.x + x * 0.4, LAKE.y, 0)
 block(LAKE.x, LAKE.y, max(LRX, LRY) + 0.3)
-block(7.6, -2.6, 0.8)
+for p in catmull(RIVER[:3], 6):
+    block(p.x, p.y, 0.9)
 
 # ── 통나무집 ─────────────────────────────────────────
 LOG = mat('log', '#a06c45', 0.85, 0.12, 10.0)
@@ -298,13 +347,31 @@ for i in range(12):
             look.boulder(f'rock_{i}', x, y, 0.16 + rnd.random() * 0.2)
             break
 
-setup_render((12.8 * 1.2, -14.4 * 1.2, 9.6 * 1.2), (0, 0, -0.6))
+# ── 둘레 숲: 빈터 가장자리부터 지평선까지 ────────────────────
+spots = []
+for gap, r0, r1 in ((1.25, 0.0, 22.0), (2.4, 22.0, 70.0)):
+    n = int(r1 / gap) + 1
+    for i in range(-n, n + 1):
+        for j in range(-n, n + 1):
+            x, y = (i + rnd.random() * 0.8) * gap, (j + rnd.random() * 0.8) * gap
+            d = clear(x, y)
+            r = math.hypot(x, y)
+            if d < 3.0 + rnd.random() * 2.0 or not (r0 <= r < r1) or poly_dist((x, y), RIVER) < 1.4:
+                continue
+            z = hfar(x, y)
+            if z > TOP + 7.5 or (z > TOP + 5 and rnd.random() < 0.6):
+                continue
+            h = (1.6 + rnd.random() * 1.4) * G * (0.5 + 0.5 * smooth(3, 16, d))
+            spots.append((x, y, z - 0.05, h, 'pine' if rnd.random() < 0.9 else LEAF[('orange', 'red', 'rust')[rnd.randrange(3)]]))
+print('far trees', len(spots), flush=True)
+tile.far_trees('far_trees', spots)
+
+setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
 lights = [three(at(CAB, CROT, 0.4 * 1.25, -1.9), 1.1), three(camp, 0.6), three(lantern_dock, LEVEL + 1.1)]
 layout = {
     'lights': lights,
-    # 호수 물길이 가장자리(+x)로 떨어지는 폭포
-    'falls': [{'origin': [W / 2 + 0.02, LEVEL, 2.55], 'outward': [1, 0, 0], 'width': 0.55, 'length': 11, 'reach': 0.9}],
+    'ground': tile.heightmap(hfar),
     'smoke': three(Vector(at(CAB, CROT, (2.1 / 2 + 0.2) * 1.25, 0.15 * 1.25)), height(*CAB) + 2.5),
 }
 

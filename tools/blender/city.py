@@ -1,14 +1,18 @@
 # 도시 테마: 운하가 가로지르는 구시가 디오라마. 앱: public/models/city.glb + city_light.png(라이트맵)
 #   blender -b -P tools/blender/city.py -- public/models glb 384
 #   ffmpeg -i public/models/city_light.png -c:v libwebp -quality 90 public/models/city_light.webp  (png 는 지운다)
-# 네모난 땅 조각: 가운데를 지나는 돌 운하(아치 다리 둘), 운하를 감싸 도는 돌길(자동차가 돈다),
+# 구시가 한 구역: 가운데를 지나는 돌 운하(아치 다리 둘), 운하를 감싸 도는 돌길(자동차가 돈다),
 # 뒤쪽 두 변을 따라 늘어선 파스텔 회벽 집들, 시계탑 교회와 분수 광장, 노천카페, 앞쪽 공원.
+# 둘레(far_*)는 운하가 이어지는 시가지 구역들(밤에 창이 켜진다)이 펼쳐지고, 멀리 초록 언덕이 감싼다.
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import *  # noqa: F401,F403
 import lib
 import look
 import tile
+
+# 집이 많아 기와는 줄 단위로(삼각형을 크게 줄인다)
+look.ROW_ROOF = True
 from tile import smooth, three
 
 W = D = 16.0
@@ -53,8 +57,56 @@ def paint(x, y, z):
     return PAVE
 
 
-tile.build(W, D, height, paint, water=LEVEL, step=0.2)
+tile.build(W, D, height, paint, water=LEVEL, step=0.2, ground=True)
 tile.liquid_plane('liquid_canal', W, D, height, LEVEL, step=0.2)
+
+# ── 둘레 시가지: 네모 구역(집이 가장자리를 두른다)과 길, 운하는 그대로 이어진다 ─────────
+PER, BX, SW = W / 2 + 1.4, 6.0, 1.2  # 타일 둘레 길 바깥 끝, 구역 폭, 길 폭
+CITY_R = 44.0
+MID = (CX0 + CX1) / 2
+spans = [(-W / 2, W / 2)] + [(PER + k * (BX + SW), PER + k * (BX + SW) + BX) for k in range(7)]
+spans += [(-b, -a) for a, b in spans[1:]]
+
+
+def span_of(v):
+    return next((sp for sp in spans if sp[0] <= v <= sp[1]), None)
+
+
+# 옛 구역을 감싼 첫 줄 구역은 공원 띠(집이 옛 구역을 가리지 않게)
+RING1 = (spans[0], spans[1], spans[8])
+park = lambda sx, sy: sx in RING1 and sy in RING1
+
+
+def corridor(x):
+    """운하와 양쪽 둑길"""
+    return abs(x - MID) < (CX1 - CX0) / 2 + 0.9
+
+
+def hills(x, y):
+    r = math.hypot(x, y)
+    a = math.atan2(y, x)
+    return 6.0 * (0.6 + 0.3 * math.sin(a * 3 + 0.5)) * smooth(CITY_R + 2, 85, r) * smooth(1.6, 5.0, abs(x - MID))
+
+
+def hfar(x, y):
+    return height(x, y) + hills(x, y)
+
+
+def paint_far(x, y, z):
+    if in_canal(x) and z < TOP - 0.1:
+        return QUAY
+    if math.hypot(x, y) > CITY_R + 3:
+        return GRASS
+    sx, sy = span_of(x), span_of(y)
+    if sx and sy and not corridor(x):
+        inset = min(x - sx[0], sx[1] - x, y - sy[0], sy[1] - y)
+        if inset > (0.3 if park(sx, sy) else 1.6):
+            return GRASS  # 공원·안뜰
+    return PAVE
+
+
+tile.surround('far_ground', W, D, 0.2, hfar, paint_far)
+tile.liquid_far('liquid_canal_far', W, D, hfar, LEVEL)
 
 # 운하 둑: 돌벽 + 갓돌
 for sx, x in ((-1, CX0), (1, CX1)):
@@ -132,7 +184,6 @@ def arch_bridge(name, x, y, span, width, rail=True):
     return o
 
 
-MID = (CX0 + CX1) / 2
 for s in (-1, 1):
     arch_bridge(f'bridge_{s}', MID, s * RING, CX1 - CX0 + 0.6, RW + 0.5)
 arch_bridge('bridge_foot', MID, 0.6, CX1 - CX0 + 0.6, 0.8)
@@ -358,6 +409,68 @@ for k, (c, kind) in enumerate((('#d9583b', 'hatch'), ('#4f86b8', 'hatch'), ('#e8
     o.location = (p.x, p.y, TOP + 0.02)
     o.scale = (1.3, 1.3, 1.3)
 
+# ── 둘레 시가지의 집, 안뜰 나무, 운하 다리, 먼 종탑 ──────────────────
+items, spots = [], []
+for sx in spans:
+    for sy in spans:
+        if sx == spans[0] and sy == spans[0]:
+            continue
+        x0, x1 = sx
+        y0, y1 = sy
+        if math.hypot((x0 + x1) / 2, (y0 + y1) / 2) > CITY_R:
+            continue
+        if park(sx, sy):
+            for k in range(int((x1 - x0) * (y1 - y0) / 7)):
+                x, y = x0 + 0.8 + rnd.random() * (x1 - x0 - 1.6), y0 + 0.8 + rnd.random() * (y1 - y0 - 1.6)
+                if not corridor(x):
+                    spots.append((x, y, TOP - 0.03, 1.2 + rnd.random() * 0.5,
+                                  LEAF[('green', 'orange', 'green', 'yellow', 'red')[rnd.randrange(5)]]))
+            continue
+        dd = 1.3
+        for side in range(4):
+            # 길을 따라 집을 잇는다(앞 = 길 쪽)
+            if side < 2:
+                a, b, fixed, rot = x0, x1, (y0 + dd / 2 if side == 0 else y1 - dd / 2), (0.0 if side == 0 else math.pi)
+            else:
+                a, b, fixed, rot = y0 + dd, y1 - dd, (x0 + dd / 2 if side == 2 else x1 - dd / 2), (-H if side == 2 else H)
+            t = a
+            while t < b - 0.6:
+                w = min(1.0 + rnd.random() * 0.6, b - t)
+                c = t + w / 2
+                t += w
+                x, y = (c, fixed) if side < 2 else (fixed, c)
+                if corridor(x) or (abs(x) < W / 2 + 0.3 and abs(y) < W / 2 + 0.3):
+                    continue
+                floors = rnd.randint(1, 3)
+                items.append((x, y, TOP - 0.02, w - 0.04, dd, 0.75 + floors * 0.6, 0.5 + rnd.random() * 0.2, rot,
+                              WALLS[rnd.randrange(len(WALLS))], ROOFS[rnd.randrange(len(ROOFS))]))
+        # 안뜰 나무
+        for k in range(rnd.randint(0, 2)):
+            x, y = x0 + 1.9 + rnd.random() * (x1 - x0 - 3.8), y0 + 1.9 + rnd.random() * (y1 - y0 - 3.8)
+            if not corridor(x) and x1 - x0 > 4:
+                spots.append((x, y, TOP - 0.03, 1.6 + rnd.random() * 0.6, LEAF[('green', 'orange', 'green', 'red')[rnd.randrange(4)]]))
+# 먼 종탑 몇 개
+for k, (x, y) in enumerate(((-21.0, 26.0), (30.0, 12.0), (14.0, -31.0), (-33.0, -9.0))):
+    items.append((x, y, TOP - 0.02, 1.0, 1.0, 4.2 + k % 2, 1.6, 0.0, WALLS[6], SLATE))
+# 둘레 길의 가로수, 먼 언덕의 나무
+for k in range(260):
+    a = rnd.random() * math.tau
+    r = CITY_R + 4 + rnd.random() * 30
+    x, y = math.cos(a) * r, math.sin(a) * r
+    if abs(x - MID) > 4:
+        spots.append((x, y, hfar(x, y) - 0.05, (1.8 + rnd.random()) * 1.3, 'pine' if rnd.random() < 0.3 else LEAF['green']))
+print('far houses', len(items), 'trees', len(spots), flush=True)
+tile.far_houses('far_town', items)
+tile.far_trees('far_trees', spots)
+P = []
+for sy in spans:
+    for y in (sy[0] - SW / 2, sy[1] + SW / 2):
+        if abs(y) < CITY_R and abs(y) > W / 2 + 0.1:
+            P.append(box('far_bridge', (CX1 - CX0 + 0.5, SW + 0.1, 0.3), (MID, y, TOP - 0.13), QUAY, bevel=0.02))
+            for s_ in (-1, 1):
+                P.append(box('far_bridge_rail', (CX1 - CX0 + 0.5, 0.1, 0.16), (MID, y + s_ * (SW / 2), TOP + 0.08), PAVE_LIGHT, bevel=0.02))
+bake(P, 'far_bridges')
+
 # ── 가로등, 공원 나무 ─────────────────────────────────
 lamps = []
 for k, p in enumerate(ring_points(RING + RW / 2 + 0.35, 20)):
@@ -389,10 +502,11 @@ for i in range(16):
             block(x, y, 0.25)
             break
 
-setup_render((12.8 * 1.2, -14.4 * 1.2, 9.6 * 1.2), (0, 0, -0.6))
+setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
 # 도로 중심선(앱 좌표): 차가 오른쪽 차선을 달리게 앱이 옆으로 비낀다
 layout = {
+    'ground': tile.heightmap(hfar),
     'paths': {'ring': [three(p, TOP + 0.02) for p in ROUTE[::3]], 'canal': [three(Vector((MID, y)), LEVEL) for y in (-7.2, 0, 7.2)]},
     'lights': [three(Vector((CH.x, CH.y - 1.05 - 0.9)), 1.0), three(FT, 1.2), three(cafe[0], 1.0)]
               + [three(o.location, 1.2) for o in lamps[::3]],

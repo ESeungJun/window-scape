@@ -1,5 +1,6 @@
 # 사각 디오라마 타일 공용 도구(드라이브·도시·성·숲). 레퍼런스 디오라마처럼 네모난 땅 조각을 잘라 낸 모양:
 # 높이 함수로 빚은 윗면(칸마다 재질), 지층이 드러난 옆면, 물이 있으면 옆면에 물 단면, 아래로 좁아지는 바위 밑동.
+# 땅에 놓인 테마(ground=True)는 옆면·밑동 대신 surround 로 타일 둘레를 지평선까지 이어 붙인다(far_*: 굽지 않는 먼 풍경).
 # 타일 축은 Blender x·y 와 같다. 앱 기본 시점이 대각선(CAM ≈ (0.66, -0.75))이라 모서리 하나가 카메라를 향한다.
 # 물(liquid_)과 움직이는 것(mover_)은 앱이 따로 그린다(lib.dynamic).
 import math
@@ -28,8 +29,9 @@ def poly_dist(p, pts):
     return min(seg_dist(p, pts[i], pts[i + 1]) for i in range(len(pts) - 1))
 
 
-def build(W, D, height, paint, water=None, step=0.2, depth=1.5, under=4.0, top_mat=lib.GRASS):
-    """W×D 타일. height(x, y) -> 윗면 높이, paint(x, y, z) -> 재질. water: 수면 높이(없으면 None)"""
+def build(W, D, height, paint, water=None, step=0.2, depth=1.5, under=4.0, top_mat=lib.GRASS, ground=False):
+    """W×D 타일. height(x, y) -> 윗면 높이, paint(x, y, z) -> 재질. water: 수면 높이(없으면 None).
+    ground: 둘레를 surround 로 잇는 땅 테마(옆면·밑동을 만들지 않는다)"""
     nx, ny = round(W / step), round(D / step)
     xs = [-W / 2 + W * i / nx for i in range(nx + 1)]
     ys = [-D / 2 + D * j / ny for j in range(ny + 1)]
@@ -52,6 +54,8 @@ def build(W, D, height, paint, water=None, step=0.2, depth=1.5, under=4.0, top_m
     top = new_obj('tile_top', bm)
     for m in mats:
         top.data.materials.append(m)
+    if ground:
+        return H, xs, ys
 
     # 옆면: 둘레를 따라 지층 벽(층 무늬가 보이게 세로로 잘게 나눈다). 물 아래 땅이면 물 단면을 얹는다
     z0 = lib.TOP - depth
@@ -161,6 +165,12 @@ def liquid_ribbon(name, pts, width, zfn):
     return o
 
 
+def speckle(x, y):
+    """칸마다 고정된 0~1 난수(재질 경계를 점점이 섞을 때)"""
+    v = math.sin(x * 127.1 + y * 311.7) * 43758.5453
+    return v - math.floor(v)
+
+
 def free(x, y, r, W, D, margin=0.3):
     return abs(x) < W / 2 - margin and abs(y) < D / 2 - margin and lib.free(x, y, r)
 
@@ -173,3 +183,134 @@ def three(p, h=None):
     """Blender (x, y[, z]) -> 앱 [x, y, z]"""
     z = h if h is not None else (p.z if len(p) > 2 else lib.surface(p.x, p.y))
     return [round(p.x, 3), round(z, 3), round(-p.y, 3)]
+
+
+def axis(half, step, R, grow=1.16, keep=4.0):
+    """타일 안과 그 바깥 keep 까지는 step 간격(타일 가장자리 점과 맞물리고, 물가·재질 경계가 계단지지 않게),
+    그 밖으로 갈수록 성기게 R 까지"""
+    n = round(2 * half / step)
+    inner = [-half + 2 * half * i / n for i in range(n + 1)]
+    out, x, s_ = [], half, step
+    while x < R:
+        if x >= half + keep:
+            s_ *= grow
+        x = min(R, x + s_)
+        out.append(x)
+    return [-v for v in reversed(out)] + inner + out
+
+
+def surround(name, W, D, step, hfar, paint, R=110.0):
+    """타일 바깥을 지평선까지 잇는 땅(far_ground). hfar(x, y): 높이(타일 가장자리에선 타일과 같아야 한다)"""
+    xs, ys = axis(W / 2, step, R), axis(D / 2, step, R)
+    bm = bmesh.new()
+    V = {}
+    for i, x in enumerate(xs):
+        for j, y in enumerate(ys):
+            if abs(x) <= W / 2 - 1e-6 and abs(y) <= D / 2 - 1e-6:
+                continue
+            V[i, j] = bm.verts.new((x, y, hfar(x, y)))
+    mats, idx = [], {}
+    for i in range(len(xs) - 1):
+        for j in range(len(ys) - 1):
+            cx, cy = (xs[i] + xs[i + 1]) / 2, (ys[j] + ys[j + 1]) / 2
+            if abs(cx) < W / 2 and abs(cy) < D / 2:
+                continue
+            vs = [V[i, j], V[i + 1, j], V[i + 1, j + 1], V[i, j + 1]]
+            f = bm.faces.new(vs)
+            m = paint(cx, cy, sum(v.co.z for v in vs) / 4)
+            if m.name not in idx:
+                idx[m.name] = len(mats)
+                mats.append(m)
+            f.material_index = idx[m.name]
+            f.smooth = True
+    o = new_obj(name, bm)
+    for m in mats:
+        o.data.materials.append(m)
+    return o
+
+
+def liquid_far(name, W, D, hfar, level, R=110.0, step=0.4):
+    """타일 바깥 수면(먼 바다·강). 땅이 수면 아래인 칸만. uv 는 liquid_plane 과 같다"""
+    xs, ys = axis(W / 2, step, R, 1.25), axis(D / 2, step, R, 1.25)
+    bm = bmesh.new()
+    uvl = bm.loops.layers.uv.new('UVMap')
+    for i in range(len(xs) - 1):
+        for j in range(len(ys) - 1):
+            cs = [(xs[i + a], ys[j + b]) for a, b in ((0, 0), (1, 0), (1, 1), (0, 1))]
+            cx, cy = (xs[i] + xs[i + 1]) / 2, (ys[j] + ys[j + 1]) / 2
+            if abs(cx) < W / 2 and abs(cy) < D / 2:
+                continue
+            hs = [hfar(x, y) for x, y in cs]
+            if min(hs) > level + 0.02:
+                continue
+            f = bm.faces.new([bm.verts.new((x, y, level)) for x, y in cs])
+            for loop, (x, y), h in zip(f.loops, cs, hs):
+                loop[uvl].uv = (0.5 + 0.5 * smooth(0.35, 0.0, level - h), x * 0.22 + y * 0.08)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+    o = new_obj(name, bm)
+    o.data.materials.append(lib.WATER)
+    return o
+
+
+def far_trees(name, spots):
+    """먼 숲: 면이 적은 나무(흔들리지 않는다). 재질마다 한 물체. spots: (x, y, z, 키, 'pine' | 잎 재질 | ('bush', 재질))"""
+    bms = {}
+    get = lambda m: bms.setdefault(m.name, (m, bmesh.new()))[1]
+    for x, y, z, h, kind in spots:
+        if isinstance(kind, tuple):
+            # 덤불(울타리 덤불): 줄기 없이 낮은 공
+            bmesh.ops.create_icosphere(get(kind[1]), subdivisions=1, radius=0.5 * h,
+                                       matrix=lib.Matrix.Translation((x, y, z + 0.25 * h)) @ lib.Matrix.Diagonal((1, 1, 0.8, 1)))
+            continue
+        bmesh.ops.create_cone(get(lib.TRUNK), cap_ends=False, segments=5, radius1=0.06 * h, radius2=0.04 * h, depth=0.4 * h,
+                              matrix=lib.Matrix.Translation((x, y, z + 0.2 * h)))
+        if kind == 'pine':
+            for k in range(2):
+                bmesh.ops.create_cone(get(lib.PINE), cap_ends=True, segments=7, radius1=(0.36 - k * 0.12) * h, radius2=0.02 * h,
+                                      depth=0.62 * h, matrix=lib.Matrix.Translation((x, y, z + (0.62 + k * 0.4) * h)))
+        else:
+            bmesh.ops.create_icosphere(get(kind), subdivisions=2, radius=0.34 * h,
+                                       matrix=lib.Matrix.Translation((x, y, z + 0.72 * h)) @ lib.Matrix.Diagonal((1, 1, 0.85, 1)))
+    for m, bm in bms.values():
+        o = new_obj(f'{name}_{m.name}', bm)
+        o.data.materials.append(m)
+        for p in o.data.polygons:
+            p.use_smooth = m is not lib.PINE
+
+
+def far_houses(name, items, glass=None):
+    """먼 마을: 벽 상자 + 박공 지붕 + 층마다 창 띠(밤에 불이 켜진다). 재질마다 한 물체.
+    items: (x, y, z, 폭, 깊이, 벽 높이, 지붕 높이, 회전, 벽 재질, 지붕 재질). 폭 방향이 용마루"""
+    glass = glass or lib.GLASS
+    bms = {}
+    get = lambda m: bms.setdefault(m.name, (m, bmesh.new()))[1]
+    for x, y, z, w, d, h, rh, rot, wall, roof in items:
+        M = lib.Matrix.Translation((x, y, z)) @ lib.Matrix.Rotation(rot, 4, 'Z')
+        bmesh.ops.create_cube(get(wall), size=1.0, matrix=M @ lib.Matrix.Translation((0, 0, h / 2)) @ lib.Matrix.Diagonal((w, d, h, 1)))
+        bm = get(roof)
+        o = 0.08
+        vs = [bm.verts.new(M @ Vector(v)) for v in ((-w / 2 - o, -d / 2 - o, h), (w / 2 + o, -d / 2 - o, h), (w / 2 + o, 0, h + rh),
+                                                     (-w / 2 - o, 0, h + rh), (-w / 2 - o, d / 2 + o, h), (w / 2 + o, d / 2 + o, h))]
+        bm.faces.new([vs[0], vs[1], vs[2], vs[3]])
+        bm.faces.new([vs[5], vs[4], vs[3], vs[2]])
+        # 박공 삼각 벽은 벽 재질
+        bw = get(wall)
+        for sx in (-1, 1):
+            tv = [bw.verts.new(M @ Vector(v)) for v in ((sx * w / 2, -d / 2, h), (sx * w / 2, d / 2, h), (sx * w / 2, 0, h + rh))]
+            bw.faces.new(tv if sx > 0 else tv[::-1])
+        floors = max(1, round((h - 0.3) / 0.6))
+        bg = get(glass)
+        for f in range(floors):
+            zc = 0.45 + f * 0.6
+            for sy in (-1, 1):
+                q = [bg.verts.new(M @ Vector((a * w * 0.35, sy * (d / 2 + 0.01), zc + b * 0.1))) for a, b in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+                bg.faces.new(q if sy < 0 else q[::-1])
+    for m, bm in bms.values():
+        o = new_obj(f'{name}_{m.name}', bm)
+        o.data.materials.append(m)
+
+
+def heightmap(hfn, half=40.0, n=81):
+    """앱 카메라가 땅속으로 들어가지 않게 쓰는 높이 격자(앱 좌표: x, z = -y). h[i * n + j] = 높이(x_i, z_j)"""
+    g = [-half + 2 * half * k / (n - 1) for k in range(n)]
+    return {'half': half, 'n': n, 'h': [round(hfn(x, -z), 2) for x in g for z in g]}

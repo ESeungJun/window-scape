@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import type { Env } from './env';
 import { softSprite, type Rng } from '../util';
-import { applyLightmap } from './baked';
-import { gltfLoader, trackMaterials } from './props';
+import { applyLightmap, applyOpenSky } from './baked';
+import { loadModel, trackMaterials } from './props';
 import { riverMaterial } from './water';
-import { FLOATING_VIEW, Sway, Waterfall, islandBob, waterBrightness, type Stage } from './kit';
+import { Sway, Waterfall, waterBrightness, type Stage } from './kit';
 
 /**
- * 네모난 디오라마 타일 테마(드라이브·도시·성·숲)의 공통 틀. 모양은 Blender 에서 직접 모델링한 public/models/<이름>.glb
+ * 땅에 놓인 디오라마 테마(드라이브·도시·성·숲)의 공통 틀. 모양은 Blender 에서 직접 모델링한 public/models/<이름>.glb
  * (만드는 법: tools/blender/<이름>.py, 공용 바닥: tools/blender/tile.py)이고 빛은 구운 라이트맵에 하늘빛을 곱해 쓴다.
+ * 가운데 네모 땅은 구운 빛, 그 둘레를 지평선까지 잇는 먼 풍경(far_*)은 탁 트인 하늘빛을 받는다.
  * 여기서는 그 위에 물(liquid_*), 폭포, 나무 흔들림, 계절 색, 밤 불빛을 입히고,
  * 움직이는 것(mover_*)은 테마별 하위 클래스가 onLoad/tick 에서 움직인다.
  */
@@ -21,6 +22,8 @@ export interface Layout {
   paths?: Record<string, [number, number, number][]>;
   /** 굴뚝 연기가 피어오르는 점 */
   smoke?: [number, number, number];
+  /** 땅 높이 격자(카메라가 땅속으로 들어가지 않게). h[i * n + j] = 높이(x_i, z_j), x·z 는 -half ~ half */
+  ground?: { half: number; n: number; h: number[] };
 }
 
 /** 굴뚝 연기: 부드러운 점들이 바람 따라 기울며 피어오른다 */
@@ -57,7 +60,7 @@ export class Smoke {
 
 export abstract class Diorama implements Stage {
   readonly group = new THREE.Group();
-  readonly kind = 'floating' as const;
+  readonly kind = 'ground' as const;
   readonly baked = true;
   readonly view: { target: THREE.Vector3; distance: number };
   protected readonly sway = new Sway();
@@ -68,11 +71,21 @@ export abstract class Diorama implements Stage {
   private readonly glass: THREE.MeshStandardMaterial[] = [];
   private flowers: THREE.Object3D[] = [];
   private smoke?: { fx: Smoke; at: THREE.Vector3 };
+  private ground?: Layout['ground'];
 
   constructor(rng: Rng, name: string, distance: number) {
-    this.view = { target: FLOATING_VIEW.target, distance };
-    gltfLoader.load(`models/${name}.glb`, (gltf) => {
-      const root = gltf.scene;
+    this.view = { target: new THREE.Vector3(0, 0.6, 0), distance };
+    loadModel(`models/${name}.glb`, (root) => {
+      // 먼 풍경은 라이트맵 자리가 없으므로 재질을 따로 둔다(가운데 땅과 같은 재질을 쓰면 라이트맵 엉뚱한 곳을 읽는다)
+      const far = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+      root.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh || !o.name.startsWith('far_')) return;
+        const m = mesh.material as THREE.MeshStandardMaterial;
+        if (!far.has(m)) far.set(m, m.clone());
+        mesh.material = far.get(m)!;
+      });
+      for (const m of far.values()) applyOpenSky(m);
       trackMaterials(root, this.seasonal, this.glass);
       const movers: THREE.Object3D[] = [];
       root.traverse((o) => {
@@ -101,8 +114,9 @@ export abstract class Diorama implements Stage {
         this.group.add(light);
         this.lights.push(light);
       }
+      this.ground = layout.ground;
       if (layout.smoke) {
-        this.smoke = { fx: new Smoke(rng), at: new THREE.Vector3(...layout.smoke) };
+        this.smoke = { fx: new Smoke(rng, 60, 1.4), at: new THREE.Vector3(...layout.smoke) };
         this.group.add(this.smoke.fx.points);
       }
       this.group.add(root);
@@ -128,7 +142,20 @@ export abstract class Diorama implements Stage {
     for (const f of this.flowers) f.visible = env.snowCover < 0.6;
     this.smoke?.fx.update(dt, env, this.smoke.at);
     this.tick(dt, t, env);
-    this.group.position.y = islandBob(t);
+  }
+
+  groundHeight(x: number, z: number): number {
+    const g = this.ground;
+    if (!g) return 0;
+    const f = (v: number) => THREE.MathUtils.clamp(((v + g.half) / (2 * g.half)) * (g.n - 1), 0, g.n - 1.001);
+    const fx = f(x);
+    const fz = f(z);
+    const i = Math.floor(fx);
+    const j = Math.floor(fz);
+    const a = fx - i;
+    const b = fz - j;
+    const h = (ii: number, jj: number) => g.h[ii * g.n + jj];
+    return (h(i, j) * (1 - a) + h(i + 1, j) * a) * (1 - b) + (h(i, j + 1) * (1 - a) + h(i + 1, j + 1) * a) * b;
   }
 }
 
