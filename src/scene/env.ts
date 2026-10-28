@@ -42,7 +42,7 @@ const TIME: Record<TimeOfDay, {
   // 하늘·안개색은 시간대마다 크게 바뀌지만, 장면을 비추는 빛(sun·hemiSky)은 중립에 가깝게 둬 장면 고유색이 덜 흔들리게 한다
   morning: { skyTop: '#9fb8dc', skyBottom: '#f3dcc6', sun: '#ffdcb6', sunI: 2.3, elev: 0.3, hemi: 1.2, hemiSky: '#e9e6ec', lights: 0.25, stars: 0 },
   day: { skyTop: '#8db8e0', skyBottom: '#dce6ee', sun: '#fff1dc', sunI: 2.5, elev: 0.95, hemi: 1.5, hemiSky: '#e4eef6', lights: 0, stars: 0 },
-  evening: { skyTop: '#8497c9', skyBottom: '#efd2c0', sun: '#ffc89a', sunI: 1.8, elev: 0.16, hemi: 1.05, hemiSky: '#efdcd2', lights: 0.8, stars: 0.2 },
+  evening: { skyTop: '#7f95c8', skyBottom: '#ecd6cc', sun: '#ffc89a', sunI: 1.8, elev: 0.16, hemi: 1.05, hemiSky: '#efdcd2', lights: 0.8, stars: 0.2 },
   night: { skyTop: '#1a2140', skyBottom: '#34406a', sun: '#9fb2ff', sunI: 0.6, elev: 0.75, hemi: 0.7, hemiSky: '#5a6fb0', lights: 1, stars: 1 },
 };
 

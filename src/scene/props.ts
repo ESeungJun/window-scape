@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Env } from './env';
 
@@ -20,6 +21,9 @@ export const SEASONAL: Record<string, (env: Env, out: THREE.Color) => void> = {
   pine: (e, c) => c.copy(e.pine),
   bush: (e, c) => c.copy(e.grass).multiplyScalar(0.72),
 };
+
+/** 모델 불러오기(Blender 에서 draco 로 압축해 내보낸다. 해독기는 public/draco) */
+export const gltfLoader = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath('draco/'));
 
 const protos = new Map<string, THREE.Object3D>();
 const seasonal: [THREE.MeshStandardMaterial, (env: Env, out: THREE.Color) => void][] = [];
@@ -43,7 +47,7 @@ export function trackMaterials(root: THREE.Object3D, list = seasonal, lights = g
 
 export async function loadProps(): Promise<void> {
   try {
-    const gltf = await new GLTFLoader().loadAsync('models/props.glb');
+    const gltf = await gltfLoader.loadAsync('models/props.glb');
     // 둥근 나무 잎은 재질 하나(leaf)로 만들었다. 잎 색 두 가지(A·B)로 나눠 쓴다
     gltf.scene.traverse((o) => {
       const mesh = o as THREE.Mesh;

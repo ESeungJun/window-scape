@@ -1,9 +1,8 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Env } from './env';
 import type { Rng } from '../util';
 import { applyLightmap } from './baked';
-import { trackMaterials } from './props';
+import { gltfLoader, trackMaterials } from './props';
 import {
   FLOATING_VIEW, Sway, TOP, Waterfall, addVines, fallAt, islandBob, riverMesh, rimPoint, waterBrightness, type Stage,
 } from './kit';
@@ -36,7 +35,7 @@ export class Island implements Stage {
   constructor(rng: Rng) {
     const g = this.group;
 
-    new GLTFLoader().load('models/island.glb', (gltf) => {
+    gltfLoader.load('models/island.glb', (gltf) => {
       const root = gltf.scene;
       trackMaterials(root, this.seasonal, this.glass);
       applyLightmap(root, 'models/island_light.webp');
@@ -74,7 +73,7 @@ export class Island implements Stage {
     }
 
     // 밤에 고이는 따뜻한 불빛: 집 두 채 앞과 모닥불(모델의 자리, Blender (x, y) = 여기 (x, -z))
-    for (const [x, z, y] of [[1.9, -2.5, 0.9], [-1.3, 2.5, 0.9], [1.35, 3.35, 0.45]]) {
+    for (const [x, z, y] of [[1.9, -2.6, 1.0], [-1.4, 2.6, 1.0], [1.35, 3.35, 0.5]]) {
       const light = new THREE.PointLight('#ffc46b', 0, 4, 2);
       light.position.set(x, y, z);
       g.add(light);
