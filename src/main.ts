@@ -88,7 +88,7 @@ function loadSavedTheme(): Theme {
   } catch {
     // 저장소를 못 쓰면 기본 테마
   }
-  return 'poke-center';
+  return 'island';
 }
 
 function saveTheme(t: Theme) {
@@ -343,5 +343,3 @@ renderInfo();
 loadPlace(state.place);
 setInterval(updateScene, 60 * 1000); // 실시간 시간대 갱신(화면 글자는 그대로 둬 포커스·낭독이 흔들리지 않게)
 setInterval(() => loadPlace(state.place, true), REFRESH_MS);
-// 개발 서버에서만: 스크린샷 스크립트(tools/shot.mjs)가 날씨·시간을 바꿔 볼 수 있게
-if (import.meta.env.DEV) (window as any).__world = world;
