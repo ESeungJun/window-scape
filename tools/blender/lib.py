@@ -1,5 +1,5 @@
 # 창밖날씨 테마들을 Blender 안에서 직접 모델링하는 공용 도구(재질·모양·나무·집·소품·조명·내보내기).
-# 장면 스크립트(island.py, props.py)가 불러 쓴다.
+# 장면 스크립트(island.py, 디오라마 drive·city·castle·forest.py)가 불러 쓴다. 사각 디오라마 바닥은 tile.py.
 # 좌표: Blender 는 Z 가 위. 앱(three.js)의 (x, y, z) = Blender (x, -y... ) 가 아니라
 #   three (x, y, z)  ->  Blender (x, -z, y)
 # 섬 반지름 R, 윤곽 rimFactor, 윗면 높이 TOP, 강 경로는 앱(src/scene/kit.ts, island.ts)과 같게 맞춘다.
@@ -265,20 +265,12 @@ def bake(objs, name, origin=None):
         bpy.ops.object.join()
     o = bpy.context.view_layer.objects.active
     o.name = name
+    # 첫 부품의 크기·회전이 물체에 남지 않게 메시에 새긴다(나중에 물체 크기·회전을 새로 줘도 모양이 그대로)
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
     if origin is not None:
         scene.cursor.location = origin
         bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
     return o
-
-
-def group(name, parts, loc, rot_z=0.0):
-    e = bpy.data.objects.new(name, None)
-    COL.objects.link(e)
-    for p in parts:
-        p.parent = e
-    e.location = loc
-    e.rotation_euler = (0, 0, rot_z)
-    return e
 
 
 # 겹치지 않게 놓기
@@ -418,40 +410,6 @@ def build_river():
 
 # ── 나무 ─────────────────────────────────────────────
 
-def leafy_tree(name, x, y, h, color):
-    z = surface(x, y) - 0.03
-    parts = [cyl(f'{name}_trunk', 0.075 * h, 0.05 * h, 0.75 * h, (x, y, z + 0.37 * h), TRUNK, seg=8, bevel=0.01)]
-    # 가지 둘
-    for k in range(2):
-        a = rnd.random() * math.tau
-        br = cyl(f'{name}_br{k}', 0.03 * h, 0.018 * h, 0.35 * h, (x + math.cos(a) * 0.08 * h, y + math.sin(a) * 0.08 * h, z + 0.6 * h),
-                 TRUNK, seg=6, rot=(math.cos(a + 1.57) * 0.7, math.sin(a + 1.57) * 0.7, 0))
-        parts.append(br)
-    cz = z + 0.95 * h
-    n = rnd.randint(6, 9)
-    leaf = LEAF[color]
-    parts.append(blob(f'{name}_top', 0.36 * h, (x, y, cz + 0.12 * h), leaf, sub=3, disp=0.07 * h, disp_size=0.25 * h))
-    for k in range(n):
-        a = k / n * math.tau + rnd.random() * 0.5
-        rr = (0.22 + rnd.random() * 0.12) * h
-        d = (0.24 + rnd.random() * 0.1) * h
-        parts.append(blob(f'{name}_b{k}', rr, (x + math.cos(a) * d, y + math.sin(a) * d, cz + (rnd.random() - 0.6) * 0.22 * h), leaf,
-                          sub=3, disp=0.06 * h, disp_size=0.22 * h))
-    return bake(parts, name, origin=(x, y, z))
-
-
-def pine_tree(name, x, y, h):
-    z = surface(x, y) - 0.03
-    parts = [cyl(f'{name}_trunk', 0.06 * h, 0.04 * h, 0.4 * h, (x, y, z + 0.2 * h), TRUNK, seg=8)]
-    tiers = 4
-    for k in range(tiers):
-        t = k / tiers
-        r = (0.42 - t * 0.28) * h
-        dz = z + (0.3 + t * 0.62) * h
-        parts.append(cyl(f'{name}_t{k}', r, r * 0.12, 0.42 * h, (x, y, dz + 0.21 * h), PINE, seg=14, sub=1, disp=0.035 * h, disp_size=0.15 * h))
-    return bake(parts, name, origin=(x, y, z))
-
-
 def bush(name, x, y, s):
     z = surface(x, y)
     parts = []
@@ -460,73 +418,6 @@ def bush(name, x, y, s):
         parts.append(blob(f'{name}_{k}', s * (0.7 + rnd.random() * 0.4), (x + math.cos(a) * s * 0.6, y + math.sin(a) * s * 0.6, z + s * 0.35),
                           BUSH, scale=(1, 1, 0.75), sub=2, disp=0.08 * s, disp_size=0.3 * s))
     return bake(parts, name)
-
-
-# ── 집 ───────────────────────────────────────────────
-
-def house(name, x, y, rot, w, d, h, roof, shutter):
-    """반목조 집: 돌 기단, 회벽, 나무 뼈대, 처마 깊은 기와지붕, 굴뚝, 덧창·창가 화분"""
-    P = []
-    P.append(box(f'{name}_base', (w + 0.1, d + 0.1, 0.16), (0, 0, 0.08), STONE, bevel=0.03))
-    P.append(box(f'{name}_wall', (w, d, h), (0, 0, 0.16 + h / 2), PLASTER, bevel=0.025))
-    top = 0.16 + h
-    # 나무 뼈대: 모서리 기둥, 가운데 가로대
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            P.append(box(f'{name}_post', (0.07, 0.07, h), (sx * w / 2, sy * d / 2, 0.16 + h / 2), DARKWOOD, bevel=0.01))
-    for sy in (-1, 1):
-        P.append(box(f'{name}_beam', (w + 0.04, 0.06, 0.06), (0, sy * (d / 2 + 0.01), 0.16 + h * 0.55), DARKWOOD, bevel=0.01))
-        P.append(box(f'{name}_beam_t', (w + 0.04, 0.06, 0.06), (0, sy * (d / 2 + 0.01), top - 0.03), DARKWOOD, bevel=0.01))
-    # 박공(삼각 벽)
-    pitch = math.radians(42)
-    rise = (w / 2) * math.tan(pitch)
-    for sy in (-1, 1):
-        bm = bmesh.new()
-        vs = [bm.verts.new(v) for v in ((-w / 2, 0, 0), (w / 2, 0, 0), (0, 0, rise))]
-        f = bm.faces.new(vs)
-        bmesh.ops.solidify(bm, geom=[f], thickness=0.04)
-        g = new_obj(f'{name}_gable', bm)
-        g.location = (0, sy * d / 2, top)
-        P.append(finish(g, PLASTER, smooth=False))
-        P.append(box(f'{name}_gx', (0.05, 0.05, rise * 0.8), (0, sy * (d / 2 + 0.02), top + rise * 0.4), DARKWOOD, bevel=0.01))
-    # 지붕 두 장(처마가 튀어나온다)
-    slope = (w / 2 + 0.18) / math.cos(pitch)
-    for sx in (-1, 1):
-        P.append(box(f'{name}_roof', (slope, d + 0.34, 0.08),
-                     (sx * (w / 4 + 0.09) * 0.98, 0, top + rise / 2 - 0.01 + 0.04),
-                     roof, rot=(0, sx * pitch, 0), bevel=0.03, seg=3))
-    P.append(cyl(f'{name}_ridge', 0.055, 0.055, d + 0.38, (0, 0, top + rise + 0.05), roof, seg=12, rot=(math.pi / 2, 0, 0)))
-    # 굴뚝
-    P.append(box(f'{name}_chim', (0.2, 0.2, 0.55), (w * 0.22, -d * 0.2, top + rise * 0.6 + 0.15), STONE, bevel=0.02))
-    P.append(box(f'{name}_chimcap', (0.26, 0.26, 0.05), (w * 0.22, -d * 0.2, top + rise * 0.6 + 0.44), DARKWOOD, bevel=0.01))
-    # 문(앞 = -y)
-    P.append(box(f'{name}_door', (0.26, 0.04, 0.44), (0, -d / 2 - 0.02, 0.16 + 0.22), WOOD, bevel=0.015))
-    P.append(box(f'{name}_doorframe', (0.34, 0.03, 0.5), (0, -d / 2 - 0.005, 0.16 + 0.25), DARKWOOD, bevel=0.01))
-    P.append(box(f'{name}_step', (0.4, 0.16, 0.06), (0, -d / 2 - 0.1, 0.03), STONE, bevel=0.02))
-    # 창문: 앞·뒤 두 개씩, 옆 한 개
-    def window(cx, cy, cz, ry):
-        rot = (0, 0, ry)
-        c, s = math.cos(ry), math.sin(ry)
-        off = lambda dx, dy: (cx + dx * c - dy * s, cy + dx * s + dy * c, cz)
-        P.append(box(f'{name}_glass', (0.2, 0.03, 0.22), off(0, 0), GLASS, rot=rot, bevel=0.005))
-        P.append(box(f'{name}_frame', (0.25, 0.025, 0.27), off(0, 0.008), PLASTER, rot=rot, bevel=0.005))
-        for k in (-1, 1):
-            P.append(box(f'{name}_shut', (0.09, 0.03, 0.26), off(k * 0.17, -0.01), shutter, rot=rot, bevel=0.008))
-        P.append(box(f'{name}_box', (0.26, 0.08, 0.06), (off(0, -0.05)[0], off(0, -0.05)[1], cz - 0.15), WOOD, rot=rot, bevel=0.01))
-        for k in range(4):
-            fl = off(-0.09 + k * 0.06, -0.06)
-            P.append(blob(f'{name}_fl', 0.032, (fl[0], fl[1], cz - 0.1), mat('flower_r', '#e8475a', 0.6, 0) if k % 2 else mat('flower_y', '#ffd24a', 0.6, 0), sub=1))
-    wz = 0.16 + h * 0.62
-    for sx in (-1, 1):
-        window(sx * w * 0.28, -d / 2 - 0.02, wz, 0)
-        window(sx * w * 0.28, d / 2 + 0.02, wz, math.pi)
-    window(w / 2 + 0.02, 0, wz, math.pi / 2)
-    window(-w / 2 - 0.02, 0, wz, -math.pi / 2)
-    o = bake(P, name, origin=(0, 0, 0))
-    o.location = (x, y, surface(x, y) - 0.04)
-    o.rotation_euler = (0, 0, rot)
-    block(x, y, max(w, d) * 1.15)
-    return o
 
 
 # ── 풍차 ─────────────────────────────────────────────
@@ -615,24 +506,6 @@ def sheep(name, x, y, rot):
     return o
 
 
-def fence_ring(name, cx, cy, radius, gate):
-    n = max(10, round(radius * 10))
-    P = []
-    for i in range(n):
-        a = i / n * math.tau
-        P.append(box(f'{name}_p', (0.06, 0.06, 0.34), (math.cos(a) * radius, math.sin(a) * radius, 0.17), WOOD, bevel=0.012))
-        mid = a + math.pi / n
-        if abs(math.atan2(math.sin(mid - gate), math.cos(mid - gate))) < math.pi / n:
-            continue
-        L = 2 * radius * math.sin(math.pi / n)
-        rr = radius * math.cos(math.pi / n)
-        for zz in (0.13, 0.26):
-            P.append(box(f'{name}_r', (L + 0.04, 0.035, 0.045), (math.cos(mid) * rr, math.sin(mid) * rr, zz), WOOD, rot=(0, 0, mid + math.pi / 2), bevel=0.008))
-    o = bake(P, name, origin=(0, 0, 0))
-    o.location = (cx, cy, surface(cx, cy) - 0.02)
-    return o
-
-
 def well(x, y):
     z = surface(x, y)
     P = [cyl('well_ring', 0.34, 0.36, 0.36, (0, 0, 0.18), STONE, seg=20, bevel=0.03, disp=0.025, disp_size=0.08),
@@ -647,43 +520,6 @@ def well(x, y):
     o.location = (x, y, z)
     block(x, y, 0.5)
     return o
-
-
-def rock(name, x, y, s):
-    o = blob(name, s, (x, y, surface(x, y) + s * 0.1), STONE, scale=(1.2, 1, 0.65), sub=2, disp=0.35 * s, disp_size=0.6 * s)
-    o.rotation_euler = (0, 0, rnd.random() * math.tau)
-    return o
-
-
-def hay(x, y):
-    z = surface(x, y)
-    o = cyl('hay', 0.16, 0.16, 0.26, (x, y, z + 0.16), HAY, seg=16, rot=(math.pi / 2, 0, rnd.random() * math.pi), bevel=0.04)
-    block(x, y, 0.25)
-    return o
-
-
-def lamp(x, y):
-    z = surface(x, y)
-    P = [cyl('lamp_post', 0.03, 0.04, 0.9, (0, 0, 0.45), DARKWOOD, seg=8),
-         box('lamp_box', (0.12, 0.12, 0.16), (0, 0, 0.95), GLASS, bevel=0.01),
-         cyl('lamp_cap', 0.11, 0.02, 0.1, (0, 0, 1.08), DARKWOOD, seg=8)]
-    o = bake(P, 'lamp', origin=(0, 0, 0))
-    o.location = (x, y, z)
-    block(x, y, 0.2)
-    return o
-
-
-def stepping_stones(points):
-    for i in range(len(points) - 1):
-        a, b = Vector(points[i]), Vector(points[i + 1])
-        n = max(1, int((b - a).length / 0.36))
-        for k in range(n):
-            p = a.lerp(b, k / n) + Vector(((rnd.random() - 0.5) * 0.1, (rnd.random() - 0.5) * 0.1))
-            if not free(p.x, p.y, 0.05) and k:
-                pass
-            cyl('stone_step', 0.15, 0.17, 0.05, (p.x, p.y, surface(p.x, p.y) + 0.01), PATH, seg=8, bevel=0.02,
-                rot=(0, 0, rnd.random() * math.pi))
-            block(p.x, p.y, 0.22)
 
 
 def flowers(count):
@@ -760,15 +596,23 @@ def setup_render(cam_loc, cam_target):
     scene.render.resolution_x, scene.render.resolution_y = 1200, 800
 
 
-
-GROUND_MATS = {'grass', 'grass_dark', 'path', 'cliff', 'dirt', 'sand', 'ledge_a', 'ledge_b'}
+GROUND_MATS = {'grass', 'grass_dark', 'path', 'cliff', 'dirt', 'sand', 'ledge_a', 'ledge_b', 'pave', 'road', 'quay'}
 GROUND_UV_SCALE = 4.0
+
+
+def dynamic(o):
+    """앱이 따로 그리거나 움직이는 물체(물 'liquid_', 움직이는 것 'mover_' 과 그 부품). 합치지도 굽지도 않는다"""
+    while o:
+        if o.name.startswith(('liquid_', 'mover_')):
+            return True
+        o = o.parent
+    return False
 
 
 def bake_lightmap(path, size, samples):
     """하늘에서만 오는 흰 간접광 + 틈 그늘(AO)을 라이트맵 한 장에 굽는다(해·불빛은 굽지 않는다).
     앱이 이 값에 시간대·날씨의 하늘색을 곱하고 해는 실시간으로 얹는다. 꽃은 너무 잘아서 뺀다."""
-    objs = [o for o in bpy.data.objects if o.type == 'MESH' and not o.name.startswith('flowers_')]
+    objs = [o for o in bpy.data.objects if o.type == 'MESH' and not o.name.startswith('flowers_') and not dynamic(o)]
     for o in objs:
         uv = o.data.uv_layers.new(name='lightmap')
         o.data.uv_layers.active = uv
@@ -888,7 +732,7 @@ def export_glb(path, join=True, lightmap=None, size=2048, samples=512, layout=No
         bm.to_mesh(o.data)
         bm.free()
     if join:
-        keep = lambda o: o.name.startswith(('tree_', 'mill_', 'flowers_')) or o.parent is not None
+        keep = lambda o: o.name.startswith(('tree_', 'mill_', 'flowers_')) or o.parent is not None or dynamic(o)
         rest = [o for o in bpy.data.objects if o.type == 'MESH' and not keep(o)]
         bake(rest, 'static')
     bpy.ops.object.select_all(action='DESELECT')
