@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import type { Condition, Season, TimeOfDay } from '../data/weather';
 import { mulberry32, lerp } from '../util';
 import { Clouds } from './clouds';
@@ -21,11 +25,15 @@ export class World {
   private readonly env: Env = createEnv();
   private readonly target: Env = createEnv();
   private readonly renderer: THREE.WebGLRenderer;
+  /** 맞닿은 곳·틈을 은은하게 어둡게(앰비언트 오클루전) 해 장난감 디오라마 같은 깊이를 준다. 화질 '낮음'에서는 끈다 */
+  private readonly composer: EffectComposer;
+  private readonly ao: GTAOPass;
+  private useComposer = false;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(38, 1, 0.1, 1000);
   private readonly controls: OrbitControls;
   private readonly sun = new THREE.DirectionalLight('#ffffff', 3);
-  private readonly hemi = new THREE.HemisphereLight('#ffffff', '#a08c78', 1);
+  private readonly hemi = new THREE.HemisphereLight('#ffffff', '#b9c3cc', 1);
   private readonly fog = new THREE.Fog('#ffffff', 45, 150);
   private readonly sky = new SkyDome();
   private readonly clouds: Clouds;
@@ -51,9 +59,25 @@ export class World {
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     container.appendChild(this.renderer.domElement);
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.ao = new GTAOPass(this.scene, this.camera);
+    this.ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.5, scale: 1.1 });
+    this.ao.blendIntensity = 0.85;
+    // 빛줄기·물·물보라 같은 반투명 물체는 오클루전 계산에서 뺀다(넣으면 둘레에 윤곽선이 생긴다)
+    const ao = this.ao as unknown as { scene: THREE.Scene; _visibilityCache: THREE.Object3D[]; _overrideVisibility(): void };
+    ao._overrideVisibility = () => ao.scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+      if (o.visible && ((o as THREE.Points).isPoints || (o as THREE.Line).isLine || m?.transparent)) {
+        o.visible = false;
+        ao._visibilityCache.push(o);
+      }
+    });
+    this.composer.addPass(this.ao);
+    this.composer.addPass(new OutputPass());
 
     const narrow = container.clientWidth < container.clientHeight;
-    this.camera.position.set(17, 6, 19).multiplyScalar(narrow ? 1.45 : 1);
+    this.camera.position.set(16, 11, 18).multiplyScalar(narrow ? 1.45 : 1);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.target.set(0, -1.5, 0);
     this.controls.enableDamping = true;
@@ -79,6 +103,9 @@ export class World {
     this.sun.shadow.camera.far = 80;
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.03;
+    // 그림자 가장자리를 넓게 흐려 부드럽게
+    this.sun.shadow.radius = 5;
+    this.sun.shadow.blurSamples = 12;
 
     const rng = mulberry32(7);
     this.floaters = new Floaters(rng);
@@ -135,7 +162,7 @@ export class World {
 
     // 지금 보는 방향은 유지하고, 테마의 기준점과 거리로 옮긴다
     const dir = this.camera.position.clone().sub(c.target);
-    dir.y = Math.max(dir.y, dir.length() * (floating ? 0.2 : 0.3));
+    dir.y = Math.max(dir.y, dir.length() * (floating ? 0.38 : 0.3));
     dir.normalize();
     const narrow = this.container.clientWidth < this.container.clientHeight;
     // 움직이는 주인공이 있으면 처음부터 그쪽을 비춘다
@@ -171,6 +198,8 @@ export class World {
     if (key === this.qualityKey) return;
     this.qualityKey = key;
     this.renderer.setPixelRatio(ratio);
+    this.composer.setPixelRatio(ratio);
+    this.useComposer = level !== 'low';
     if (this.renderer.shadowMap.enabled !== shadows) {
       this.renderer.shadowMap.enabled = shadows;
       this.scene.traverse((o) => {
@@ -191,10 +220,11 @@ export class World {
     const h = this.container.clientHeight;
     if (!w || !h) return;
     this.renderer.setSize(w, h, false);
+    this.composer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     // 크기를 바꾸면 캔버스가 비워진다. 다음 프레임(위젯은 30fps)까지 빈 화면이 보이지 않게 바로 다시 그린다
-    this.renderer.render(this.scene, this.camera);
+    this.render();
   }
 
   /** 초당 최대 프레임. 하루 종일 떠 있는 위젯은 30 으로 낮춰 배터리를 아낀다. 0 이면 제한 없음. */
@@ -230,7 +260,7 @@ export class World {
 
     this.fog.color.copy(env.skyBottom);
     // 땅 테마는 지평선이 하늘에 녹아들도록 안개를 가깝게 둔다
-    this.fog.near = lerp(floating ? 45 : 24, 6, env.fog);
+    this.fog.near = lerp(floating ? 30 : 22, 6, env.fog);
     this.fog.far = lerp(floating ? 150 : 72, floating ? 34 : 30, env.fog);
 
     this.sky.update(env, this.sunDir, flash);
@@ -252,7 +282,12 @@ export class World {
       const floor = this.stage.groundHeight(p.x, p.z) + 0.8;
       if (p.y < floor) p.y = floor;
     }
-    this.renderer.render(this.scene, this.camera);
+    this.render();
     this.onFrame?.(env);
+  }
+
+  private render(): void {
+    if (this.useComposer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 }

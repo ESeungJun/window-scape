@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Env } from './env';
 import type { Rng } from '../util';
+import { prop } from './props';
 import {
   MATS, Sway, TOP, lampPost, mesh, rimFactor, roundTree, rollingHills, shapeRim, std, terrain, vehicle, type Stage,
 } from './kit';
@@ -208,6 +209,16 @@ export class City implements Stage {
       const x = cx + sx * lot * 0.5, z = cz + sz * lot * 0.5;
       const w = lot * (0.8 + rng() * 0.15), d = lot * (0.8 + rng() * 0.15);
       const h = 0.55 + rng() * 0.7;
+      // 소품 모음의 연립주택(2·3·4층)을 블록 바깥쪽 길을 보게 놓는다
+      const floors = h < 0.8 ? [0, 4] : h < 1.05 ? [1, 2] : [3, 5];
+      const town = prop(`town_${pick(floors)}`);
+      if (town) {
+        town.scale.set(w, (w + d) / 2, d);
+        town.position.set(x, TOP + 0.04, z);
+        town.rotation.y = rng() < 0.5 ? (sz > 0 ? 0 : Math.PI) : (sx > 0 ? Math.PI / 2 : -Math.PI / 2);
+        this.group.add(town);
+        continue;
+      }
       this.group.add(mesh(boxGeo(w, h, d, rng()).translate(x, TOP + 0.04, z), pick(this.walls)));
       if (rng() < 0.6) {
         // 박공지붕: 삼각 기둥
@@ -225,6 +236,20 @@ export class City implements Stage {
     const g = this.group;
     const h = 2.4 + rng() * 1.2;
     const r = 0.55;
+    const model = prop(`tower_${rng() < 0.5 ? 1 : 0}`);
+    if (model) {
+      model.scale.set(1, h / 3, 1);
+      model.position.set(cx, TOP + 0.04, cz);
+      g.add(model);
+      // 탑 옆 낮은 건물 둘
+      for (const dx of [-0.42, 0.42]) {
+        const low = prop('town_4')!;
+        low.scale.set(BLOCK * 0.44, 0.55, 0.5);
+        low.position.set(cx + dx * BLOCK, TOP + 0.04, cz + BLOCK * 0.32);
+        g.add(low);
+      }
+      return;
+    }
     const body = new THREE.CylinderGeometry(r, r, h, 16);
     // 원통 UV 도 창문 크기에 맞춘다
     const uv = body.getAttribute('uv') as THREE.BufferAttribute;

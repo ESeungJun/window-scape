@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { Env } from './env';
 import { hash3, jitter, softSprite, type Rng } from '../util';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { hasProps, prop, propParts, updateProps } from './props';
 import { fallMaterial, riverMaterial } from './water';
 
 /**
@@ -16,7 +18,7 @@ export function rimFactor(a: number): number {
 }
 
 export const std = (color: THREE.ColorRepresentation, extra: THREE.MeshStandardMaterialParameters = {}) =>
-  new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.92, ...extra });
+  new THREE.MeshStandardMaterial({ color, roughness: 0.92, ...extra });
 
 export const MATS = {
   grass: std('#59a843'),
@@ -36,6 +38,7 @@ export const MATS = {
   foliageA: std('#e8902f'),
   foliageB: std('#c8452e'),
   vine: std('#3d6a3a'),
+  bush: std('#4f8a3c'),
   sheep: std('#f5f2ea'),
   sheepHead: std('#3a3436'),
   window: std('#3a3946', { emissive: '#ffbf66', emissiveIntensity: 0 }),
@@ -172,29 +175,57 @@ function fallSheet(f: Fall): THREE.BufferGeometry {
 
 // ── 소품 ──────────────────────────────────────────────
 
-const TRUNK_GEO = new THREE.CylinderGeometry(0.07, 0.11, 0.5, 5).translate(0, 0.25, 0);
+const TRUNK_GEO = new THREE.CylinderGeometry(0.07, 0.11, 0.5, 8).translate(0, 0.25, 0);
 const PINE_GEOS = [
   [0.55, 0.75, 0.55],
   [0.44, 0.65, 0.9],
   [0.3, 0.55, 1.2],
-].map(([r, h, y]) => new THREE.ConeGeometry(r, h, 7).translate(0, y, 0));
-const CROWN_GEOS = [0, 1, 2].map((i) => jitter(new THREE.IcosahedronGeometry(0.5, 0), 0.18, i * 3.1).translate(0, 0.95, 0));
+].map(([r, h, y]) => new THREE.ConeGeometry(r, h, 12).translate(0, y, 0));
+/** 둥근 나무 잎: 매끈한 공 여러 개를 겹쳐 뭉게뭉게한 덩어리로(모양 3가지) */
+const CROWN_GEOS = [0, 1, 2].map((i) => {
+  const blob = (r: number, x: number, y: number, z: number, k: number) =>
+    jitter(new THREE.SphereGeometry(r, 14, 10), r * 0.12, i * 3.1 + k).translate(x, y, z);
+  const parts = [blob(0.42, 0, 0.98, 0, 0)];
+  const n = 3 + i;
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2 + i;
+    const r = 0.26 + 0.06 * ((k + i) % 3) / 2;
+    parts.push(blob(r, Math.cos(a) * 0.3, 0.86 + ((k * 7 + i) % 3) * 0.1, Math.sin(a) * 0.3, k + 1));
+  }
+  parts.push(blob(0.27, 0.05, 1.32, -0.04, 9));
+  return mergeGeometries(parts);
+});
 
-function pineTree(): THREE.Group {
+function pineTree(): THREE.Object3D {
+  const p = prop('tree_pine_0');
+  if (p) return p;
   const g = new THREE.Group();
   g.add(mesh(TRUNK_GEO, MATS.trunk));
   for (const geo of PINE_GEOS) g.add(mesh(geo, MATS.pine));
   return g;
 }
 
-export function roundTree(variant: number, mat: THREE.Material): THREE.Group {
+export function roundTree(variant: number, mat: THREE.Material): THREE.Object3D {
+  const p = prop(`tree_leafy_${variant % 3}`, mat === MATS.foliageB);
+  if (p) return p;
   const g = new THREE.Group();
   g.add(mesh(TRUNK_GEO, MATS.trunk));
   g.add(mesh(CROWN_GEOS[variant % 3], mat));
   return g;
 }
 
-export function house(w: number, d: number, h: number, roofMat: THREE.Material): THREE.Group {
+/** 소품 모음의 집 벽 너비(tools/blender/props.py 와 같다) */
+const HOUSE_W = [1.3, 1.05, 0.95, 1.2];
+
+export function house(w: number, d: number, h: number, roofMat: THREE.Material): THREE.Object3D {
+  // 파란 지붕이면 파란 집, 아니면 빨간 집 모델을 벽 너비에 맞춰 키운다
+  const tint = (roofMat as THREE.MeshStandardMaterial).color;
+  const variant = tint && tint.b > tint.r ? 1 : 0;
+  const p = prop(`house_${variant}`);
+  if (p) {
+    p.scale.setScalar(w / HOUSE_W[variant]);
+    return p;
+  }
   const g = new THREE.Group();
   g.add(mesh(new THREE.BoxGeometry(w, h, d).translate(0, h / 2, 0), MATS.wall));
   // 삼각 기둥 지붕: 3각 원기둥을 눕혀 꼭짓점이 위로 오게 한다
@@ -234,14 +265,78 @@ export function windmill(): { group: THREE.Group; hub: THREE.Group } {
   return { group: g, hub };
 }
 
-export function lampPost(): THREE.Group {
+/** 돌 우물: 둥근 돌 둘레 + 기둥 둘 + 작은 지붕 */
+export function well(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(mesh(new THREE.CylinderGeometry(0.32, 0.35, 0.34, 14, 1, true).translate(0, 0.17, 0), MATS.stone));
+  g.add(mesh(new THREE.TorusGeometry(0.32, 0.05, 6, 16).rotateX(Math.PI / 2).translate(0, 0.34, 0), MATS.stone));
+  g.add(mesh(new THREE.CircleGeometry(0.3, 14).rotateX(-Math.PI / 2).translate(0, 0.22, 0), std('#3f7fa8', { roughness: 0.2 }), false));
+  for (const x of [-0.3, 0.3]) g.add(mesh(new THREE.BoxGeometry(0.05, 0.62, 0.05).translate(x, 0.55, 0), MATS.darkWood));
+  const r = 0.3;
+  const roof = new THREE.CylinderGeometry(r, r, 0.5, 3).rotateX(-Math.PI / 2).scale(1.3, 0.6, 1).translate(0, 0.92, 0);
+  g.add(mesh(roof, MATS.roofRed));
+  return g;
+}
+
+/** 원형 울타리(gate 방향으로 한 칸 비운다) */
+export function fenceRing(radius: number, gate = 0): THREE.Group {
+  const g = new THREE.Group();
+  const n = Math.max(8, Math.round(radius * 9));
+  if (hasProps()) {
+    const len = 2 * radius * Math.sin(Math.PI / n);
+    const rr = radius * Math.cos(Math.PI / n);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const post = prop('fence_post')!;
+      post.position.set(Math.cos(a) * radius, 0, Math.sin(a) * radius);
+      g.add(post);
+      const mid = a + Math.PI / n;
+      if (Math.abs(Math.atan2(Math.sin(mid - gate), Math.cos(mid - gate))) < Math.PI / n) continue;
+      for (const y of [0.13, 0.25]) {
+        // 가로대(길이 1, x 방향)를 이웃 기둥 사이 접선 방향으로 늘려 놓는다
+        const rail = prop('fence_rail')!;
+        rail.position.set(Math.cos(mid) * rr, y, Math.sin(mid) * rr);
+        rail.rotation.y = -mid - Math.PI / 2;
+        rail.scale.x = len + 0.04;
+        g.add(rail);
+      }
+    }
+    return g;
+  }
+  const posts: THREE.Object3D[] = [];
+  const rails: THREE.Object3D[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const p = new THREE.Object3D();
+    p.position.set(Math.cos(a) * radius, 0.16, Math.sin(a) * radius);
+    posts.push(p);
+    const mid = a + Math.PI / n;
+    if (Math.abs(Math.atan2(Math.sin(mid - gate), Math.cos(mid - gate))) < Math.PI / n) continue;
+    for (const y of [0.13, 0.25]) {
+      const r = new THREE.Object3D();
+      r.position.set(Math.cos(mid) * radius * Math.cos(Math.PI / n), y, Math.sin(mid) * radius * Math.cos(Math.PI / n));
+      r.rotation.y = -mid;
+      rails.push(r);
+    }
+  }
+  const len = 2 * radius * Math.sin(Math.PI / n);
+  g.add(instanced(new THREE.BoxGeometry(0.05, 0.32, 0.05), MATS.wood, posts));
+  g.add(instanced(new THREE.BoxGeometry(0.03, 0.035, len), MATS.wood, rails));
+  return g;
+}
+
+export function lampPost(): THREE.Object3D {
+  const p = prop('lamp');
+  if (p) return p;
   const g = new THREE.Group();
   g.add(mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.9, 5).translate(0, 0.45, 0), MATS.darkWood));
   g.add(mesh(new THREE.OctahedronGeometry(0.1, 0).translate(0, 0.98, 0), MATS.lamp, false));
   return g;
 }
 
-export function sheep(): THREE.Group {
+export function sheep(): THREE.Object3D {
+  const p = prop('sheep');
+  if (p) return p;
   const g = new THREE.Group();
   g.add(mesh(jitter(new THREE.BoxGeometry(0.42, 0.28, 0.28, 2, 1, 1), 0.04).translate(0, 0.24, 0), MATS.sheep));
   g.add(mesh(new THREE.BoxGeometry(0.14, 0.16, 0.16).translate(0.25, 0.32, 0), MATS.sheepHead));
@@ -253,10 +348,11 @@ export function sheep(): THREE.Group {
 
 function miniIsland(rng: Rng, size: number): THREE.Group {
   const g = new THREE.Group();
-  g.add(mesh(jitter(new THREE.CylinderGeometry(size, size * 0.92, 0.22, 9), 0.06, size), MATS.grass));
-  const rock = new THREE.ConeGeometry(size * 0.92, size * 2.4, 9, 3);
+  // 윗면은 둥글게 부푼 잔디 언덕
+  g.add(mesh(jitter(new THREE.SphereGeometry(size, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), 0.05, size).scale(1, 0.32, 1), MATS.grass));
+  const rock = new THREE.ConeGeometry(size * 0.98, size * 2.4, 16, 6);
   rock.rotateX(Math.PI);
-  rock.translate(0, -0.11 - size * 1.2, 0);
+  rock.translate(0, -size * 1.2, 0);
   g.add(mesh(jitter(rock, size * 0.35, size + 1), MATS.miniRock));
   if (rng() > 0.35) {
     const t = rng() > 0.5 ? pineTree() : roundTree(Math.floor(rng() * 3), MATS.foliageA);
@@ -293,7 +389,9 @@ export function updateSharedMaterials(env: Env): void {
   MATS.foliageA.color.copy(env.foliageA);
   MATS.foliageB.color.copy(env.foliageB);
   MATS.pine.color.copy(env.pine);
+  MATS.bush.color.copy(env.grass).multiplyScalar(0.72);
   MATS.window.emissiveIntensity = env.nightLights * 2.6;
+  updateProps(env);
   MATS.lamp.emissiveIntensity = env.nightLights * 3;
   HEADLIGHT.emissiveIntensity = 0.4 + env.nightLights * 2.5;
   TAILLIGHT.emissiveIntensity = 0.2 + env.nightLights * 1.5;
@@ -380,6 +478,10 @@ export class Sway {
 
 /** 나무 종류별 부품(지오메트리·재질). 부품 위치는 지오메트리에 들어 있어 나무 하나 = 행렬 하나 */
 function treeParts(kind: number): [THREE.BufferGeometry, THREE.Material][] {
+  if (hasProps()) {
+    const parts = kind === 0 ? propParts('tree_pine_0') : propParts(`tree_leafy_${(kind - 1) % 3}`, kind > 3);
+    if (parts) return parts;
+  }
   if (kind === 0) return [[TRUNK_GEO, MATS.trunk], ...PINE_GEOS.map((g): [THREE.BufferGeometry, THREE.Material] => [g, MATS.pine])];
   const variant = (kind - 1) % 3;
   return [[TRUNK_GEO, MATS.trunk], [CROWN_GEOS[variant], kind <= 3 ? MATS.foliageA : MATS.foliageB]];
@@ -447,6 +549,71 @@ interface TreeOptions {
   inner?: number;
   outer?: number;
   gap?: number;
+}
+
+/** 울타리 친 양 목장 하나를 빈 자리에 놓는다 */
+export function pasture(group: THREE.Group, rng: Rng, field: Field, area: (rng: Rng) => [number, number], heightAt: (x: number, z: number) => number, radius = 1.1): boolean {
+  for (let i = 0; i < 300; i++) {
+    const [x, z] = area(rng);
+    if (!field.free(x, z, radius + 0.2)) continue;
+    const fence = fenceRing(radius, rng() * Math.PI * 2);
+    fence.position.set(x, heightAt(x, z) - 0.03, z);
+    group.add(fence);
+    field.block(x, z, radius + 0.15);
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + rng(), d = 0.25 + rng() * (radius - 0.55);
+      const s = sheep();
+      const sx = x + Math.cos(a) * d, sz = z + Math.sin(a) * d;
+      s.position.set(sx, heightAt(sx, sz) - 0.02, sz);
+      s.rotation.y = rng() * Math.PI * 2;
+      group.add(s);
+    }
+    return true;
+  }
+  return false;
+}
+
+/** 작은 집들을 빈 자리에 모아 놓는다(소품 모음의 집 4종) */
+export function village(group: THREE.Group, rng: Rng, field: Field, count: number, area: (rng: Rng) => [number, number], heightAt: (x: number, z: number) => number, facing?: (x: number, z: number) => number): void {
+  let placed = 0;
+  for (let i = 0; i < count * 60 && placed < count; i++) {
+    const [x, z] = area(rng);
+    if (!field.free(x, z, 0.9)) continue;
+    const h = prop(`house_${placed % 4}`) ?? house(1, 0.8, 0.8, MATS.roofRed);
+    h.scale.multiplyScalar(0.85 + rng() * 0.25);
+    h.position.set(x, heightAt(x, z) - 0.05, z);
+    h.rotation.y = (facing ? facing(x, z) : rng() * Math.PI * 2) + (rng() - 0.5) * 0.5;
+    group.add(h);
+    field.block(x, z, 1.0);
+    placed++;
+  }
+}
+
+/** 소품(덤불·바위·건초…)을 빈 자리에 흩뿌린다. 소품 모양별로 인스턴스로 그린다 */
+export function scatterProps(
+  group: THREE.Group, rng: Rng, field: Field, names: string[], count: number,
+  area: (rng: Rng) => [number, number], heightAt: (x: number, z: number) => number,
+  [smin, smax]: [number, number] = [1, 1], footprint = 0.3,
+): void {
+  if (!hasProps()) return;
+  const lists = names.map(() => [] as THREE.Object3D[]);
+  let placed = 0;
+  for (let i = 0; i < count * 15 && placed < count; i++) {
+    const [x, z] = area(rng);
+    const s = smin + rng() * (smax - smin);
+    if (!field.free(x, z, footprint * s)) continue;
+    const o = new THREE.Object3D();
+    o.position.set(x, heightAt(x, z) - 0.02, z);
+    o.rotation.y = rng() * Math.PI * 2;
+    o.scale.setScalar(s);
+    lists[Math.floor(rng() * names.length)].push(o);
+    field.block(x, z, footprint * s);
+    placed++;
+  }
+  names.forEach((n, k) => {
+    if (!lists[k].length) return;
+    for (const [geo, mat] of propParts(n)!) group.add(instanced(geo, mat, lists[k]));
+  });
 }
 
 /** 빈 자리에 나무를 흩뿌린다 */
@@ -562,7 +729,7 @@ export class Floaters {
   constructor(rng: Rng) {
     for (let i = 0; i < 6; i++) {
       const ang = (i / 6) * Math.PI * 2 + rng() * 0.6;
-      const mini = miniIsland(rng, 0.5 + rng() * 0.9);
+      const mini = miniIsland(rng, 0.45 + rng() * 0.5);
       const dist = 10 + rng() * 7;
       const y = -2.5 + rng() * 5;
       mini.position.set(Math.cos(ang) * dist, y, Math.sin(ang) * dist);
