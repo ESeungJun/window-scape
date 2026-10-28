@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Env } from './env';
 import type { Rng } from '../util';
 import { applyLightmap } from './baked';
-import { gltfLoader, trackMaterials } from './props';
+import { loadModel, trackMaterials } from './props';
 import {
   FLOATING_VIEW, R, Sway, TOP, Waterfall, addVines, fallAt, islandBob, riverMesh, rimPoint, waterBrightness, type Stage,
 } from './kit';
@@ -14,7 +14,7 @@ import {
  */
 const FALL_ANGLE = 0.42;
 const SPRING_FALL_ANGLE = 2.25;
-/** 이 섬은 다른 떠 있는 테마(반지름 R)보다 1.5 배 넓다(Blender lib.R = 9) */
+/** 이 섬은 kit 의 기본 섬 반지름 R 보다 1.5 배 넓다(Blender lib.R = 9) */
 const RS = 1.5;
 
 /** 모델과 함께 오는 자리(tools/blender/island.py 의 layout). 좌표는 앱 좌표(x, y, z) */
@@ -44,8 +44,7 @@ export class Island implements Stage {
   constructor(rng: Rng) {
     const g = this.group;
 
-    gltfLoader.load('models/island.glb', (gltf) => {
-      const root = gltf.scene;
+    loadModel('models/island.glb', (root) => {
       trackMaterials(root, this.seasonal, this.glass);
       applyLightmap(root, 'models/island_light.webp');
       root.traverse((o) => {

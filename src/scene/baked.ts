@@ -31,6 +31,25 @@ export function applyLightmap(root: THREE.Object3D, url: string): void {
   });
 }
 
+/** 굽지 않은 먼 풍경(far_*)의 재질: 구운 땅의 탁 트인 면과 같은 빛을 받게 흰 라이트맵을 붙인다 */
+export function applyOpenSky(m: THREE.MeshStandardMaterial): void {
+  openSky ??= Object.assign(new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1), { needsUpdate: true });
+  use(m, openSky);
+  // 구운 땅의 트인 면은 하늘빛 1 에 밝은 땅에서 튄 빛이 더해져 약 1.25 다(타일 가장자리 안팎 화면 밝기로 맞춘 값)
+  m.lightMapIntensity = Math.PI * 1.25;
+}
+
+let openSky: THREE.DataTexture | undefined;
+
+function use(m: THREE.MeshStandardMaterial, tex: THREE.Texture): void {
+  m.lightMap = tex;
+  // 구운 값 1 = 하얀 하늘 아래 트인 면. three 의 확산 반사는 1/π 를 곱하므로 π 를 곱해 둔다
+  m.lightMapIntensity = Math.PI;
+  m.envMapIntensity = 0;
+  m.onBeforeCompile = patch;
+  m.needsUpdate = true;
+}
+
 function attach(root: THREE.Object3D, tex: THREE.Texture): void {
   const done = new Set<THREE.Material>();
   root.traverse((o) => {
@@ -40,12 +59,7 @@ function attach(root: THREE.Object3D, tex: THREE.Texture): void {
     // 물처럼 따로 그리는 셰이더 재질은 건너뛴다
     if (done.has(m) || !m.isMeshStandardMaterial) return;
     done.add(m);
-    m.lightMap = tex;
-    // 구운 값 1 = 하얀 하늘 아래 트인 면. three 의 확산 반사는 1/π 를 곱하므로 π 를 곱해 둔다
-    m.lightMapIntensity = Math.PI;
-    m.envMapIntensity = 0;
-    m.onBeforeCompile = patch;
-    m.needsUpdate = true;
+    use(m, tex);
   });
 }
 

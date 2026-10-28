@@ -119,8 +119,12 @@ def stone_band(P, name, w, d, z0, rows, rh, m=STONE):
                 x += sw
 
 
+# True 면 기와를 한 장씩 대신 줄마다 긴 띠 하나로 얹는다(집이 많은 도시: 삼각형을 크게 줄인다)
+ROW_ROOF = False
+
+
 def tile_roof(P, name, w, d, top, pitch, m=TILE):
-    """기와 지붕: 줄마다 기와를 한 장씩 얹어 줄과 칸이 모양으로 보이게"""
+    """기와 지붕: 줄마다 기와를 한 장씩 얹어 줄과 칸이 모양으로 보이게(ROW_ROOF 면 줄만)"""
     over = 0.16
     slope = (w / 2 + over) / math.cos(pitch)
     rise = (w / 2) * math.tan(pitch)
@@ -134,6 +138,12 @@ def tile_roof(P, name, w, d, top, pitch, m=TILE):
         P.append(box(f'{name}_deck', (slope, d + 0.3, 0.05), (cx, 0, zc), DARKWOOD, rot=(0, th_, 0), bevel=0.01, seg=1))
         for r in range(rows):
             lx = -slope / 2 + (r + 0.5) * th
+            if ROW_ROOF:
+                lz = 0.045
+                px = cx + lx * math.cos(th_) + lz * math.sin(th_)
+                pz = zc - lx * math.sin(th_) + lz * math.cos(th_)
+                P.append(box(f'{name}_tile', (th * 1.04, d + 0.26, 0.04), (px, 0, pz), m, rot=(0, th_, 0), bevel=0.013, seg=1))
+                continue
             for k in range(cols):
                 v = -(d + 0.3) / 2 + (k + 0.5) * tw + (tw / 2 if r % 2 else 0)
                 if abs(v) > (d + 0.3) / 2 - tw * 0.3:
