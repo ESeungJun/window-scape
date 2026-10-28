@@ -32,8 +32,9 @@ function shuffle<T>(arr: T[], rng: Rng): T[] {
   return arr;
 }
 
-const PASTELS = ['#f6c1c7', '#bfe3d5', '#f9e2a7', '#cdbfe8', '#f8cfae', '#bcd9f2', '#f3efe6'];
-const ROOFS = ['#d9826b', '#6fb3a8', '#5d6f9e', '#c9a56a'];
+// 하늘섬 팔레트: 크림·베이지 회벽, 기와색 지붕
+const PASTELS = ['#eee5d4', '#e6d0b4', '#f0dcbc', '#dcc8ac', '#f3ece0', '#e2cbb0', '#e9dccb'];
+const ROOFS = ['#c8653d', '#6f8496', '#9a6a48', '#b8673a'];
 
 /** 큼직한 창문 텍스처: 낮에는 흰 창틀 하늘색 유리, 밤에는 일부만 켜진다 */
 function windowTextures(rng: Rng): { map: THREE.CanvasTexture; glow: THREE.CanvasTexture } {
@@ -92,8 +93,8 @@ export class City implements Stage {
   readonly kind = 'ground' as const;
   readonly view = { target: new THREE.Vector3(0, 0.8, 0), distance: 21 };
   private readonly walls: THREE.MeshStandardMaterial[] = [];
-  private readonly pave = std('#e6dfd3');
-  private readonly paveBase = new THREE.Color('#e6dfd3');
+  private readonly pave = std('#ddd2bf');
+  private readonly paveBase = new THREE.Color('#ddd2bf');
   private readonly snow = new THREE.Color('#f3f6f9');
   private readonly lampMat = std('#4a4038', { emissive: '#ffd9a0', emissiveIntensity: 0 });
   private readonly cars: { obj: THREE.Group; path: THREE.CurvePath<THREE.Vector3>; u: number; speed: number; length: number }[] = [];
@@ -106,7 +107,7 @@ export class City implements Stage {
     // 땅: 잔디 섬 + 그 위 포장 광장, 둘레 강물, 건너편 낮은 언덕
     g.add(mesh(shapeRim(new THREE.CylinderGeometry(CITY_R, CITY_R + 0.5, 1, 72).translate(0, TOP - 0.5, 0), 0.01), MATS.grass, false));
     g.add(mesh(shapeRim(new THREE.CylinderGeometry(PAVE_R, PAVE_R, 0.04, 72).translate(0, TOP + 0.02, 0), 0.005), this.pave, false));
-    const water = mesh(new THREE.PlaneGeometry(240, 240).rotateX(-Math.PI / 2), std('#5fa8cf', { flatShading: false, roughness: 0.15, metalness: 0.1 }), false);
+    const water = mesh(new THREE.PlaneGeometry(240, 240).rotateX(-Math.PI / 2), std('#5aa6cc', { flatShading: false, roughness: 0.3 }), false);
     water.position.y = -0.2;
     g.add(water);
     g.add(terrain(shoreHeight));

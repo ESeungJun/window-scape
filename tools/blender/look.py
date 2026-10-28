@@ -147,7 +147,7 @@ def tile_roof(P, name, w, d, top, pitch, m=TILE):
     return rise
 
 
-def house(name, x, y, rot, w, d, h):
+def house(name, x, y, rot, w, d, h, roof=TILE):
     """돌 기단 + 크림 회벽 + 기와 지붕 집(앞 = -y)"""
     P = []
     base_h = h * 0.38
@@ -156,7 +156,7 @@ def house(name, x, y, rot, w, d, h):
     P.append(box(f'{name}_wall', (w, d, h - base_h), (0, 0, base_h + (h - base_h) / 2), PLASTER, bevel=0.03, seg=3))
     top = h
     pitch = math.radians(40)
-    rise = tile_roof(P, name, w, d, top, pitch)
+    rise = tile_roof(P, name, w, d, top, pitch, roof)
     # 박공(삼각 벽)
     for sy in (-1, 1):
         bm = bmesh.new()

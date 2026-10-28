@@ -61,6 +61,11 @@ if (import.meta.env.DEV) {
       if (o.quality) world.setQuality(o.quality);
       refresh();
     },
+    // 성능 점검용: 그리기 호출·삼각형·지오메트리·텍스처 수
+    __info: () => {
+      const r = world['renderer'].info;
+      return { ...r.render, ...r.memory, programs: r.programs?.length };
+    },
   });
 }
 

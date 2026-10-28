@@ -50,9 +50,9 @@ const SHOULDER = std('#bfae8a');
 const PAINT = std('#f4f0e2');
 const RAIL = std('#e2e4e8', { metalness: 0.4, roughness: 0.5 });
 const SAND = std('#e8d6a8');
-const SEA = std('#2f86b8', { flatShading: false, roughness: 0.12, metalness: 0.15 });
+const SEA = std('#5aa6cc', { flatShading: false, roughness: 0.3 });
 const FOAM = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.55, depthWrite: false });
-const SEA_ROCK = std('#7d7a76');
+const SEA_ROCK = std('#9c9c9e');
 const WHITE = std('#f4f2ec');
 const STRIPE = std('#c8463a');
 const BEAM_LAMP = std('#fff3c4', { emissive: '#fff0b0', emissiveIntensity: 0.3 });
@@ -186,7 +186,7 @@ export class Drive implements Stage {
     g.add(this.boat);
 
     // 육지 쪽 바닷가 집
-    const home = house(1.2, 0.95, 0.95, std('#4d7fb0'));
+    const home = house(1.2, 0.95, 0.95, std('#6f8496'));
     home.position.set(-5, height(-5, roadZ(-5) - 3), roadZ(-5) - 3);
     home.rotation.y = 0.15;
     g.add(home);

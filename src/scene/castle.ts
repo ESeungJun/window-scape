@@ -26,7 +26,7 @@ const EYE = std('#3a3020', { emissive: '#ffcf7a', emissiveIntensity: 0.3 });
 const FLAG = std('#d9493b', { side: THREE.DoubleSide });
 const POND = new THREE.Vector2(2.5, -1.5);
 const POND_R = 2.2;
-const TUFT = std('#5f8f3e');
+const TUFT = std('#6f8a48');
 const tuftBase = new THREE.Color();
 
 /** 부드럽게 굽이치는 초원 언덕. 연못 자리는 파낸다 */
@@ -140,7 +140,7 @@ export class MovingCastle implements Stage {
 
     // 연못과 둘레 바위
     const pondLevel = rollingHills(POND.x, POND.y, 1.1) - 0.35;
-    const pond = mesh(jitter(new THREE.CircleGeometry(POND_R, 16), 0.15).rotateX(-Math.PI / 2), std('#5aa7cf', { flatShading: false, roughness: 0.15 }), false);
+    const pond = mesh(jitter(new THREE.CircleGeometry(POND_R, 16), 0.15).rotateX(-Math.PI / 2), std('#5aa6cc', { flatShading: false, roughness: 0.3 }), false);
     pond.position.set(POND.x, pondLevel, POND.y);
     g.add(pond);
     for (let i = 0; i < 10; i++) {

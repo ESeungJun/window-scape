@@ -24,17 +24,22 @@ def keep(o, x):
     return o
 
 
+import look  # noqa: E402
+
+# 새 룩(하늘섬과 같은 모양): 뭉게구름·달걀 나무, 각진 전나무, 돌 기단·기와 지붕 집, 둥근 바위
 x = 0.0
-for i in range(3):
-    keep(leafy_tree(f'tree_leafy_{i}', x, 0, 1.0, 'any'), x)
+for i, kind in enumerate(('cloud', 'oval', 'cloud')):
+    tree = look.cloud_tree if kind == 'cloud' else look.oval_tree
+    keep(tree(f'tree_leafy_{i}', x, 0, 1.0 + i * 0.08, 'any'), x)
     x += 1.6
 for i in range(2):
-    keep(pine_tree(f'tree_pine_{i}', x, 0, 1.25), x)
+    keep(look.pine(f'tree_pine_{i}', x, 0, 1.4 + i * 0.15), x)
     x += 1.4
-houses = [(1.3, 1.0, 1.0, ROOF_RED, SHUTTER_G), (1.05, 0.85, 0.9, ROOF_BLUE, SHUTTER_B),
-          (0.95, 0.8, 0.85, ROOF_BROWN, SHUTTER_G), (1.2, 0.9, 1.25, ROOF_RED, SHUTTER_B)]
-for i, (w, d, h, roof, sh) in enumerate(houses):
-    o = house(f'house_{i}', x, 0, 0, w, d, h, roof, sh)
+TILE_BLUE = mat('tile_blue', '#6f8496', 0.85, 0.1, 9.0)
+TILE_BROWN = mat('tile_brown', '#9a6a48', 0.85, 0.1, 9.0)
+houses = [(1.3, 1.0, 1.1, look.TILE), (1.05, 0.85, 0.95, TILE_BLUE), (0.95, 0.8, 0.9, TILE_BROWN), (1.2, 0.9, 1.3, look.TILE)]
+for i, (w, d, h, roof) in enumerate(houses):
+    o = look.house(f'house_{i}', x, 0, 0, w, d, h, roof)
     o.location.z = 0
     made.append(o)
     x += 2.0
@@ -42,13 +47,13 @@ for i in range(3):
     keep(bush(f'bush_{i}', x, 0, 0.3), x)
     x += 1.0
 for i in range(3):
-    o = rock(f'rock_{i}', x, 0, 0.3)
+    o = look.boulder(f'rock_{i}', x, 0, 0.3)
     keep(bake([o], f'rock_{i}'), x)
     x += 1.0
 o = sheep('sheep', x, 0, 0)
 made.append(o)
 x += 1.0
-made.append(lamp(x, 0))
+keep(look.lantern('lamp', x, 0), x)
 x += 1.0
 made.append(well(x, 0))
 x += 1.2
@@ -62,9 +67,9 @@ keep(box('fence_rail', (1.0, 0.035, 0.045), (x, 0, 0), WOOD, bevel=0.008), x)
 
 # 도시 건물: 연립주택 6종 + 둥근 탑 2종
 from town import AWNINGS, round_tower, townhouse  # noqa: E402
-walls = [mat(f'wall_{i}', c, 0.85, 0.05, 10.0) for i, c in enumerate(['#f6c1c7', '#bcd9f2', '#f9e2a7', '#bfe3d5', '#f3efe6', '#cdbfe8'])]
-roofs = [banded('roof_slate', ['#56657e', '#66768f', '#56657e'], 18.0, 0.3, 0.4, 0.7), ROOF_RED,
-         banded('roof_teal', ['#3f7f86', '#4f9298', '#3f7f86'], 18.0, 0.3, 0.4, 0.7)]
+# 하늘섬 팔레트: 크림·베이지 회벽
+walls = [mat(f'wall_{i}', c, 0.85, 0.05, 10.0) for i, c in enumerate(['#eee5d4', '#e6d0b4', '#f0dcbc', '#dcc8ac', '#f3ece0', '#e2cbb0'])]
+roofs = [banded('roof_slate', ['#6f8496', '#7d93a6', '#677b8c'], 18.0, 0.3, 0.4, 0.7), ROOF_RED, ROOF_BROWN]
 for i, (fl, style) in enumerate([(2, 'gable'), (3, 'mansard'), (3, 'gable'), (4, 'mansard'), (2, 'flat'), (4, 'gable')]):
     x += 1.4
     o = townhouse(f'town_{i}', fl, walls[i], roofs[i % 3], style, AWNINGS[i % 3])
