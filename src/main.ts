@@ -12,6 +12,7 @@ import { renderSettings, type Frame, type ViewOptions } from './ui/settings';
 import { Ambience } from './ui/sound';
 import { setupDesktopSettings } from './ui/desktop-settings';
 import { isDesktopApp, nativeLocation, setupWidget } from './widget';
+import { MODEL_ERROR } from './scene/props';
 
 const SEOUL: Place = { name: '서울', lat: 37.5665, lon: 126.978 };
 const PLACE_KEY = 'sky-isle:place';
@@ -129,6 +130,8 @@ function toast(message: string) {
   clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => (toastEl.hidden = true), 4500);
 }
+
+window.addEventListener(MODEL_ERROR, () => toast('풍경 모델을 불러오지 못했어요. 앱을 다시 열어 주세요.'));
 
 // ── 장면과 화면 갱신 ───────────────────────────────────
 

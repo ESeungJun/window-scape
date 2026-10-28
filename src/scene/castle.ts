@@ -5,10 +5,13 @@ import { Diorama, Smoke, pathCurve, type Layout } from './diorama';
 
 /**
  * 움직이는 성 테마: 초원 디오라마(모델: tools/blender/castle.py). 구리 선체 위에 돌 탑과 반목조 오두막을 얹은 성이
- * 새 다리 넷으로 지평선까지 트인 초원 한가운데, 연못을 감싸 도는 흙길을 천천히 걷는다. 탑 꼭대기 프로펠러가 바람 따라 돌고 굴뚝에서 연기가 오른다.
+ * 새 다리 넷으로 지평선까지 트인 초원을 걷는다. 길은 농장 둘레 밭 사이를 크게 돌고 앞쪽에서는 연못 가까이까지 들어오며,
+ * 카메라가 성 쪽으로 반쯤 따라간다. 탑 꼭대기 프로펠러가 바람 따라 돌고 굴뚝에서 연기가 오른다.
  * 특정 작품의 디자인을 옮기지 않고 '걷는 성'이라는 발상만 빌린 독자 디자인이다.
  */
-const WALK_SPEED = 0.35;
+const WALK_SPEED = 0.5;
+/** 카메라가 성 쪽으로 다가가는 정도(0 = 가운데 농장, 1 = 성) */
+const FOLLOW = 0.55;
 
 interface Leg {
   upper: THREE.Object3D;
@@ -51,6 +54,12 @@ export class MovingCastle extends Diorama {
       const lower = root.getObjectByName(`leg_${k}_lower`);
       if (upper && lower) this.legs.push({ upper, lower, phase });
     });
+  }
+
+  focus(out: THREE.Vector3): THREE.Vector3 {
+    out.copy(this.view.target);
+    if (this.castle) out.lerp(this.castle.position, FOLLOW);
+    return out;
   }
 
   protected tick(dt: number, _t: number, env: Env): void {

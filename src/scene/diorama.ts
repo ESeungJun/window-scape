@@ -87,6 +87,10 @@ export abstract class Diorama implements Stage {
       });
       for (const m of far.values()) applyOpenSky(m);
       trackMaterials(root, this.seasonal, this.glass);
+      // 그림자 범위 밖 먼 풍경과 먼 땅은 그림자를 드리우지 않는다(그림자 그리기 비용을 아낀다)
+      root.traverse((o) => {
+        if (o.name.startsWith('far_ground') || o.name.includes('distant')) o.castShadow = false;
+      });
       const movers: THREE.Object3D[] = [];
       root.traverse((o) => {
         if (o.name.startsWith('tree_')) this.sway.add(o, rng);

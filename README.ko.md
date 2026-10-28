@@ -27,14 +27,14 @@ Blender랑 Three.js로 만든 작은 섬이 실제 날씨에 맞춰 바뀌는 �
 <table>
   <tr>
     <td align="center" width="50%"><b>하늘섬</b><br>구름바다 위에 뜬 섬, 풍차와 폭포<br><img src="docs/images/theme-island.jpg" alt="하늘섬 테마"></td>
-    <td align="center" width="50%"><b>해안도로</b><br>바닷가 국도를 오가는 자동차들<br><img src="docs/images/theme-drive.jpg" alt="해안도로 테마"></td>
+    <td align="center" width="50%"><b>해안도로</b><br>터널을 나와 바닷가를 달리는 자동차, 등대 섬과 돛단배<br><img src="docs/images/theme-drive.jpg" alt="해안도로 테마"></td>
   </tr>
   <tr>
-    <td align="center"><b>파스텔 도시</b><br>강물에 둘러싸인 장난감 같은 도시<br><img src="docs/images/theme-city.jpg" alt="파스텔 도시 테마"></td>
-    <td align="center"><b>움직이는 성</b><br>들꽃 핀 언덕을 걸어 다니는 성<br><img src="docs/images/theme-castle.jpg" alt="움직이는 성 테마"></td>
+    <td align="center"><b>피렌체 도시</b><br>강 위 가게 다리, 붉은 돔 성당, 테라코타 지붕<br><img src="docs/images/theme-city.jpg" alt="피렌체 도시 테마"></td>
+    <td align="center"><b>움직이는 성</b><br>밭과 들판 사이 흙길을 크게 돌며 걷는 성<br><img src="docs/images/theme-castle.jpg" alt="움직이는 성 테마"></td>
   </tr>
   <tr>
-    <td align="center"><b>숲</b><br>시냇물이 흐르는 깊은 숲과 사슴<br><img src="docs/images/theme-forest.jpg" alt="숲 테마"></td>
+    <td align="center"><b>숲</b><br>강가 통나무집과 끝없이 이어지는 전나무 숲<br><img src="docs/images/theme-forest.jpg" alt="숲 테마"></td>
     <td align="center"><b>바탕화면 위젯</b><br>작게 띄워두면 섬과 기온만<br><img src="docs/images/widget.png" alt="바탕화면 위젯"></td>
   </tr>
 </table>
@@ -50,7 +50,7 @@ Blender랑 Three.js로 만든 작은 섬이 실제 날씨에 맞춰 바뀌는 �
     <td align="center" width="50%"><b>겨울 아침 · 눈</b><br><img src="docs/images/weather-snow.jpg" alt="눈 덮인 겨울 숲"></td>
   </tr>
   <tr>
-    <td align="center"><b>밤 · 창문 불빛</b><br><img src="docs/images/weather-night.jpg" alt="불 켜진 밤의 파스텔 도시"></td>
+    <td align="center"><b>밤 · 창문 불빛</b><br><img src="docs/images/weather-night.jpg" alt="창마다 불이 켜진 밤의 피렌체 도시"></td>
     <td align="center"><b>저녁 노을</b><br><img src="docs/images/weather-sunset.jpg" alt="노을 진 해안도로"></td>
   </tr>
 </table>

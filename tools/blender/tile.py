@@ -9,6 +9,7 @@ from mathutils import Vector
 import lib
 from lib import CLIFF, CLIFF_LEDGE, blob, finish, mat, new_obj, rnd
 
+SHADOW_R = 18.0  # 앱 그림자 범위(world.ts 땅 테마 ±16)를 조금 넘는 반지름
 WATER_SIDE = mat('water_side', '#4f9cc4', 0.3, 0.04, 2.0)
 
 
@@ -199,9 +200,10 @@ def axis(half, step, R, grow=1.16, keep=4.0):
     return [-v for v in reversed(out)] + inner + out
 
 
-def surround(name, W, D, step, hfar, paint, R=110.0):
-    """타일 바깥을 지평선까지 잇는 땅(far_ground). hfar(x, y): 높이(타일 가장자리에선 타일과 같아야 한다)"""
-    xs, ys = axis(W / 2, step, R), axis(D / 2, step, R)
+def surround(name, W, D, step, hfar, paint, R=110.0, keep=4.0):
+    """타일 바깥을 지평선까지 잇는 땅(far_ground). hfar(x, y): 높이(타일 가장자리에선 타일과 같아야 한다).
+    keep: 타일 둘레 이만큼은 촘촘한 격자(긴 물가·길이 계단지지 않게)"""
+    xs, ys = axis(W / 2, step, R, keep=keep), axis(D / 2, step, R, keep=keep)
     bm = bmesh.new()
     V = {}
     for i, x in enumerate(xs):
@@ -229,8 +231,9 @@ def surround(name, W, D, step, hfar, paint, R=110.0):
     return o
 
 
-def liquid_far(name, W, D, hfar, level, R=110.0, step=0.4):
-    """타일 바깥 수면(먼 바다·강). 땅이 수면 아래인 칸만. uv 는 liquid_plane 과 같다"""
+def liquid_far(name, W, D, hfar, level, R=110.0, step=0.4, margin=0.02):
+    """타일 바깥 수면(먼 바다·강). 땅이 수면 아래인 칸만. uv 는 liquid_plane 과 같다.
+    margin 을 크게 주면 물가 칸 너머까지 수면을 깔아 물가 선이 땅과 수면이 만나는 매끈한 선이 된다"""
     xs, ys = axis(W / 2, step, R, 1.25), axis(D / 2, step, R, 1.25)
     bm = bmesh.new()
     uvl = bm.loops.layers.uv.new('UVMap')
@@ -241,7 +244,7 @@ def liquid_far(name, W, D, hfar, level, R=110.0, step=0.4):
             if abs(cx) < W / 2 and abs(cy) < D / 2:
                 continue
             hs = [hfar(x, y) for x, y in cs]
-            if min(hs) > level + 0.02:
+            if min(hs) > level + margin:
                 continue
             f = bm.faces.new([bm.verts.new((x, y, level)) for x, y in cs])
             for loop, (x, y), h in zip(f.loops, cs, hs):
@@ -253,14 +256,31 @@ def liquid_far(name, W, D, hfar, level, R=110.0, step=0.4):
 
 
 def far_trees(name, spots):
-    """먼 숲: 면이 적은 나무(흔들리지 않는다). 재질마다 한 물체. spots: (x, y, z, 키, 'pine' | 잎 재질 | ('bush', 재질))"""
+    """먼 숲: 면이 적은 나무(흔들리지 않는다). 재질마다 한 물체. spots: (x, y, z, 키, 'pine' | 잎 재질 | ('bush' | 'cypress' | 'umbrella', 재질))"""
     bms = {}
-    get = lambda m: bms.setdefault(m.name, (m, bmesh.new()))[1]
+    # 그림자 범위(가운데에서 약 18) 밖은 '_distant' 물체로 나눈다(앱이 그림자를 그리지 않는다)
+    get = lambda m: bms.setdefault((m.name, near), (m, bmesh.new()))[1]
     for x, y, z, h, kind in spots:
-        if isinstance(kind, tuple):
+        near = math.hypot(x, y) < SHADOW_R
+        typ, m = kind if isinstance(kind, tuple) else (kind, kind)
+        if typ == 'bush':
             # 덤불(울타리 덤불): 줄기 없이 낮은 공
-            bmesh.ops.create_icosphere(get(kind[1]), subdivisions=1, radius=0.5 * h,
+            bmesh.ops.create_icosphere(get(m), subdivisions=1, radius=0.5 * h,
                                        matrix=lib.Matrix.Translation((x, y, z + 0.25 * h)) @ lib.Matrix.Diagonal((1, 1, 0.8, 1)))
+            continue
+        if typ == 'cypress':
+            # 사이프러스: 줄기 없이 가늘고 긴 방추
+            bmesh.ops.create_cone(get(m), cap_ends=True, segments=6, radius1=0.15 * h, radius2=0.01 * h, depth=0.9 * h,
+                                  matrix=lib.Matrix.Translation((x, y, z + 0.5 * h)))
+            bmesh.ops.create_cone(get(m), cap_ends=True, segments=6, radius1=0.04 * h, radius2=0.15 * h, depth=0.12 * h,
+                                  matrix=lib.Matrix.Translation((x, y, z + 0.05 * h)))
+            continue
+        if typ == 'umbrella':
+            # 우산소나무: 긴 줄기 위 납작한 우산 같은 잎
+            bmesh.ops.create_cone(get(lib.TRUNK), cap_ends=False, segments=5, radius1=0.05 * h, radius2=0.035 * h, depth=0.8 * h,
+                                  matrix=lib.Matrix.Translation((x, y, z + 0.4 * h)))
+            bmesh.ops.create_icosphere(get(m), subdivisions=1, radius=0.42 * h,
+                                       matrix=lib.Matrix.Translation((x, y, z + 0.82 * h)) @ lib.Matrix.Diagonal((1, 1, 0.32, 1)))
             continue
         bmesh.ops.create_cone(get(lib.TRUNK), cap_ends=False, segments=5, radius1=0.06 * h, radius2=0.04 * h, depth=0.4 * h,
                               matrix=lib.Matrix.Translation((x, y, z + 0.2 * h)))
@@ -271,42 +291,62 @@ def far_trees(name, spots):
         else:
             bmesh.ops.create_icosphere(get(kind), subdivisions=2, radius=0.34 * h,
                                        matrix=lib.Matrix.Translation((x, y, z + 0.72 * h)) @ lib.Matrix.Diagonal((1, 1, 0.85, 1)))
-    for m, bm in bms.values():
-        o = new_obj(f'{name}_{m.name}', bm)
+    for (_, near), (m, bm) in bms.items():
+        o = new_obj(f'{name}_{m.name}' + ('' if near else '_distant'), bm)
         o.data.materials.append(m)
         for p in o.data.polygons:
             p.use_smooth = m is not lib.PINE
 
 
 def far_houses(name, items, glass=None):
-    """먼 마을: 벽 상자 + 박공 지붕 + 층마다 창 띠(밤에 불이 켜진다). 재질마다 한 물체.
-    items: (x, y, z, 폭, 깊이, 벽 높이, 지붕 높이, 회전, 벽 재질, 지붕 재질). 폭 방향이 용마루"""
+    """먼 마을: 벽 상자 + 지붕 + 층마다 창(밤에 불이 켜진다). 재질마다 한 물체.
+    items: (x, y, z, 폭, 깊이, 벽 높이, 지붕 높이, 회전, 벽 재질, 지붕 재질[, 'gable' | 'hip']). gable 은 폭 방향이 용마루"""
     glass = glass or lib.GLASS
     bms = {}
-    get = lambda m: bms.setdefault(m.name, (m, bmesh.new()))[1]
-    for x, y, z, w, d, h, rh, rot, wall, roof in items:
+    get = lambda m: bms.setdefault((m.name, near), (m, bmesh.new()))[1]
+    for it in items:
+        x, y, z, w, d, h, rh, rot, wall, roof = it[:10]
+        style = it[10] if len(it) > 10 else 'gable'
+        near = math.hypot(x, y) < SHADOW_R
+        if style == 'hip' and d > w:
+            # 용마루가 긴 쪽을 따라가게 돌린다
+            w, d, rot = d, w, rot + math.pi / 2
         M = lib.Matrix.Translation((x, y, z)) @ lib.Matrix.Rotation(rot, 4, 'Z')
+        V = lambda bm, *vs: [bm.verts.new(M @ Vector(v)) for v in vs]
         bmesh.ops.create_cube(get(wall), size=1.0, matrix=M @ lib.Matrix.Translation((0, 0, h / 2)) @ lib.Matrix.Diagonal((w, d, h, 1)))
         bm = get(roof)
-        o = 0.08
-        vs = [bm.verts.new(M @ Vector(v)) for v in ((-w / 2 - o, -d / 2 - o, h), (w / 2 + o, -d / 2 - o, h), (w / 2 + o, 0, h + rh),
-                                                     (-w / 2 - o, 0, h + rh), (-w / 2 - o, d / 2 + o, h), (w / 2 + o, d / 2 + o, h))]
-        bm.faces.new([vs[0], vs[1], vs[2], vs[3]])
-        bm.faces.new([vs[5], vs[4], vs[3], vs[2]])
-        # 박공 삼각 벽은 벽 재질
-        bw = get(wall)
-        for sx in (-1, 1):
-            tv = [bw.verts.new(M @ Vector(v)) for v in ((sx * w / 2, -d / 2, h), (sx * w / 2, d / 2, h), (sx * w / 2, 0, h + rh))]
-            bw.faces.new(tv if sx > 0 else tv[::-1])
+        o = 0.1
+        if style == 'hip':
+            r_ = (w - d) / 2
+            A, B, C, D_, R1, R2 = V(bm, (-w / 2 - o, -d / 2 - o, h), (w / 2 + o, -d / 2 - o, h), (w / 2 + o, d / 2 + o, h),
+                                   (-w / 2 - o, d / 2 + o, h), (-r_, 0, h + rh), (r_ + 1e-3, 0, h + rh))
+            bm.faces.new([A, B, R2, R1])
+            bm.faces.new([C, D_, R1, R2])
+            bm.faces.new([D_, A, R1])
+            bm.faces.new([B, C, R2])
+        else:
+            vs = V(bm, (-w / 2 - o, -d / 2 - o, h), (w / 2 + o, -d / 2 - o, h), (w / 2 + o, 0, h + rh), (-w / 2 - o, 0, h + rh),
+                   (-w / 2 - o, d / 2 + o, h), (w / 2 + o, d / 2 + o, h))
+            bm.faces.new([vs[0], vs[1], vs[2], vs[3]])
+            bm.faces.new([vs[5], vs[4], vs[3], vs[2]])
+            # 박공 삼각 벽은 벽 재질
+            bw = get(wall)
+            for sx in (-1, 1):
+                tv = V(bw, (sx * w / 2, -d / 2, h), (sx * w / 2, d / 2, h), (sx * w / 2, 0, h + rh))
+                bw.faces.new(tv if sx > 0 else tv[::-1])
         floors = max(1, round((h - 0.3) / 0.6))
+        bays = max(1, round(w / 0.5))
         bg = get(glass)
         for f in range(floors):
             zc = 0.45 + f * 0.6
-            for sy in (-1, 1):
-                q = [bg.verts.new(M @ Vector((a * w * 0.35, sy * (d / 2 + 0.01), zc + b * 0.1))) for a, b in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
-                bg.faces.new(q if sy < 0 else q[::-1])
-    for m, bm in bms.values():
-        o = new_obj(f'{name}_{m.name}', bm)
+            for k in range(bays):
+                cx = (k - (bays - 1) / 2) * w / bays
+                for sy in (-1, 1):
+                    yy = sy * (d / 2 + 0.01)
+                    q = V(bg, (cx - 0.08, yy, zc - 0.13), (cx + 0.08, yy, zc - 0.13), (cx + 0.08, yy, zc + 0.13), (cx - 0.08, yy, zc + 0.13))
+                    bg.faces.new(q if sy < 0 else q[::-1])
+    for (_, near), (m, bm) in bms.items():
+        o = new_obj(f'{name}_{m.name}' + ('' if near else '_distant'), bm)
         o.data.materials.append(m)
 
 
