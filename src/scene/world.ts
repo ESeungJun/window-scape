@@ -37,7 +37,7 @@ export class World {
   private readonly hemi = new THREE.HemisphereLight('#ffffff', '#b9c3cc', 1);
   private readonly fog = new THREE.Fog('#ffffff', 45, 150);
   private readonly sky = new SkyDome();
-  /** 구운 장면에서 라이트맵이 없는 것(구름·떠다니는 섬·덩굴)을 비추는 하늘 환경광 */
+  /** 하늘 그라데이션 환경광. 실시간 장면 전체와, 구운 장면에서 라이트맵이 없는 것(구름·떠다니는 섬·덩굴)을 비춘다 */
   private readonly skyLight: SkyLight;
   private skyEnv: THREE.Texture | null = null;
   private readonly clouds: Clouds;
@@ -159,8 +159,8 @@ export class World {
     c.maxDistance = floating ? 45 : 40;
     // 땅 테마는 땅 밑을 보지 않게 수평선 위로만
     c.maxPolarAngle = Math.PI * (floating ? 0.64 : 0.47);
-    // 구운 장면은 그늘·틈이 이미 라이트맵에 있으니 해 그림자만 아주 넓게 흐린다
-    // 모든 테마: 그림자는 넓게 흐리고 옅게(새 룩의 부드러운 그늘). 구운 장면은 틈 그늘이 라이트맵에 있어 더 옅게
+    // 모든 테마: 그림자는 넓게 흐린다. 구운 장면은 틈 그늘만 라이트맵에 있고 해 그림자는 실시간이라 그대로(1),
+    // 실시간 장면은 그늘이 탁해지지 않게 옅게(0.7)
     this.sun.shadow.radius = 6;
     this.sun.shadow.blurSamples = 16;
     this.sun.shadow.intensity = this.stage.baked ? 1 : 0.7;

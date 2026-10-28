@@ -4,7 +4,7 @@
 # 레퍼런스 디오라마처럼 넓은 섬(반지름 9)에 이야기가 있는 마을: 언덕 위 풍차, 바위 곶의 등대, 광장을 둘러싼 집 넷,
 # 강과 다리, 모래 호숫가의 선착장·낚시 오두막·나룻배, 양 우리, 밭, 가장자리를 두른 숲.
 # 배치는 scr(u, v) = 앱 기본 시점에서 본 화면 좌표(u 오른쪽, v 안쪽)로 잡는다.
-# 끝에 찍는 RIVER·LAKE·POS 값은 앱(src/scene/island.ts)의 강·호수·밤 불빛 자리와 같게 맞춘다.
+# 강·호수·밤 불빛 자리는 glb 의 'layout' 으로 앱(src/scene/island.ts)에 넘긴다.
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import *  # noqa: F401,F403
@@ -199,16 +199,20 @@ flowers(260)
 
 setup_render((12.8 * 1.4, -14.4 * 1.4, 8.6 * 1.4), (0, 0, -1.5))
 
-# 앱과 맞출 자리(Blender (x, y) = 앱 (x, -z))
-print('RIVER', [(round(p.x, 3), round(p.y, 3)) for p in river_points()], flush=True)
-print('LAKE', round(LAKE.x, 3), round(LAKE.y, 3), LAKE_R, round(LROT, 4), flush=True)
-for n in ('house_0', 'house_1', 'house_2', 'house_3', 'campfire', 'stilt_hut'):
-    o = bpy.data.objects.get(n)
-    print('POS', n, round(o.location.x, 2), round(o.location.y, 2), flush=True)
+# 앱과 맞출 자리: glb 의 'layout' 으로 함께 내보낸다(Blender (x, y) = 앱 (x, -z))
+three = lambda p, h=TOP: [round(p.x, 3), round(h, 3), round(-p.y, 3)]
+layout = {
+    # 강: 샘 → 호수까지(가장자리 폭포 쪽 끝은 앱이 섬 윤곽으로 잇는다)
+    'river': [three(p) for p in river_points()[:5]],
+    'lake': {'center': three(LAKE), 'rx': LAKE_R[0], 'ry': LAKE_R[1], 'rot': round(LROT, 4)},
+    # 밤 불빛: 앞쪽 집 셋의 문 앞, 모닥불, 낚시 오두막(뒤쪽 집은 생략해 불빛 수를 아낀다)
+    'lights': [three(bpy.data.objects[n].location.xy + CAM * 0.95, 1.0) for n in ('house_0', 'house_1', 'house_3')]
+              + [three(camp, 0.5), three(hut, 1.1)],
+}
 
 if MODE == 'glb':
     out = os.path.abspath(OUT)
-    export_glb(os.path.join(out, 'island.glb'), lightmap=os.path.join(out, 'island_light.png'), samples=SAMPLES)
+    export_glb(os.path.join(out, 'island.glb'), lightmap=os.path.join(out, 'island_light.png'), samples=SAMPLES, layout=layout)
 if MODE == 'preview':
     scene.render.filepath = os.path.join(OUT, 'preview.png')
     bpy.ops.render.render(write_still=True)

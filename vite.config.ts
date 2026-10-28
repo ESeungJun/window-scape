@@ -6,7 +6,9 @@ const CSP = [
   "connect-src 'self' https://api.open-meteo.com https://geocoding-api.open-meteo.com",
   "img-src 'self' data: blob:",
   "style-src 'self'",
-  "script-src 'self'",
+  // 모델 압축(Draco) 해독기: WASM 컴파일과 blob 워커가 필요하다(일반 JS eval 은 여전히 막힌다)
+  "script-src 'self' 'wasm-unsafe-eval'",
+  "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",

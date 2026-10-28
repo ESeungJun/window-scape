@@ -833,7 +833,7 @@ def bake_lightmap(path, size, samples):
             m.node_tree.nodes.remove(nd)
 
 
-def export_glb(path, join=True, lightmap=None, size=2048, samples=512):
+def export_glb(path, join=True, lightmap=None, size=2048, samples=512, layout=None):
     # 미리보기 전용(물·구름·조명·카메라)은 빼고, 앱에서 바꾸지 않는 물체는 하나로 합친다
     for o in list(bpy.data.objects):
         if o.name.startswith(('water_', 'cloud_')) or o.type in ('LIGHT', 'CAMERA'):
@@ -925,7 +925,13 @@ def export_glb(path, join=True, lightmap=None, size=2048, samples=512):
         me.color_attributes.active_color = attr
     if lightmap:
         bake_lightmap(lightmap, size, samples)
-    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=False, export_apply=True,
+    if layout is not None:
+        # 앱이 쓸 자리(강 경로·불빛 등)를 'layout' 빈 물체의 extras 로 함께 내보낸다(앱: userData.layout)
+        import json
+        e = bpy.data.objects.new('layout', None)
+        COL.objects.link(e)
+        e['layout'] = json.dumps(layout)
+    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=False, export_apply=True, export_extras=True,
                               export_vertex_color='ACTIVE', export_draco_mesh_compression_enable=True,
                               export_draco_position_quantization=14, export_draco_texcoord_quantization=12)
     print('exported', path, flush=True)

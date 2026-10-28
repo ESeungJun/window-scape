@@ -21,11 +21,17 @@ function patch(shader: THREE.WebGLProgramParametersWithUniforms): void {
 
 /** 모델의 (UV 가 있는) 재질에 라이트맵을 붙인다. 하늘 환경광은 라이트맵이 대신하므로 끈다 */
 export function applyLightmap(root: THREE.Object3D, url: string): void {
-  const tex = new THREE.TextureLoader().load(url);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  // glTF 의 UV 는 위아래가 뒤집혀 있다
-  tex.flipY = false;
-  tex.channel = 0;
+  // 그림을 다 받은 뒤에 붙인다(받기 전에 붙이면 빈 텍스처라 그늘이 잠깐 검게 나온다)
+  new THREE.TextureLoader().load(url, (tex) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    // glTF 의 UV 는 위아래가 뒤집혀 있다
+    tex.flipY = false;
+    tex.channel = 0;
+    attach(root, tex);
+  });
+}
+
+function attach(root: THREE.Object3D, tex: THREE.Texture): void {
   const done = new Set<THREE.Material>();
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
