@@ -37,7 +37,8 @@ function attach(root: THREE.Object3D, tex: THREE.Texture): void {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh || !mesh.geometry.attributes.uv) return;
     const m = mesh.material as THREE.MeshStandardMaterial;
-    if (done.has(m)) return;
+    // 물처럼 따로 그리는 셰이더 재질은 건너뛴다
+    if (done.has(m) || !m.isMeshStandardMaterial) return;
     done.add(m);
     m.lightMap = tex;
     // 구운 값 1 = 하얀 하늘 아래 트인 면. three 의 확산 반사는 1/π 를 곱하므로 π 를 곱해 둔다

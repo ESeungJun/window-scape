@@ -464,3 +464,31 @@ def crop_field(name, x, y, rot, rows=5, cols=7):
             else:
                 P.append(blob(f'{name}_leaf', 0.1, (xx, yy, 0.12), CROP, scale=(1, 1, 0.8), sub=2))
     return place(bake(P, name, origin=(0, 0, 0)), x, y, rot, max(rows * 0.36, cols * 0.32) * 0.6)
+
+
+# ── 탈것 ─────────────────────────────────────────────
+CAR_GLASS = mat('car_glass', '#3b4752', 0.25, 0.02)
+TIRE = mat('tire', '#2e2e32', 0.9, 0.03)
+
+
+def car(name, color, kind='hatch'):
+    """작은 자동차(앞 = +x, 기준점 = 바닥 가운데). kind: hatch·van. 앱이 길을 따라 움직인다(mover_)"""
+    body = mat(f'car_{color}', color, 0.45, 0.04)
+    van = kind == 'van'
+    L, Wd = (0.95, 0.46) if not van else (1.05, 0.48)
+    P = [box(f'{name}_body', (L, Wd, 0.2), (0, 0, 0.17), body, bevel=0.06, seg=3)]
+    cl, cx = (0.52, -0.06) if not van else (0.8, -0.1)
+    P.append(box(f'{name}_cab', (cl, Wd - 0.06, 0.2 if not van else 0.26), (cx, 0, 0.35 if not van else 0.38), body, bevel=0.06, seg=3))
+    # 유리: 앞·뒤·옆
+    P.append(box(f'{name}_wf', (0.04, Wd - 0.12, 0.13), (cx + cl / 2 - 0.005, 0, 0.36), CAR_GLASS, rot=(0, -0.35, 0), bevel=0.01))
+    P.append(box(f'{name}_wb', (0.04, Wd - 0.12, 0.12), (cx - cl / 2 + 0.005, 0, 0.36), CAR_GLASS, rot=(0, 0.3, 0), bevel=0.01))
+    for s in (-1, 1):
+        P.append(box(f'{name}_ws', (cl - 0.14, 0.03, 0.12), (cx, s * (Wd / 2 - 0.025), 0.37), CAR_GLASS, bevel=0.01))
+        for wx in (L / 2 - 0.2, -L / 2 + 0.2):
+            P.append(cyl(f'{name}_tire', 0.1, 0.1, 0.08, (wx, s * (Wd / 2 - 0.02), 0.1), TIRE, seg=14, rot=(math.pi / 2, 0, 0), bevel=0.02))
+            P.append(cyl(f'{name}_hub', 0.045, 0.045, 0.09, (wx, s * (Wd / 2 - 0.02), 0.1), STONE, seg=10, rot=(math.pi / 2, 0, 0)))
+        P.append(box(f'{name}_head', (0.03, 0.08, 0.05), (L / 2 + 0.005, s * 0.15, 0.2), GLASS, bevel=0.01))
+        P.append(box(f'{name}_tail', (0.03, 0.07, 0.04), (-L / 2 - 0.005, s * 0.16, 0.21), CLOTH_R, bevel=0.01))
+    P.append(box(f'{name}_bump', (0.06, Wd + 0.02, 0.06), (L / 2, 0, 0.1), STONE, bevel=0.02))
+    P.append(box(f'{name}_bumpb', (0.06, Wd + 0.02, 0.06), (-L / 2, 0, 0.1), STONE, bevel=0.02))
+    return bake(P, name, origin=(0, 0, 0))
