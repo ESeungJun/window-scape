@@ -24,11 +24,11 @@ export class Clouds {
   private readonly sea = new THREE.Group();
   /** 섬 주변을 도는 구름 묶음. 땅 테마에서는 높이 띄운다 */
   private readonly skyLayer = new THREE.Group();
-  private readonly seaMat = new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 1 });
-  private readonly skyMat = new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true, roughness: 1 });
+  private readonly seaMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1 });
+  private readonly skyMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1 });
 
   constructor(rng: Rng) {
-    const puff = new THREE.IcosahedronGeometry(1, 1);
+    const puff = new THREE.IcosahedronGeometry(1, 3);
     const count = 18;
     for (let i = 0; i < count; i++) {
       const cloud = new THREE.Group();
@@ -41,14 +41,14 @@ export class Clouds {
         m.castShadow = true;
         cloud.add(m);
       }
-      cloud.position.y = 6 + rng() * 7;
+      cloud.position.y = 11 + rng() * 5;
       this.skyLayer.add(cloud);
       this.sky.push({
         obj: cloud,
         threshold: (i + 0.5) / count,
         base: 0.8 + rng() * 0.9,
         angle: rng() * Math.PI * 2,
-        radius: 9 + rng() * 10,
+        radius: 7 + rng() * 8,
         speed: 0.6 + rng() * 0.8,
       });
     }

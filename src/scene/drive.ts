@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import type { Env } from './env';
 import { jitter, smoothstep, type Rng } from '../util';
 import {
-  Field, MATS, Sway, alongCurve, distantMountains, house, instanced, lampPost, mesh, ribbon, rollingHills, scatterTrees, std,
-  terrain, vehicle, type Stage,
+  Field, MATS, Sway, alongCurve, distantMountains, house, instanced, lampPost, mesh, pasture, ribbon, rollingHills, scatterProps,
+  scatterTrees, std, terrain, vehicle, village, type Stage,
 } from './kit';
 
 /**
@@ -192,15 +192,25 @@ export class Drive implements Stage {
     g.add(home);
     field.block(-5, roadZ(-5) - 3, 1.2);
 
+    // 길가 마을과 양 목장(육지 쪽 비탈)
+    const nearRoad = (r: Rng): [number, number] => { const x = -12 + r() * 26; return [x, roadZ(x) - 2.4 - r() * 5]; };
+    village(g, rng, field, 7, nearRoad, height, () => (rng() - 0.5) * 0.4);
+    pasture(g, rng, field, (r) => { const x = -16 + r() * 32; return [x, roadZ(x) - 4 - r() * 6]; }, height);
+
     // 숲은 육지 쪽에만
     scatterTrees(g, rng, field, this.sway, {
-      count: 170,
+      count: 230,
       area: (r) => { const x = (r() - 0.5) * 84; return [x, roadZ(x) - 2.4 - r() * 28]; },
       heightAt: height,
-      pineRatio: 0.65,
+      pineRatio: 0.5,
       scale: [0.9, 1.8],
       gap: 0.2,
     });
+    // 덤불·바위·건초로 빈 땅을 채운다
+    const land = (r: Rng): [number, number] => { const x = (r() - 0.5) * 60; return [x, roadZ(x) - 1.4 - r() * 16]; };
+    scatterProps(g, rng, field, ['bush_0', 'bush_1', 'bush_2'], 240, land, height, [0.8, 1.6], 0.3);
+    scatterProps(g, rng, field, ['rock_0', 'rock_1', 'rock_2'], 40, land, height, [0.6, 1.5], 0.3);
+    scatterProps(g, rng, field, ['hay'], 10, nearRoad, height, [1, 1.3], 0.25);
 
     // 차 다섯 대: 같은 차선끼리는 같은 속도로 간격을 두고 달려 서로 부딪히지 않는다
     const fleet: [string, boolean, number, 1 | -1][] = [

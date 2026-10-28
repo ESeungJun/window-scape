@@ -12,6 +12,7 @@ import { renderSettings, type Frame, type ViewOptions } from './ui/settings';
 import { Ambience } from './ui/sound';
 import { setupDesktopSettings } from './ui/desktop-settings';
 import { isDesktopApp, nativeLocation, setupWidget } from './widget';
+import { loadProps } from './scene/props';
 
 const SEOUL: Place = { name: '서울', lat: 37.5665, lon: 126.978 };
 const PLACE_KEY = 'sky-isle:place';
@@ -26,6 +27,8 @@ const GEO_ERRORS: Record<number, string> = {
 const $ = <T extends Element = HTMLElement>(id: string) => document.querySelector<T>(`#${id}`)!;
 
 // 저장된 테마로 바로 시작한다(하늘섬을 먼저 만들었다 바꾸지 않게)
+// 소품 모델을 먼저 불러 둔다(테마들이 바로 복제해 쓴다)
+await loadProps();
 const world = new World($('scene'), loadSavedTheme());
 const ambience = new Ambience();
 if (isDesktopApp) {

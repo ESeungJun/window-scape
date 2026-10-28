@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Env } from './env';
 import { jitter, smoothstep, softSprite, type Rng } from '../util';
 import {
-  Field, MATS, Sway, distantMountains, mesh, ribbon, ringArea, rollingHills, scatterTrees, std, terrain, type Stage,
+  Field, MATS, Sway, distantMountains, mesh, pasture, ribbon, ringArea, rollingHills, scatterProps, scatterTrees, std, terrain,
+  village, type Stage,
 } from './kit';
 
 /**
@@ -151,8 +152,15 @@ export class MovingCastle implements Stage {
     }
     field.block(POND.x, POND.y, POND_R + 0.8);
 
-    // 언덕 위 외딴 나무 몇 그루
-    scatterTrees(g, rng, field, this.sway, { count: 9, area: ringArea(3, 26), heightAt: height, pineRatio: 0.3, scale: [1.3, 2.0], gap: 2.5 });
+    // 언덕 너머 농가 마을과 양 목장 둘
+    village(g, rng, field, 6, ringArea(6, 15), height);
+    pasture(g, rng, field, ringArea(4, 13), height, 1.25);
+    pasture(g, rng, field, ringArea(4, 13), height, 1.1);
+    // 나무: 무리 지어 선 작은 숲과 외딴 나무, 덤불·바위·건초
+    scatterTrees(g, rng, field, this.sway, { count: 45, area: ringArea(3.5, 26), heightAt: height, pineRatio: 0.35, scale: [1.0, 1.9], gap: 0.4 });
+    scatterProps(g, rng, field, ['bush_0', 'bush_1', 'bush_2'], 160, ringArea(2, 22), height, [0.8, 1.5], 0.3);
+    scatterProps(g, rng, field, ['rock_0', 'rock_1', 'rock_2'], 30, ringArea(2, 22), height, [0.6, 1.4], 0.3);
+    scatterProps(g, rng, field, ['hay'], 8, ringArea(5, 14), height, [1, 1.3], 0.25);
 
     // 풀포기와 들꽃 무리: 개수가 많아 인스턴스로 그린다
     const m4 = new THREE.Matrix4();
@@ -173,7 +181,7 @@ export class MovingCastle implements Stage {
       tufts.setMatrixAt(i, m4.compose(pos, q, sc));
     }
     g.add(tufts);
-    const flowerGeo = new THREE.IcosahedronGeometry(0.07, 0);
+    const flowerGeo = new THREE.IcosahedronGeometry(0.07, 1);
     for (const color of ['#ffffff', '#ffd84a', '#ff8fb8', '#b9a2ff', '#ff6a5a']) {
       const flowers = new THREE.InstancedMesh(flowerGeo, std(color), 260);
       let k = 0;

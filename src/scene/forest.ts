@@ -159,7 +159,7 @@ export class Forest implements Stage {
     });
 
     // 덤불·버섯
-    const bushGeo = jitter(new THREE.IcosahedronGeometry(0.18, 0), 0.06);
+    const bushGeo = jitter(new THREE.SphereGeometry(0.18, 12, 8), 0.04);
     for (let i = 0; i < 400; i++) {
       const [x, z] = ringArea(0.8, 11)(rng);
       if (!field.free(x, z, 0.02)) continue;

@@ -40,7 +40,7 @@ const TIME: Record<TimeOfDay, {
   hemi: number; hemiSky: string; lights: number; stars: number;
 }> = {
   morning: { skyTop: '#6f9fdc', skyBottom: '#ffd2ad', sun: '#ffc98f', sunI: 2.6, elev: 0.3, hemi: 1.0, hemiSky: '#d4e2ff', lights: 0.25, stars: 0 },
-  day: { skyTop: '#3d84d8', skyBottom: '#cfe7ff', sun: '#fff3df', sunI: 3.2, elev: 0.95, hemi: 1.25, hemiSky: '#dcedff', lights: 0, stars: 0 },
+  day: { skyTop: '#4a8fdc', skyBottom: '#dcecfb', sun: '#ffe8c8', sunI: 2.8, elev: 0.95, hemi: 1.5, hemiSky: '#dcedff', lights: 0, stars: 0 },
   evening: { skyTop: '#46499a', skyBottom: '#ff9466', sun: '#ff8a4c', sunI: 2.3, elev: 0.16, hemi: 0.8, hemiSky: '#ffc0a0', lights: 0.8, stars: 0.2 },
   night: { skyTop: '#060b22', skyBottom: '#1c2a58', sun: '#8ea4ff', sunI: 0.75, elev: 0.75, hemi: 0.45, hemiSky: '#4f63a6', lights: 1, stars: 1 },
 };
@@ -64,7 +64,7 @@ const WEATHER: Record<Condition, {
 const SEASON: Record<Season, { grass: string; a: string; b: string; pine: string; snow: number }> = {
   spring: { grass: '#7cc25a', a: '#93d36b', b: '#f4aecb', pine: '#2f7046', snow: 0 },
   summer: { grass: '#59a843', a: '#3f9a3c', b: '#2e7d36', pine: '#2a6440', snow: 0 },
-  autumn: { grass: '#93a54a', a: '#e8902f', b: '#c8452e', pine: '#2f6443', snow: 0 },
+  autumn: { grass: '#82ad4c', a: '#e8902f', b: '#c8452e', pine: '#2f6443', snow: 0 },
   winter: { grass: '#8e9f78', a: '#b9a98e', b: '#a99b86', pine: '#2f5a46', snow: 1 },
 };
 
