@@ -9,6 +9,8 @@ import { Diorama, TILE_HALF, pathCurve, type Layout } from './diorama';
  * 모래사장과 바다, 바위섬 등대, 바다를 도는 돛단배, 바람 따라 도는 언덕 위 풍력 발전기.
  */
 const LANE = 0.55;
+/** 디오라마 모양에서 받침 안 고리를 도는 차 수 */
+const LOOP_CARS = 5;
 
 interface Car {
   obj: THREE.Object3D;
@@ -90,6 +92,7 @@ export class Drive extends Diorama {
       c.obj.position.set(p.x - tan.z * LANE, p.y, p.z + tan.x * LANE);
       c.obj.rotation.set(0, Math.atan2(-tan.z, tan.x), 0);
       c.obj.scale.setScalar(THREE.MathUtils.clamp((Math.min(u, 1 - u) * len) / 4, 0, 1));
+      c.obj.visible = true;
     }
   }
 
@@ -102,10 +105,12 @@ export class Drive extends Diorama {
     const r = LANE;
     const straight = Math.max(0, b - a - 2 * r);
     const loop = 2 * straight + 2 * Math.PI * r;
-    const n = this.cars.length;
-    // 한 박자를 같이 쓰고 차마다 고리 길이의 1/n 씩 벌린다
+    // 받침 안 길은 짧아서 몇 대만 달린다. 한 박자를 같이 쓰고 차마다 고리 길이의 1/n 씩 벌린다
+    const n = Math.min(this.cars.length, LOOP_CARS);
     this.loopU = (this.loopU + (2.2 * dt) / loop) % 1;
     this.cars.forEach((c, k) => {
+      c.obj.visible = k < n;
+      if (k >= n) return;
       const s = (this.loopU + k / n) % 1;
       this.loopAt(s * loop, straight, this.p);
       this.loopAt(s * loop + 0.05, straight, this.q);
