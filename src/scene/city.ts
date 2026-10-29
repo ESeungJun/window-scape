@@ -5,7 +5,7 @@ import { Diorama, pathCurve, type Layout } from './diorama';
 /**
  * 도시 테마: 피렌체를 모티브로 한 강변 옛 도시 디오라마(모델: tools/blender/city.py).
  * 가게가 얹힌 옛 다리, 붉은 돔 성당과 종탑, 탑이 선 시청 궁전과 광장, 강을 따라 늘어선 팔라초.
- * 자동차들이 강을 두 번 건너는 순환 도로를 오른쪽 차선으로 돌고, 나룻배 한 척이 강을 오르내린다(layout 의 길 이름은 ring·canal).
+ * 자동차들이 강을 두 번 건너는 순환 도로를 오른쪽 차선으로 돌고, 나룻배 한 척이 강을 오르내린다.
  */
 const LANE = 0.27;
 
@@ -20,7 +20,7 @@ interface Car {
 export class City extends Diorama {
   private readonly cars: Car[] = [];
   private ring?: THREE.CatmullRomCurve3;
-  private canal?: THREE.CatmullRomCurve3;
+  private river?: THREE.CatmullRomCurve3;
   private boat?: THREE.Object3D;
   private boatU = 0.2;
   private boatDir = 1;
@@ -34,7 +34,7 @@ export class City extends Diorama {
   protected onLoad(_root: THREE.Object3D, layout: Layout, movers: THREE.Object3D[]): void {
     if (!layout.paths) return;
     this.ring = pathCurve(layout.paths.ring, true);
-    this.canal = pathCurve(layout.paths.canal, false);
+    this.river = pathCurve(layout.paths.river, false);
     let k = 0;
     for (const m of movers) {
       if (m.name.startsWith('mover_car')) {
@@ -59,15 +59,15 @@ export class City extends Diorama {
         c.obj.rotation.set(0, Math.atan2(-tan.z, tan.x), 0);
       }
     }
-    if (this.canal && this.boat) {
+    if (this.river && this.boat) {
       // 강 끝에 닿으면 돌아선다
-      this.boatU += (this.boatDir * 0.22 * dt) / this.canal.getLength();
+      this.boatU += (this.boatDir * 0.22 * dt) / this.river.getLength();
       if (this.boatU > 0.93 || this.boatU < 0.07) {
         this.boatDir = -this.boatDir;
         this.boatU = THREE.MathUtils.clamp(this.boatU, 0.07, 0.93);
       }
-      this.canal.getPointAt(this.boatU, p);
-      this.canal.getTangentAt(this.boatU, tan).multiplyScalar(this.boatDir);
+      this.river.getPointAt(this.boatU, p);
+      this.river.getTangentAt(this.boatU, tan).multiplyScalar(this.boatDir);
       this.boat.position.copy(p);
       this.boat.rotation.set(0, Math.atan2(-tan.z, tan.x), 0);
     }
