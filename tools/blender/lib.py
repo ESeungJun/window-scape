@@ -601,10 +601,10 @@ GROUND_UV_SCALE = 4.0
 
 
 def dynamic(o):
-    """앱이 따로 그리거나 움직이는 물체(물 'liquid_', 움직이는 것 'mover_' 과 그 부품, 굽지 않는 먼 풍경 'far_').
+    """앱이 따로 그리거나 움직이는 물체(물 'liquid_', 움직이는 것 'mover_' 과 그 부품, 굽지 않는 먼 풍경 'far_', 디오라마 받침 'case_').
     합치지도 굽지도 않는다"""
     while o:
-        if o.name.startswith(('liquid_', 'mover_', 'far_')):
+        if o.name.startswith(('liquid_', 'mover_', 'far_', 'case_')):
             return True
         o = o.parent
     return False

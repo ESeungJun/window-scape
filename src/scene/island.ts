@@ -101,7 +101,7 @@ export class Island implements Stage {
 
     // 밤에 고이는 따뜻한 불빛
     for (const [x, y, z] of layout.lights) {
-      const light = new THREE.PointLight('#ffc46b', 0, 4.5, 2);
+      const light = new THREE.PointLight('#ffc46b', 0, 7, 1.6);
       light.position.set(x, y, z);
       g.add(light);
       this.lights.push(light);
@@ -109,9 +109,9 @@ export class Island implements Stage {
   }
 
   update(dt: number, t: number, env: Env): void {
-    for (const l of this.lights) l.intensity = env.nightLights * 3.5;
+    for (const l of this.lights) l.intensity = env.nightLights * 7;
     for (const [m, fn] of this.seasonal) fn(env, m.color);
-    for (const m of this.glass) m.emissiveIntensity = 0.15 + env.nightLights * 2.6;
+    for (const m of this.glass) m.emissiveIntensity = 0.15 + env.nightLights * 3.4;
     const bright = waterBrightness(env);
     if (this.river) {
       this.river.uniforms.time.value = t;
