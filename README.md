@@ -41,6 +41,8 @@ so WINDOW SCAPE is a native macOS widget. It started as a single sky island and 
 The Walking Castle is an original design — a ramshackle castle on mechanical legs —
 inspired by the idea of a moving castle, not a copy of any film's design.
 
+Apart from the sky island, each world can also be shown as a diorama on a wooden plinth instead of land running to the horizon (Settings → Shape).
+
 ## It follows the sky
 
 <table>

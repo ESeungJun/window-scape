@@ -393,6 +393,7 @@ tile.far_trees('far_trees', spots)
 setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
 lights = [three(at(CAB, CROT, 0.4 * 1.25, -1.9), 1.1), three(camp, 0.6), three(lantern_dock, LEVEL + 1.1)] + path_lights
+tile.case(W, D, height, water=LEVEL)
 layout = {
     'lights': lights,
     'ground': tile.heightmap(hfar),

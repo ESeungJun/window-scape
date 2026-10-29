@@ -170,31 +170,47 @@ for p in LOOP[::2]:
     block(p.x, p.y, 1.1)
 
 # 성이 걷는 넓은 흙길: 가운데 땅 안쪽은 굽고(roam_path), 바깥은 먼 풍경(far_roam)
-inside = lambda p: abs(p.x) < 8.3 and abs(p.y) < 8.3
+inside = lambda p: abs(p.x) < W / 2 and abs(p.y) < D / 2
+
+
+def edge_cross(a, b):
+    """a·b 사이에서 타일 가장자리를 지나는 점(길을 가장자리에서 딱 자른다: 디오라마 받침 밖으로 삐져나오지 않게)"""
+    lo, hi = 0.0, 1.0
+    for _ in range(24):
+        m = (lo + hi) / 2
+        lo, hi = (m, hi) if inside(a.lerp(b, m)) == inside(a) else (lo, m)
+    return a.lerp(b, (lo + hi) / 2)
+
+
 n = len(ROAM)
 start_i = next(i for i in range(n) if not inside(ROAM[i]) and inside(ROAM[(i + 1) % n]))
-order = [(start_i + k) % n for k in range(n + 1)]
-runs, cur, cur_in = [], [order[0]], True
-for i in order[1:]:
-    cur.append(i)
+# 구간마다 (점, 길 방향, 번호). 안팎이 바뀌는 곳에는 가장자리 점을 두 구간에 함께 넣는다
+tan_of = lambda i: (ROAM[(i + 1) % n] - ROAM[i - 1]).normalized()
+runs, cur, cur_in = [], [(ROAM[start_i], tan_of(start_i), start_i)], False
+for k in range(1, n + 1):
+    i, h = (start_i + k) % n, (start_i + k - 1) % n
     if inside(ROAM[i]) != cur_in:
+        c = (edge_cross(ROAM[h], ROAM[i]), tan_of(i), i)
+        cur.append(c)
         runs.append((cur_in, cur))
-        cur, cur_in = [i], inside(ROAM[i])
+        cur, cur_in = [c], inside(ROAM[i])
+    cur.append((ROAM[i], tan_of(i), i))
 runs.append((cur_in, cur))
 # 수레바퀴 자국 두 줄 사이로 풀이 자란 시골길
 LANE_DIRT = mat('lane_dirt', '#d6c095', 0.95, 0.06, 6.0)
-for k, (is_in, idx) in enumerate(runs):
+for k, (is_in, pts) in enumerate(runs):
     bm = bmesh.new()
     for c in (-0.4, 0.4):
         L, R_ = [], []
-        for i in idx:
-            tan = (ROAM[(i + 1) % n] - ROAM[i - 1]).normalized()
+        for p, tan, i in pts:
             nrm = Vector((-tan.y, tan.x))
             w = 0.3 + 0.04 * math.sin(i * 1.3 + c * 5)
             for side, out in ((c + w, L), (c - w, R_)):
-                q = ROAM[i] + nrm * side
+                q = p + nrm * side
+                if is_in:
+                    q = Vector((max(-W / 2, min(W / 2, q.x)), max(-D / 2, min(D / 2, q.y))))
                 out.append(bm.verts.new((q.x, q.y, height(q.x, q.y) + 0.04)))
-        for j in range(len(idx) - 1):
+        for j in range(len(pts) - 1):
             bm.faces.new([L[j], R_[j], R_[j + 1], L[j + 1]])
     finish(new_obj(('roam_path_' if is_in else 'far_roam_') + str(k), bm), LANE_DIRT)
 for p in ROAM[::2]:
@@ -523,9 +539,11 @@ if os.environ.get('CLOSE'):
 else:
     setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
+tile.case(W, D, height, water=None)
 layout = {
     'ground': tile.heightmap(hfar),
-    'paths': {'loop': [three(p, z) for p, z in list(zip(ROAM, ROAMZ))[::3]]},
+    # inner: 디오라마 모양(둘레 땅이 없다)일 때 걷는 농장 안 연못 둘레 길
+    'paths': {'loop': [three(p, z) for p, z in list(zip(ROAM, ROAMZ))[::3]], 'inner': [three(p, z) for p, z in list(zip(LOOP, LOOPZ))[::2]]},
     'lights': [three(bp + CAM * 1.4, 1.2)] + [three(bpy.data.objects[f'house_{k}'].location.xy + CAM * 0.95, 1.2) for k in range(2)] + path_lamps,
 }
 
