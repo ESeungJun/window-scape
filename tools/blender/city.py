@@ -80,7 +80,7 @@ def paint(x, y, z):
 tile.build(W, D, height, paint, water=LEVEL, step=0.2, ground=True)
 tile.liquid_plane('liquid_river', W, D, height, LEVEL, step=0.2)
 
-# ── 둘레 시가지: 크기가 제각각인 구역, 강은 그대로 이어진다 ─────────
+# ── 둘레 시가지: 크기가 제각각인 구역, 강은 구역 밖에서 굽이치며 이어진다 ─────────
 CITY_R = 40.0
 PER = W / 2 + 1.2
 
@@ -103,9 +103,21 @@ def span_of(v, spans):
     return next((sp for sp in spans if sp[0] <= v <= sp[1]), None)
 
 
-def corridor(x):
+def river_x(y):
+    """강 가운데 x. 타일 가까이는 곧고, 멀어질수록 S 자로 굽이친다"""
+    return MID + smooth(D / 2 + 1, D / 2 + 14, abs(y)) * 6.5 * math.sin(y * 0.085)
+
+
+def corridor(x, y):
     """강과 양쪽 둑길"""
-    return abs(x - MID) < (RX1 - RX0) / 2 + 0.9
+    return abs(x - river_x(y)) < (RX1 - RX0) / 2 + 1.4
+
+
+def hriver(x, y):
+    """굽은 강의 땅 높이: 타일 가장자리에선 타일과 같은 곧은 돌둑, 멀어질수록 비스듬한 둑"""
+    d = abs(x - river_x(y))
+    soft = TOP - (TOP - BED) * (1 - smooth((RX1 - RX0) / 2 - 0.9, (RX1 - RX0) / 2 + 0.5, d))
+    return height(x, y) + (soft - height(x, y)) * smooth(D / 2, D / 2 + 3, abs(y))
 
 
 def hills(x, y):
@@ -113,11 +125,11 @@ def hills(x, y):
     a = math.atan2(y, x)
     # 뒤쪽(북쪽 언덕 마을 쪽)이 더 높다
     return (5.0 + 3.0 * max(0.0, math.sin(a))) * (0.6 + 0.3 * math.sin(a * 3 + 0.5) + 0.15 * math.sin(a * 7 + 1.3)) \
-        * smooth(CITY_R + 2, 80, r) * smooth(1.6, 6.0, abs(x - MID))
+        * smooth(CITY_R + 2, 80, r) * smooth(1.6, 6.0, abs(x - river_x(y)))
 
 
 def hfar(x, y):
-    return height(x, y) + hills(x, y)
+    return hriver(x, y) + hills(x, y)
 
 
 def belt(x, y):
@@ -130,13 +142,13 @@ def cell(x, y, s):
 
 
 def paint_far(x, y, z):
-    if in_river(x) and z < TOP - 0.1:
+    if z < TOP - 0.1:
         return QUAY
     if math.hypot(x, y) > CITY_R + 3:
         # 언덕: 밭·올리브밭·풀밭 조각보
         return FIELD[(cell(x + 3, y, 7.0) * 2654435761 >> 7) % len(FIELD)]
     sx, sy = span_of(x, XS), span_of(y, YS)
-    if sx and sy and not corridor(x):
+    if sx and sy and not corridor(x, y):
         inset = min(x - sx[0], sx[1] - x, y - sy[0], sy[1] - y)
         if belt(x, y) and inset > 0.3:
             return GRASS
@@ -684,7 +696,7 @@ for sx in XS:
         x0, x1 = sx
         y0, y1 = sy
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-        if math.hypot(cx, cy) > CITY_R or corridor(cx):
+        if math.hypot(cx, cy) > CITY_R or corridor(cx, cy):
             continue
         if (cell(cx, cy, 5) % 9) == 0 and x1 - x0 > 4.5 and y1 - y0 > 4.5:
             plazas.append((cx, cy))  # 성당 광장
@@ -701,7 +713,7 @@ for sx in XS:
                     x, y, rot = c, (y0 + dd / 2 if side == 0 else y1 - dd / 2), (0.0 if side == 0 else math.pi)
                 else:
                     x, y, rot = (x0 + dd / 2 if side == 2 else x1 - dd / 2), c, (-H if side == 2 else H)
-                if corridor(x) or (abs(x) < W / 2 + 0.3 and abs(y) < D / 2 + 0.3) or belt(x, y):
+                if corridor(x, y) or (abs(x) < W / 2 + 0.3 and abs(y) < D / 2 + 0.3) or belt(x, y):
                     continue
                 if rnd.random() < 0.04:
                     items.append((x, y, TOP - 0.02, 0.9, 0.9, 4.0 + rnd.random() * 1.5, 0.3, rot, RUSTIC, Hr(), 'hip'))
@@ -713,7 +725,7 @@ for sx in XS:
             # 공원: 우산소나무·사이프러스
             for k in range(int((x1 - x0) * (y1 - y0) / 2.2)):
                 x, y = x0 + 0.7 + rnd.random() * (x1 - x0 - 1.4), y0 + 0.7 + rnd.random() * (y1 - y0 - 1.4)
-                if belt(x, y) and not corridor(x):
+                if belt(x, y) and not corridor(x, y):
                     spots.append((x, y, TOP - 0.03, 1.6 + rnd.random() * 0.6, ('umbrella', UMBRELLA) if k % 3 else ('cypress', CYPRESS)))
             continue
         for k in range(rnd.randint(0, 2)):
@@ -749,9 +761,13 @@ P = []
 for sy in YS:
     for y in (sy[0] - 0.5, sy[1] + 0.5):
         if D / 2 + 0.5 < abs(y) < CITY_R:
-            P.append(box('far_bridge', (RX1 - RX0 + 0.5, 1.0, 0.18), (MID, y, TOP - 0.06), QUAY, bevel=0))
+            # 강을 똑바로 가로지르게 강 굽이만큼 돌린다
+            rx, a = river_x(y), math.atan2(-(river_x(y + 0.1) - river_x(y - 0.1)) / 0.2, 1)
+            c, s = math.cos(a), math.sin(a)
+            P.append(box('far_bridge', (RX1 - RX0 + 0.6, 1.0, 0.18), (rx, y, TOP - 0.06), QUAY, rot=(0, 0, a), bevel=0))
             for s_ in (-1, 1):
-                P.append(box('far_bridge_rail', (RX1 - RX0 + 0.5, 0.08, 0.14), (MID, y + s_ * 0.46, TOP + 0.08), CURB, bevel=0))
+                P.append(box('far_bridge_rail', (RX1 - RX0 + 0.6, 0.08, 0.14), (rx - s * s_ * 0.46, y + c * s_ * 0.46, TOP + 0.08), CURB,
+                             rot=(0, 0, a), bevel=0))
 bake(P, 'far_bridges')
 
 # 언덕: 사이프러스 줄, 올리브 숲, 우산소나무, 빌라
@@ -759,7 +775,7 @@ for k in range(1400):
     a = rnd.random() * math.tau
     r = CITY_R + 4 + rnd.random() * 34
     x, y = math.cos(a) * r, math.sin(a) * r
-    if abs(x - MID) < 4:
+    if abs(x - river_x(y)) < 4:
         continue
     z = hfar(x, y) - 0.05
     u = rnd.random()
@@ -773,7 +789,7 @@ for k in range(36):
     a = rnd.random() * math.tau
     r = CITY_R + 6 + rnd.random() * 26
     x, y = math.cos(a) * r, math.sin(a) * r
-    if abs(x - MID) < 5:
+    if abs(x - river_x(y)) < 5:
         continue
     rot = rnd.random() * math.tau
     items.append((x, y, hfar(x, y) - 0.1, 2.2 + rnd.random(), 1.6 + rnd.random() * 0.6, 1.6 + rnd.random() * 0.6, 0.5, rot,
@@ -793,7 +809,7 @@ setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 # 도로 중심선(앱 좌표): 차가 오른쪽 차선을 달리게 앱이 옆으로 비낀다
 layout = {
     'ground': tile.heightmap(hfar),
-    'paths': {'ring': [three(p, TOP + 0.02) for p in ROUTE[::3]], 'canal': [three(Vector((MID, y)), LEVEL) for y in (-7.2, 0, 7.2)]},
+    'paths': {'ring': [three(p, TOP + 0.02) for p in ROUTE[::3]], 'river': [three(Vector((MID, y)), LEVEL) for y in (-7.2, 0, 7.2)]},
     'lights': [three(Vector((DX, NAVE_Y0 - 0.6)), 1.0), three(FT, 1.2), three(cafe[0], 1.0), three(Vector((MID, PV_Y)), 1.0)]
               + [three(o.location, 1.2) for o in lamps[::3]],
 }

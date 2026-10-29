@@ -294,8 +294,9 @@ export class World {
     updateSharedMaterials(env);
     this.stage.update(dt, this.time, env);
     this.floaters.update(dt, this.time);
-    // 돌아다니는 주인공이 있으면 카메라가 부드럽게 따라간다(보는 각도는 유지)
-    if (this.stage.focus) {
+    // 돌아다니는 주인공이 있으면 카메라가 부드럽게 따라간다(보는 각도는 유지).
+    // 사용자가 시점을 돌리는 동안과 그 뒤 잠시(자동 회전이 다시 켜질 때까지)는 멈춘다
+    if (this.stage.focus && this.controls.autoRotate) {
       this.stage.focus(this.focusPoint);
       this.focusDelta.subVectors(this.focusPoint, this.controls.target).multiplyScalar(1 - Math.exp(-dt * 0.8));
       this.controls.target.add(this.focusDelta);
