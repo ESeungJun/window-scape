@@ -43,9 +43,12 @@ const GROUPS: AnyGroup[] = [
 export function renderSettings(root: HTMLElement, initial: ViewOptions, onChange: (next: ViewOptions) => void): (opts: ViewOptions) => void {
   let opts = initial;
   const chips: { key: keyof ViewOptions; value: string; el: HTMLButtonElement }[] = [];
+  let shapeSection: HTMLElement | undefined;
   const sync = (next: ViewOptions) => {
     opts = next;
     for (const c of chips) c.el.setAttribute('aria-pressed', String(opts[c.key] === c.value));
+    // 하늘섬은 처음부터 떠 있는 섬이라 모양을 고를 게 없다
+    if (shapeSection) shapeSection.hidden = opts.theme === 'island';
   };
 
   root.replaceChildren();
@@ -72,6 +75,7 @@ export function renderSettings(root: HTMLElement, initial: ViewOptions, onChange
       list.append(b);
     }
     section.append(h, list);
+    if (group.key === 'shape') shapeSection = section;
     root.append(section);
   }
   sync(opts);

@@ -70,6 +70,14 @@ export abstract class Diorama implements Stage {
   private readonly outside: THREE.Object3D[] = [];
   private readonly caseParts: THREE.Object3D[] = [];
   private readonly landDistance: number;
+  /** 받침 가장자리에서 자를 재질(받침 자신은 빼고)과 그 네 평면 */
+  private readonly clipped = new Set<THREE.Material>();
+  private readonly clipPlanes = [
+    new THREE.Plane(new THREE.Vector3(1, 0, 0), TILE_HALF + 0.02),
+    new THREE.Plane(new THREE.Vector3(-1, 0, 0), TILE_HALF + 0.02),
+    new THREE.Plane(new THREE.Vector3(0, 0, 1), TILE_HALF + 0.02),
+    new THREE.Plane(new THREE.Vector3(0, 0, -1), TILE_HALF + 0.02),
+  ];
   readonly baked = true;
   readonly view: { target: THREE.Vector3; distance: number };
   protected readonly sway = new Sway();
@@ -92,16 +100,19 @@ export abstract class Diorama implements Stage {
     this.view = { target: new THREE.Vector3(0, 0.6, 0), distance };
     this.landDistance = distance;
     loadModel(`models/${name}.glb`, (root) => {
-      // 먼 풍경은 라이트맵 자리가 없으므로 재질을 따로 둔다(가운데 땅과 같은 재질을 쓰면 라이트맵 엉뚱한 곳을 읽는다)
+      // 먼 풍경·받침은 라이트맵 자리가 없으므로 재질을 따로 둔다(가운데 땅과 같은 재질을 쓰면 라이트맵 엉뚱한 곳을 읽는다).
+      // 받침은 가장자리에서 잘리지 않게 먼 풍경과도 따로
       const far = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+      const stand = new Map<THREE.Material, THREE.MeshStandardMaterial>();
       root.traverse((o) => {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh || !/^(far|case)_/.test(o.name)) return;
+        const own = o.name.startsWith('case_') ? stand : far;
         const m = mesh.material as THREE.MeshStandardMaterial;
-        if (!far.has(m)) far.set(m, m.clone());
-        mesh.material = far.get(m)!;
+        if (!own.has(m)) own.set(m, m.clone());
+        mesh.material = own.get(m)!;
       });
-      for (const m of far.values()) applyOpenSky(m);
+      for (const m of [...far.values(), ...stand.values()]) applyOpenSky(m);
       trackMaterials(root, this.seasonal, this.glass);
       // 그림자 범위 밖 먼 풍경과 먼 땅은 그림자를 드리우지 않는다(그림자 그리기 비용을 아낀다)
       root.traverse((o) => {
@@ -152,6 +163,14 @@ export abstract class Diorama implements Stage {
         this.smoke = { fx: new Smoke(rng, 60, 1.4), at: new THREE.Vector3(...layout.smoke) };
         this.group.add(this.smoke.fx.points);
       }
+      // 받침 밖으로 걸친 것(나무 가지·길 끝 등)을 자를 재질: 받침과 물(셰이더 재질) 말고 모두
+      root.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh || o.name.startsWith('case_')) return;
+        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          if ((m as THREE.MeshStandardMaterial).isMeshStandardMaterial) this.clipped.add(m);
+        }
+      });
       this.group.add(root);
       this.onLoad(root, layout, movers);
       this.setCase(this.cased);
@@ -165,6 +184,7 @@ export abstract class Diorama implements Stage {
     this.view.distance = this.landDistance * (on ? 1.4 : 1);
     for (const o of this.outside) o.visible = !on;
     for (const o of this.caseParts) o.visible = on;
+    for (const m of this.clipped) m.clippingPlanes = on ? this.clipPlanes : null;
     this.onCase(on);
   }
 

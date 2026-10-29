@@ -65,6 +65,8 @@ export class World {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // 디오라마 모양: 받침 가장자리에서 장면을 자른다(재질별 clippingPlanes)
+    this.renderer.localClippingEnabled = true;
     container.appendChild(this.renderer.domElement);
     this.skyLight = new SkyLight(this.renderer);
     this.composer = new EffectComposer(this.renderer);
