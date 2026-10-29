@@ -162,7 +162,7 @@ export interface Stage {
   readonly view: { target: THREE.Vector3; distance: number };
   /** 카메라가 부드럽게 따라갈 점(넓게 돌아다니는 주인공이 있는 테마만) */
   focus?(out: THREE.Vector3): THREE.Vector3;
-  /** 그 위치의 땅 높이(땅 테마). 카메라가 언덕 속으로 들어가지 않게 쓴다 */
+  /** 그 위치의 땅 높이(땅 테마, 먼 집이 있으면 지붕 높이). 카메라가 언덕이나 집 속으로 들어가지 않게 쓴다 */
   groundHeight?(x: number, z: number): number;
   /** 빛을 구운 장면(라이트맵 + 하늘빛). 실시간 반구광·오클루전 대신 구운 빛을 쓴다 */
   readonly baked?: boolean;
