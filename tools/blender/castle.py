@@ -281,8 +281,6 @@ for k, (p, w, d, h, roof) in enumerate(((Vector((6.5, 4.2)), 1.15, 0.95, 1.0, TI
     grow(look.house(f'house_{k}', p.x, p.y, FACE + 0.2 * (k - 0.5), w, d, h, roof), 1.3)
 look.fence_line('fence_a', [(6.4, 0.6), (7.4, 1.8), (7.5, 4.0)])
 look.fence_line('fence_b', [(-7.5, -2.6), (-6.6, -3.4)])
-for k, (u, v) in enumerate(((-1.8, 0.5), (2.6, 1.8), (-6.9, -3.9))):
-    grow(look.villager(f'man_{k}', u, v, FACE + k, (look.CLOTH_B, CLOTH_R, look.CLOTH_G)[k], hat=k != 1, pose='wave' if k == 0 else 'stand'))
 look.signpost(1.4, 6.3, FACE + 0.4).scale = (1.3, 1.3, 1.3)
 
 # ── 걷는 성 ──────────────────────────────────────────

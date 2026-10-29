@@ -137,8 +137,14 @@ def build(W, D, height, paint, water=None, step=0.2, depth=1.5, under=4.0, top_m
     return H, xs, ys
 
 
-def liquid_plane(name, W, D, height, level, step=0.4):
-    """수면: 타일 전체 격자 중 땅이 수면 아래로 내려간 칸만. uv.x = 물가 정도(0.5 깊음 ~ 1 물가), uv.y = 흐름 좌표"""
+def still_uv(x, y, shore):
+    """고인 물(바다·호수·연못)의 uv: u = 물가 정도(0.5 깊음 ~ 1 물가). v 는 쓰지 않는다(앱이 위치로 일렁임을 그린다)"""
+    return 0.5 + 0.5 * shore, 0.0
+
+
+def liquid_plane(name, W, D, height, level, step=0.4, uv=still_uv):
+    """수면: 타일 전체 격자 중 땅이 수면 아래로 내려간 칸만. uv(x, y, 물가 정도 0~1) → (u, v).
+    강은 u = 강폭 방향(0.5 가운데 ~ 0·1 둑), v = 흐르는 방향 거리를 준다(앱 강물 셰이더가 v 방향으로 흘린다)"""
     nx, ny = round(W / step), round(D / step)
     bm = bmesh.new()
     uvl = bm.loops.layers.uv.new('UVMap')
@@ -150,8 +156,7 @@ def liquid_plane(name, W, D, height, level, step=0.4):
                 continue
             f = bm.faces.new([bm.verts.new((x, y, level)) for x, y in cs])
             for loop, (x, y), h in zip(f.loops, cs, hs):
-                shore = smooth(0.35, 0.0, level - h)
-                loop[uvl].uv = (0.5 + 0.5 * shore, x * 0.22 + y * 0.08)
+                loop[uvl].uv = uv(x, y, smooth(0.35, 0.0, level - h))
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
     o = new_obj(name, bm)
     o.data.materials.append(lib.WATER)
@@ -244,7 +249,7 @@ def surround(name, W, D, step, hfar, paint, R=110.0, keep=4.0):
     return o
 
 
-def liquid_far(name, W, D, hfar, level, R=110.0, step=0.4, margin=0.02):
+def liquid_far(name, W, D, hfar, level, R=110.0, step=0.4, margin=0.02, uv=still_uv):
     """타일 바깥 수면(먼 바다·강). 땅이 수면 아래인 칸만. uv 는 liquid_plane 과 같다.
     margin 을 크게 주면 물가 칸 너머까지 수면을 깔아 물가 선이 땅과 수면이 만나는 매끈한 선이 된다"""
     xs, ys = axis(W / 2, step, R, 1.25), axis(D / 2, step, R, 1.25)
@@ -261,7 +266,7 @@ def liquid_far(name, W, D, hfar, level, R=110.0, step=0.4, margin=0.02):
                 continue
             f = bm.faces.new([bm.verts.new((x, y, level)) for x, y in cs])
             for loop, (x, y), h in zip(f.loops, cs, hs):
-                loop[uvl].uv = (0.5 + 0.5 * smooth(0.35, 0.0, level - h), x * 0.22 + y * 0.08)
+                loop[uvl].uv = uv(x, y, smooth(0.35, 0.0, level - h))
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
     o = new_obj(name, bm)
     o.data.materials.append(lib.WATER)
