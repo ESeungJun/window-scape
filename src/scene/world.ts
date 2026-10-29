@@ -303,11 +303,12 @@ export class World {
       this.camera.position.add(this.focusDelta);
     }
     this.controls.update(dt);
-    // 땅 테마: 카메라가 언덕 속으로 들어가지 않게 땅 위로 밀어 올린다
+    // 땅 테마: 카메라가 언덕·먼 나무·집 속으로 들어가지 않게 위로 밀어 올린다.
+    // 부드럽게 올려 높이 격자 칸이 바뀔 때 들썩이지 않게 하되, 여유(0.8) 절반 아래로는 절대 내려가지 않는다
     if (this.stage.groundHeight) {
       const p = this.camera.position;
       const floor = this.stage.groundHeight(p.x, p.z) + 0.8;
-      if (p.y < floor) p.y = floor;
+      if (p.y < floor) p.y = Math.max(floor - 0.4, p.y + (floor - p.y) * (1 - Math.exp(-dt * 6)));
     }
     this.render();
     this.onFrame?.(env);
