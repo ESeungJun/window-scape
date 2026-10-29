@@ -563,22 +563,26 @@ def rabbit(name, x, y, rot):
     return o
 
 
-def wildflowers(W, D, height, clusters, spread=0.7, where=None):
-    """들꽃 무리(색마다 한 덩어리 flowers_k: 앱이 눈 쌓이면 숨긴다). where(x, y) 가 참인 곳에만"""
+def wildflowers(W, D, height, zones):
+    """들꽃 무리(색마다 한 덩어리 flowers_k: 앱이 눈 쌓이면 숨긴다).
+    zones: [(무리 수, 무리 크기, where(x, y) 가 참인 곳에만 | None)] — 여러 곳을 한 번에 만들어 물체 이름이 겹치지 않게"""
     from tile import free, pick
     cols = ['#ffffff', '#f2d14a', '#f29ab8', '#b9a2ff', '#ef6a5a']
     bms = [bmesh.new() for _ in cols]
-    for c in range(clusters):
-        for _ in range(60):
-            cx, cy = pick(W, D, 0.5)
-            if free(cx, cy, 0.3, W, D) and (where is None or where(cx, cy)):
-                break
-        k = c % len(cols)
-        for j in range(9):
-            fx, fy = cx + (rnd.random() - 0.5) * spread, cy + (rnd.random() - 0.5) * spread
-            if not free(fx, fy, 0.0, W, D):
-                continue
-            z = height(fx, fy) + 0.05
-            bmesh.ops.create_icosphere(bms[k], subdivisions=1, radius=0.04 + rnd.random() * 0.015, matrix=Matrix.Translation((fx, fy, z)))
-    for k, c in enumerate(cols):
-        finish(new_obj(f'flowers_{k}', bms[k]), mat(f'flower_{k}', c, 0.6, 0.05))
+    c = 0
+    for clusters, spread, where in zones:
+        for _ in range(clusters):
+            for _ in range(60):
+                cx, cy = pick(W, D, 0.5)
+                if free(cx, cy, 0.3, W, D) and (where is None or where(cx, cy)):
+                    break
+            k = c % len(cols)
+            c += 1
+            for j in range(9):
+                fx, fy = cx + (rnd.random() - 0.5) * spread, cy + (rnd.random() - 0.5) * spread
+                if not free(fx, fy, 0.0, W, D):
+                    continue
+                z = height(fx, fy) + 0.05
+                bmesh.ops.create_icosphere(bms[k], subdivisions=1, radius=0.04 + rnd.random() * 0.015, matrix=Matrix.Translation((fx, fy, z)))
+    for k, col in enumerate(cols):
+        finish(new_obj(f'flowers_{k}', bms[k]), mat(f'flower_{k}', col, 0.6, 0.05))

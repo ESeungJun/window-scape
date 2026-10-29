@@ -201,6 +201,7 @@ for k, (is_in, idx) in enumerate(runs):
 for p in ROAM[::2]:
     if inside(p):
         block(p.x, p.y, 1.6)
+PATHS_TAKEN = len(lib.taken)  # 여기까지는 길 자리(이 뒤로 놓인 집·헛간·울타리·연못과만 겹침을 본다)
 
 # ── 연못: 갈대, 연잎, 오리, 둘레 돌 ──────────────────────
 REED = mat('reed', '#7f9a50', 0.95, 0.06)
@@ -435,6 +436,17 @@ smoke.parent = body
 root.location = (start.x, start.y, ROAMZ[60])
 root.scale = (1.4, 1.4, 1.4)
 
+# 길가 등불(나무보다 먼저 자리를 잡고, 집·헛간·울타리와 겹치는 자리는 건너뛴다)
+path_lamps = []
+for k, i in enumerate(range(0, n, 6)):
+    tan = (ROAM[(i + 1) % n] - ROAM[i - 1]).normalized()
+    q = ROAM[i] + Vector((-tan.y, tan.x)) * (1.25 if k % 2 else -1.25)
+    clear_ = all((q.x - a) ** 2 + (q.y - b) ** 2 > (r + 0.15) ** 2 for a, b, r in lib.taken[PATHS_TAKEN:])
+    if abs(q.x) < 7.6 and abs(q.y) < 7.6 and clear_ and (q - POND).length > POND_R + 0.6 and loop_near(q.x, q.y)[0] > 0.8 and roam_near(q.x, q.y)[0] > 1.05:
+        grow(look.lantern(f'lantern_lane_{k}', q.x, q.y), 1.4)
+        path_lamps.append(three(q, height(q.x, q.y) + 1.3))
+print('lane lamps', len(path_lamps), flush=True)
+
 # ── 나무, 덤불, 들꽃 ──────────────────────────────────
 trees = 0
 for i in range(8000):
@@ -504,16 +516,7 @@ print('far spots', len(spots), flush=True)
 tile.far_trees('far_trees', spots)
 
 # 길섶: 성이 걷는 길 양옆 들꽃과 등불
-look.wildflowers(W, D, height, 60, 0.45, where=lambda x, y: 0.95 < roam_near(x, y)[0] < 1.5)
-look.wildflowers(W, D, height, 12)
-path_lamps = []
-for k, i in enumerate(range(0, n, 7)):
-    tan = (ROAM[(i + 1) % n] - ROAM[i - 1]).normalized()
-    q = ROAM[i] + Vector((-tan.y, tan.x)) * (1.7 if k % 2 else -1.7)
-    if abs(q.x) < 7.6 and abs(q.y) < 7.6:
-        grow(look.lantern(f'lantern_lane_{k}', q.x, q.y), 1.4)
-        path_lamps.append(three(q, height(q.x, q.y) + 1.3))
-print('lane lamps', len(path_lamps), flush=True)
+look.wildflowers(W, D, height, [(60, 0.45, lambda x, y: 0.95 < roam_near(x, y)[0] < 1.5), (12, 0.7, None)])
 
 if os.environ.get('CLOSE'):
     setup_render((start.x + 6.5, start.y - 7.5, 5.0), (start.x, start.y, 2.0))

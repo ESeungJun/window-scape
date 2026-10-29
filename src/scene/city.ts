@@ -63,7 +63,8 @@ export class City extends Diorama {
     const { p, tan } = this;
     if (this.wheel) {
       const step = dt * 0.12;
-      this.spin += step;
+      // 한 바퀴마다 되돌려 오래 켜 둬도 각도가 한없이 커지지 않게
+      this.spin = (this.spin + step) % (Math.PI * 2);
       this.wheel.rotateOnWorldAxis(this.axis, step);
       // 곤돌라는 바퀴와 같은 각도만큼 축을 돈 자리로 옮기기만 한다(돌리지 않아 늘 아래로 매달린다)
       for (const g of this.gondolas) g.obj.position.copy(g.from).applyAxisAngle(this.axis, this.spin).add(this.wheel.position);

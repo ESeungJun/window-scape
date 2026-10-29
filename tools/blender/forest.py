@@ -362,8 +362,8 @@ for i in range(12):
             break
 
 # ── 동물: 풀밭의 사슴 둘·토끼 셋, 호숫가에서 물 마시는 사슴, 쓰러진 통나무 곁 여우 ──────
-look.wildflowers(W, D, height, 18, 0.8, where=lambda x, y: (Vector((x, y)) - MEADOW).length < MR - 0.2)
-look.wildflowers(W, D, height, 10, 0.6, where=lambda x, y: lake_q(x, y) > 1.5 and x - y > 1.0)
+look.wildflowers(W, D, height, [(18, 0.8, lambda x, y: (Vector((x, y)) - MEADOW).length < MR - 0.2),
+                                 (10, 0.6, lambda x, y: lake_q(x, y) > 1.5 and x - y > 1.0)])
 grow(look.deer('deer_0', MEADOW.x - 0.6, MEADOW.y + 0.4, FACE + 2.2, antlers=True), 1.5)
 grow(look.deer('deer_1', MEADOW.x + 0.7, MEADOW.y - 0.5, FACE + 0.9, graze=True), 1.4)
 grow(look.deer('deer_2', LAKE.x + 0.4, LAKE.y + LRY + 0.6, -H + 0.2, graze=True), 1.4)
