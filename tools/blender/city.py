@@ -134,8 +134,11 @@ def hfar(x, y):
 
 
 def belt(x, y):
-    """앞쪽 두 변을 감싼 공원 띠(집이 가운데 타일을 가리지 않게)"""
-    return max(abs(x) - W / 2, abs(y) - D / 2) < 8.0 and (x > W / 2 + 0.1 or y < -D / 2 - 0.1)
+    """앞쪽 두 변을 감싼 공원 띠(집이 가운데 타일을 가리지 않게)와 시가지 사이사이 공원 구역"""
+    if max(abs(x) - W / 2, abs(y) - D / 2) < 8.0 and (x > W / 2 + 0.1 or y < -D / 2 - 0.1):
+        return True
+    sx, sy = span_of(x, XS), span_of(y, YS)
+    return bool(sx and sy and (sx, sy) != (XS[0], YS[0]) and (cell((sx[0] + sx[1]) / 2, (sy[0] + sy[1]) / 2, 3.1) * 2654435761 >> 9) % 4 == 0)
 
 
 def cell(x, y, s):
@@ -448,7 +451,6 @@ row('pal_w', (-4.35, -1.8), (-4.35, 4.7), H, 0.8, (2, 4))
 row('pal_r', (5.6, PV_Y + 0.9), (5.6, 4.7), -H, 0.8, (3, 4), towers=0.2)
 row('pal_ow', (-7.0, -7.5), (-7.0, 7.5), H, 1.6, (3, 5), towers=0.1)
 row('pal_ob', (-6.0, 7.0), (7.5, 7.0), 0.0, 1.6, (3, 5), lambda c: RX0 - 0.6 < c.x < RX1 + 0.6, towers=0.1)
-row('pal_or', (7.6, -3.0), (7.6, 6.0), -H, 0.75, (2, 3))
 
 # ── 성당: 줄무늬 대리석 본당과 정면, 팔각 북 위 붉은 갈비뼈 돔과 등탑, 세 반원 제단 ─────────
 DX, DY = -2.1, 3.25  # 돔 가운데
@@ -645,6 +647,63 @@ for k, c in enumerate(('#efe4c6', '#c8453a', '#9fcbb7', '#8fb3d1')):
     o.location = (p.x, p.y, TOP + 0.02)
     o.scale = (1.25, 1.25, 1.25)
 
+# ── 대관람차: 타일 오른쪽 공원(먼 풍경 쪽), 바퀴 면이 카메라를 본다.
+#    바퀴(mover_wheel)는 앱이 제 축으로 돌리고 곤돌라(mover_gondola_k)는 늘 아래로 매달리게 따로 움직인다 ─────
+WHEEL_M = mat('wheel', '#f2efe8', 0.5, 0.03)
+GONDOLA = [mat(f'gondola_{k}', c, 0.6, 0.04) for k, c in enumerate(('#e58f6f', '#7fb3c8', '#f0c95a', '#9cc59a'))]
+WC, WR, WZ, NG = Vector((10.2, 1.0)), 2.4, 3.1, 12  # 가운데, 바퀴 반지름, 축 높이(땅에서), 곤돌라 수
+WROT = math.atan2(CAM.y, CAM.x)  # 바퀴 축(로컬 x)이 카메라 쪽을 보게
+
+
+def ring(name, r, x, m):
+    bpy.ops.mesh.primitive_torus_add(major_radius=r, minor_radius=0.035, major_segments=48, minor_segments=6, location=(x, 0, 0), rotation=(0, H, 0))
+    o = bpy.context.object
+    o.name = name
+    return finish(o, m)
+
+
+P = [cyl('wh_hub', 0.13, 0.13, 0.42, (0, 0, 0), WHEEL_M, seg=12, rot=(0, H, 0))]
+for sx in (-0.13, 0.13):
+    P.append(ring('wh_rim', WR, sx, WHEEL_M))
+    P.append(ring('wh_rim_in', WR * 0.62, sx, WHEEL_M))
+for k in range(NG):
+    a = k / NG * math.tau
+    for sx in (-0.13, 0.13):
+        P.append(box('wh_spoke', (0.025, 0.025, WR), (sx, -math.sin(a) * WR / 2, math.cos(a) * WR / 2), WHEEL_M, rot=(a, 0, 0), bevel=0))
+    P.append(box('wh_bar', (0.3, 0.03, 0.03), (0, -math.sin(a) * WR, math.cos(a) * WR), WHEEL_M, rot=(a, 0, 0), bevel=0))
+for k in range(NG * 2):
+    a = (k + 0.5) / (NG * 2) * math.tau
+    for sx in (-0.15, 0.15):
+        P.append(blob('wh_bulb', 0.035, (sx, -math.sin(a) * WR, math.cos(a) * WR), GLASS, sub=1))
+wheel = bake(P, 'mover_wheel', origin=(0, 0, 0))
+wheel.location = (WC.x, WC.y, TOP + WZ)
+wheel.rotation_euler = (0, 0, WROT)
+# 받침: 양쪽 A자 다리, 바닥판, 매표소
+P = [box('wh_base', (1.1, 2.8, 0.1), (0, 0, 0.05), CURB, bevel=0.02),
+     box('wh_booth', (0.5, 0.5, 0.55), (0.1, -1.55, 0.28), WALLS[1], bevel=0.02),
+     box('wh_booth_roof', (0.62, 0.62, 0.06), (0.1, -1.55, 0.58), COTTO[0], bevel=0.02),
+     box('wh_booth_win', (0.03, 0.3, 0.18), (0.36, -1.55, 0.34), GLASS, bevel=0.005)]
+L_ = math.hypot(1.3, WZ)
+b_ = math.atan2(1.3, WZ)
+for sx in (-0.32, 0.32):
+    for sy in (-1, 1):
+        P.append(box('wh_leg', (0.07, 0.07, L_), (sx, sy * 0.65, WZ / 2), WHEEL_M, rot=(sy * b_, 0, 0), bevel=0.01))
+    P.append(box('wh_brace', (0.04, 1.4, 0.04), (sx, 0, WZ * 0.4), WHEEL_M, bevel=0.005))
+P.append(cyl('wh_axle', 0.05, 0.05, 0.75, (0, 0, WZ), WHEEL_M, seg=8, rot=(0, H, 0)))
+stand = bake(P, 'far_wheel_stand', origin=(0, 0, 0))
+stand.location = (WC.x, WC.y, TOP)
+stand.rotation_euler = (0, 0, WROT)
+for k in range(NG):
+    a = k / NG * math.tau
+    m = GONDOLA[k % len(GONDOLA)]
+    P = [cyl('gd_hang', 0.012, 0.012, 0.14, (0, 0, -0.07), WHEEL_M, seg=6),
+         cyl('gd_roof', 0.24, 0.03, 0.1, (0, 0, -0.17), m, seg=4, rot=(0, 0, math.pi / 4), bevel=0.01),
+         box('gd_body', (0.26, 0.3, 0.24), (0, 0, -0.32), m, bevel=0.03),
+         box('gd_win', (0.27, 0.31, 0.09), (0, 0, -0.29), GLASS, bevel=0.01)]
+    g = bake(P, f'mover_gondola_{k}', origin=(0, 0, 0))
+    g.location = (WC.x + math.sin(WROT) * math.sin(a) * WR, WC.y - math.cos(WROT) * math.sin(a) * WR, TOP + WZ + math.cos(a) * WR)
+tile.mark_top(WC.x, WC.y, WR, TOP + WZ + WR + 0.4)
+
 # ── 정원의 사이프러스·우산소나무, 가로등 ─────────────────────
 
 
@@ -705,7 +764,7 @@ for sx in XS:
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         if math.hypot(cx, cy) > CITY_R or corridor(cx, cy):
             continue
-        if (cell(cx, cy, 5) % 9) == 0 and x1 - x0 > 4.5 and y1 - y0 > 4.5:
+        if (cell(cx, cy, 5) % 5) == 0 and x1 - x0 > 4.5 and y1 - y0 > 4.5:
             plazas.append((cx, cy))  # 성당 광장
         for side in range(4):
             # 길을 따라 집을 잇는다(앞 = 길 쪽), 깊이·높이·지붕이 제각각
@@ -720,7 +779,7 @@ for sx in XS:
                     x, y, rot = c, (y0 + dd / 2 if side == 0 else y1 - dd / 2), (0.0 if side == 0 else math.pi)
                 else:
                     x, y, rot = (x0 + dd / 2 if side == 2 else x1 - dd / 2), c, (-H if side == 2 else H)
-                if corridor(x, y) or (abs(x) < W / 2 + 0.3 and abs(y) < D / 2 + 0.3) or belt(x, y):
+                if corridor(x, y) or (abs(x) < W / 2 + 0.3 and abs(y) < D / 2 + 0.3) or belt(x, y) or rnd.random() < 0.22:
                     continue
                 if rnd.random() < 0.04:
                     items.append((x, y, TOP - 0.02, 0.9, 0.9, 4.0 + rnd.random() * 1.5, 0.3, rot, RUSTIC, Hr(), 'hip'))
@@ -732,7 +791,7 @@ for sx in XS:
             # 공원: 우산소나무·사이프러스
             for k in range(int((x1 - x0) * (y1 - y0) / 2.2)):
                 x, y = x0 + 0.7 + rnd.random() * (x1 - x0 - 1.4), y0 + 0.7 + rnd.random() * (y1 - y0 - 1.4)
-                if belt(x, y) and not corridor(x, y):
+                if belt(x, y) and not corridor(x, y) and (Vector((x, y)) - WC).length > 3.0:
                     spots.append((x, y, TOP - 0.03, 1.6 + rnd.random() * 0.6, ('umbrella', UMBRELLA) if k % 3 else ('cypress', CYPRESS)))
             continue
         for k in range(rnd.randint(0, 2)):
@@ -742,7 +801,7 @@ print('far houses', len(items), 'plazas', len(plazas), flush=True)
 
 # 먼 성당들(광장 가운데): 줄무늬 정면 + 박공 본당 + 종탑, 일부는 돔
 P = []
-for k, (cx, cy) in enumerate(plazas[:7]):
+for k, (cx, cy) in enumerate(plazas[:10]):
     rot = (k % 2) * H
     Q = [box('far_ch_nave', (1.4, 2.6, 1.6), (0, 0, 0.8), MARBLE if k % 2 else WALLS[3], bevel=0),
          gable_prism('far_ch_roof', 1.4, 2.6, 1.6, 0.42, COTTO[k % 3], o=0.05),
@@ -762,6 +821,21 @@ for k, (cx, cy) in enumerate(plazas[:7]):
         q.rotation_euler.z += rot
     P += Q
 bake(P, 'far_churches_distant')
+
+# 먼 언덕 위 요새(별 모양 성벽·모서리 보루·가운데 궁): 뒤쪽 언덕 능선의 랜드마크
+FORT = Vector((-16.0, 52.0))
+fz = hfar(FORT.x, FORT.y) - 0.3
+P = [box('far_fort_wall', (7.0, 7.0, 1.6), (0, 0, 0.8), RUSTIC, bevel=0), box('far_fort_top', (6.4, 6.4, 1.7), (0, 0, 0.85), GRASS, bevel=0),
+     box('far_fort_palace', (2.6, 1.8, 2.0), (0, 0.4, 2.6), WALLS[0], bevel=0)]
+for sx in (-1, 1):
+    for sy in (-1, 1):
+        P.append(cyl('far_fort_bastion', 1.0, 1.2, 1.9, (sx * 3.5, sy * 3.5, 0.95), RUSTIC, seg=5, rot=(0, 0, math.atan2(sy, sx))))
+P.append(hip_roof('far_fort_roof', 2.6, 1.8, 3.6, 0.6, COTTO[1]))
+P[-1].location.y += 0.4
+for q in P:
+    q.location = (q.location.x + FORT.x, q.location.y + FORT.y, q.location.z + fz)
+bake(P, 'far_fort_distant')
+tile.mark_top(FORT.x, FORT.y, 5.0, fz + 4.3)
 
 # 강을 건너는 먼 다리(길마다)
 P = []
@@ -812,7 +886,7 @@ tile.far_houses('far_town', items)
 tile.far_trees('far_trees', spots)
 
 # 먼 성당(종탑·돔)도 카메라 높이 격자에 넣는다(먼 집·나무는 tile 이 넣는다)
-for cx, cy in plazas[:7]:
+for cx, cy in plazas[:10]:
     tile.mark_top(cx, cy, 2.0, TOP + 4.0)
 
 setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
@@ -821,7 +895,7 @@ setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 layout = {
     'ground': tile.heightmap(hfar),
     'paths': {'ring': [three(p, TOP + 0.02) for p in ROUTE[::3]], 'river': [three(Vector((MID, y)), LEVEL) for y in (-7.2, 0, 7.2)]},
-    'lights': [three(Vector((DX, NAVE_Y0 - 0.6)), 1.0), three(FT, 1.2), three(cafe[0], 1.0), three(Vector((MID, PV_Y)), 1.0)]
+    'lights': [three(WC, TOP + WZ), three(Vector((DX, NAVE_Y0 - 0.6)), 1.0), three(FT, 1.2), three(cafe[0], 1.0), three(Vector((MID, PV_Y)), 1.0)]
               + [three(o.location, 1.2) for o in lamps[::3]],
 }
 

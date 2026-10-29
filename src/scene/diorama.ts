@@ -115,7 +115,7 @@ export abstract class Diorama implements Stage {
       }
       // 밤에 고이는 따뜻한 불빛
       for (const [x, y, z] of layout.lights ?? []) {
-        const light = new THREE.PointLight('#ffc46b', 0, 4.5, 2);
+        const light = new THREE.PointLight('#ffc46b', 0, 7, 1.6);
         light.position.set(x, y, z);
         this.group.add(light);
         this.lights.push(light);
@@ -137,9 +137,9 @@ export abstract class Diorama implements Stage {
   protected tick(_dt: number, _t: number, _env: Env): void {}
 
   update(dt: number, t: number, env: Env): void {
-    for (const l of this.lights) l.intensity = env.nightLights * 3.5;
+    for (const l of this.lights) l.intensity = env.nightLights * 7;
     for (const [m, fn] of this.seasonal) fn(env, m.color);
-    for (const m of this.glass) m.emissiveIntensity = 0.15 + env.nightLights * 2.6;
+    for (const m of this.glass) m.emissiveIntensity = 0.15 + env.nightLights * 3.4;
     const bright = waterBrightness(env);
     for (const m of [this.water, this.still]) {
       m.uniforms.time.value = t;

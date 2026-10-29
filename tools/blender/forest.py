@@ -23,6 +23,12 @@ STREAM = [Vector(p) for p in ((-4.6, 3.4), (-3.0, 2.2), (-1.2, 1.7), (0.4, 0.9),
 # 호수에서 나가는 강(타일 밖 멀리까지)
 RIVER = [Vector(p) for p in ((6.4, -2.7), (8.3, -2.4), (12.0, -1.4), (17.0, -2.9), (25.0, -1.2), (40.0, -4.0), (70.0, 0.0), (120.0, 3.0))]
 HILL = Vector((-6.6, 6.4))
+MEADOW, MR = Vector((4.3, 3.6)), 2.7  # 오른쪽 뒤 들꽃 풀밭(사슴·토끼)
+
+
+def glade(x, y):
+    """먼 숲 사이사이 트인 풀밭"""
+    return math.sin(x * 0.21 + 1.3) * math.cos(y * 0.17 - 0.4) + 0.5 * math.sin(x * 0.07 - y * 0.11) > 0.5
 
 
 def lake_q(x, y):
@@ -95,6 +101,8 @@ def paint(x, y, z):
     if q < 1.35 or poly_dist((x, y), STREAM) < 0.5 or poly_dist((x, y), RIVER) < 0.95:
         return SAND
     # 빈터 잔디가 가장자리로 갈수록 숲 바닥에 점점이 섞여 든다(바깥 먼 땅은 숲 바닥)
+    if (Vector((x, y)) - MEADOW).length < MR:
+        return GRASS
     if x - y < -4.5 or tile.speckle(x, y) < smooth(5.0, 7.9, max(abs(x), abs(y))):
         return FOREST_FLOOR
     return GRASS
@@ -109,8 +117,7 @@ def paint_far(x, y, z):
         return ROCK
     if poly_dist((x, y), RIVER) < 0.95:
         return SAND
-    # 빈터 잔디가 숲 바닥으로 점점이 섞여 든다
-    return FOREST_FLOOR
+    return GRASS if glade(x, y) else FOREST_FLOOR
 
 
 tile.surround('far_ground', W, D, 0.2, hfar, paint_far)
@@ -295,6 +302,10 @@ for k in range(14):
     p = HILL + Vector((math.cos(a), math.sin(a))) * rnd.random() * 2.6
     if abs(p.x) < 7.6 and abs(p.y) < 7.6:
         look.boulder(f'hill_rock_{k}', p.x, p.y, 0.35 + rnd.random() * 0.45)
+path_lights = []
+for k, p in enumerate((at(CAB, CROT, 1.75, -2.75), br + Vector((0.55, -0.45)), Vector((-1.5, 3.2)))):
+    grow(look.lantern(f'lantern_path_{k}', p.x, p.y), 1.3)
+    path_lights.append(three(p, height(p.x, p.y) + 1.2))
 fl = Vector((-5.2, -1.4))
 o = cyl('fallen_log', 0.16, 0.13, 2.0, (fl.x, fl.y, height(fl.x, fl.y) + 0.12), LOG, seg=10, rot=(H, 0, 0.7), bevel=0.02)
 block(fl.x, fl.y, 1.0)
@@ -303,13 +314,15 @@ block(fl.x, fl.y, 1.0)
 kinds = ['pine', 'pine', 'cloud:orange', 'pine', 'oval:red', 'pine', 'pine', 'cloud:rust', 'pine', 'oval:yellow']
 trees = 0
 for i in range(20000):
-    if trees >= 95:
+    if trees >= 52:
         break
     x, y = tile.pick(W, D, 0.35)
     front = x - y  # 클수록 카메라 쪽 모서리
+    if (Vector((x, y)) - MEADOW).length < MR + 0.3:
+        continue
     if front > 6.5 and rnd.random() < 0.92:
         continue
-    if front > 1.5 and rnd.random() < 0.8:
+    if front > 1.5 and rnd.random() < 0.95:
         continue
     h = (0.95 + rnd.random() * 0.6) * G
     kind = kinds[trees % len(kinds)]
@@ -328,7 +341,7 @@ for i in range(20000):
     trees += 1
 print('trees', trees, flush=True)
 SHROOM = mat('shroom', '#c8553d', 0.6, 0.05)
-for i in range(40):
+for i in range(24):
     for _ in range(60):
         x, y = tile.pick(W, D, 0.4)
         s_ = 0.14 + rnd.random() * 0.1
@@ -348,16 +361,26 @@ for i in range(12):
             look.boulder(f'rock_{i}', x, y, 0.16 + rnd.random() * 0.2)
             break
 
+# ── 동물: 풀밭의 사슴 둘·토끼 셋, 호숫가에서 물 마시는 사슴, 쓰러진 통나무 곁 여우 ──────
+look.wildflowers(W, D, height, 18, 0.8, where=lambda x, y: (Vector((x, y)) - MEADOW).length < MR - 0.2)
+look.wildflowers(W, D, height, 10, 0.6, where=lambda x, y: lake_q(x, y) > 1.5 and x - y > 1.0)
+grow(look.deer('deer_0', MEADOW.x - 0.6, MEADOW.y + 0.4, FACE + 2.2, antlers=True), 1.5)
+grow(look.deer('deer_1', MEADOW.x + 0.7, MEADOW.y - 0.5, FACE + 0.9, graze=True), 1.4)
+grow(look.deer('deer_2', LAKE.x + 0.4, LAKE.y + LRY + 0.6, -H + 0.2, graze=True), 1.4)
+grow(look.fox('fox', fl.x - 0.3, fl.y + 0.95, FACE - 0.5), 1.5)
+for k, (dx, dy) in enumerate(((0.9, 1.4), (-1.4, -0.9), (1.6, -1.6))):
+    grow(look.rabbit(f'mover_rabbit_{k}', MEADOW.x + dx, MEADOW.y + dy, FACE + k * 2.1), 1.4)
+
 # ── 둘레 숲: 빈터 가장자리부터 지평선까지 ────────────────────
 spots = []
-for gap, r0, r1 in ((1.25, 0.0, 22.0), (2.4, 22.0, 70.0)):
+for gap, r0, r1 in ((1.5, 0.0, 22.0), (2.6, 22.0, 70.0)):
     n = int(r1 / gap) + 1
     for i in range(-n, n + 1):
         for j in range(-n, n + 1):
             x, y = (i + rnd.random() * 0.8) * gap, (j + rnd.random() * 0.8) * gap
             d = clear(x, y)
             r = math.hypot(x, y)
-            if d < 3.0 + rnd.random() * 2.0 or not (r0 <= r < r1) or poly_dist((x, y), RIVER) < 1.4:
+            if d < 3.0 + rnd.random() * 2.0 or not (r0 <= r < r1) or poly_dist((x, y), RIVER) < 1.4 or glade(x, y):
                 continue
             z = hfar(x, y)
             if z > TOP + 7.5 or (z > TOP + 5 and rnd.random() < 0.6):
@@ -369,7 +392,7 @@ tile.far_trees('far_trees', spots)
 
 setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
-lights = [three(at(CAB, CROT, 0.4 * 1.25, -1.9), 1.1), three(camp, 0.6), three(lantern_dock, LEVEL + 1.1)]
+lights = [three(at(CAB, CROT, 0.4 * 1.25, -1.9), 1.1), three(camp, 0.6), three(lantern_dock, LEVEL + 1.1)] + path_lights
 layout = {
     'lights': lights,
     'ground': tile.heightmap(hfar),
