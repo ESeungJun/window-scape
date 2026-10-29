@@ -233,12 +233,12 @@ j.location.z = LEVEL + 0.04
 bt = jb + Vector((math.cos(ja), math.sin(ja))) * 1.3 + Vector((-math.sin(ja), math.cos(ja))) * -0.55
 o = grow(look.rowboat('boat_0', bt.x, bt.y, LEVEL - 0.03, ja + 0.1), 1.4)
 
-# 바위섬 등대
-grow(lighthouse(ISLET.x, ISLET.y + 0.1), 1.05)
+# 바위섬 등대(타일 밖이라 먼 풍경 far_: 디오라마 모양에서는 숨는다)
+grow(lighthouse(ISLET.x, ISLET.y + 0.1), 1.05).name = 'far_lighthouse'
 for k in range(10):
     a = k / 10 * math.tau
     p = ISLET + Vector((math.cos(a), math.sin(a))) * (1.1 + rnd.random() * 0.45)
-    look.boulder(f'islet_rock_{k}', p.x, p.y, 0.25 + rnd.random() * 0.25)
+    look.boulder(f'far_islet_rock_{k}', p.x, p.y, 0.25 + rnd.random() * 0.25)
 
 # ── 뒤쪽 언덕: 하얀 집 둘, 풍력 발전기 ─────────────
 WHITE = mat('wall_white', '#f3efe6', 0.9, 0.03, 8.0)
@@ -331,6 +331,7 @@ tile.far_houses('far_town', items)
 
 setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
+tile.case(W, D, height, water=LEVEL)
 layout = {
     'ground': tile.heightmap(hfar),
     # 길 중심선(양쪽 안개 속 먼 끝에서 끝난다)

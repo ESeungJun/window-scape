@@ -998,6 +998,7 @@ for cx, cy in plazas[:10]:
 setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
 # 도로 중심선(앱 좌표): 차가 오른쪽 차선을 달리게 앱이 옆으로 비낀다
+tile.case(W, D, height, water=LEVEL)
 layout = {
     'ground': tile.heightmap(hfar),
     'paths': {'ring': [three(p, TOP + 0.02) for p in ROUTE[::3]], 'river': [three(Vector((MID, y)), LEVEL) for y in (-7.2, 0, 7.2)]},

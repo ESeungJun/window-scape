@@ -7,6 +7,7 @@ import { Diorama, Smoke, pathCurve, type Layout } from './diorama';
  * 움직이는 성 테마: 초원 디오라마(모델: tools/blender/castle.py). 구리 선체 위에 돌 탑과 반목조 오두막을 얹은 성이
  * 새 다리 넷으로 지평선까지 트인 초원을 걷는다. 길은 농장 둘레 밭 사이를 크게 돌고 앞쪽에서는 연못 가까이까지 들어오며,
  * 카메라가 성 쪽으로 반쯤 따라간다. 탑 꼭대기 프로펠러가 바람 따라 돌고 굴뚝에서 연기가 오른다.
+ * 디오라마 모양에서는 둘레 땅이 없으므로 농장 안 연못 둘레 길(inner)을 돈다.
  * 특정 작품의 디자인을 옮기지 않고 '걷는 성'이라는 발상만 빌린 독자 디자인이다.
  */
 const WALK_SPEED = 0.5;
@@ -21,6 +22,8 @@ interface Leg {
 
 export class MovingCastle extends Diorama {
   private loop?: THREE.CatmullRomCurve3;
+  private wide?: THREE.CatmullRomCurve3;
+  private inner?: THREE.CatmullRomCurve3;
   private castle?: THREE.Object3D;
   private body?: THREE.Object3D;
   private prop?: THREE.Object3D;
@@ -42,7 +45,9 @@ export class MovingCastle extends Diorama {
 
   protected onLoad(root: THREE.Object3D, layout: Layout, movers: THREE.Object3D[]): void {
     if (!layout.paths) return;
-    this.loop = pathCurve(layout.paths.loop, true);
+    this.wide = pathCurve(layout.paths.loop, true);
+    if (layout.paths.inner) this.inner = pathCurve(layout.paths.inner, true);
+    this.loop = this.wide;
     this.castle = movers.find((m) => m.name === 'mover_castle');
     this.body = root.getObjectByName('castle_body');
     this.prop = root.getObjectByName('castle_prop');
@@ -54,6 +59,12 @@ export class MovingCastle extends Diorama {
       const lower = root.getObjectByName(`leg_${k}_lower`);
       if (upper && lower) this.legs.push({ upper, lower, phase });
     });
+  }
+
+  protected onCase(on: boolean): void {
+    this.loop = (on && this.inner) || this.wide;
+    // 처음 자리가 타일 밖이라 받침 모양에서 숨겨진다. 성은 늘 보인다
+    if (this.castle) this.castle.visible = true;
   }
 
   focus(out: THREE.Vector3): THREE.Vector3 {

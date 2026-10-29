@@ -8,7 +8,7 @@ import { isTheme, type Theme } from './scene/themes';
 import { World } from './scene/world';
 import { badgeText, renderHourly, renderNow, renderWeek } from './ui/forecast';
 import { setupSearch } from './ui/search';
-import { renderSettings, type Frame, type ViewOptions } from './ui/settings';
+import { renderSettings, type Frame, type Shape, type ViewOptions } from './ui/settings';
 import { Ambience } from './ui/sound';
 import { setupDesktopSettings } from './ui/desktop-settings';
 import { isDesktopApp, nativeLocation, setupWidget } from './widget';
@@ -17,6 +17,7 @@ import { MODEL_ERROR } from './scene/props';
 const SEOUL: Place = { name: '서울', lat: 37.5665, lon: 126.978 };
 const PLACE_KEY = 'sky-isle:place';
 const THEME_KEY = 'sky-isle:theme';
+const SHAPE_KEY = 'sky-isle:shape';
 const REFRESH_MS = 15 * 60 * 1000;
 const GEO_ERRORS: Record<number, string> = {
   1: '위치 권한이 없어서 현재 위치를 가져오지 못했어요.',
@@ -44,6 +45,7 @@ const state = {
   dayIndex: 0,
   view: {
     theme: loadSavedTheme(),
+    shape: loadSavedShape(),
     time: 'live',
     cond: 'live',
     season: 'live',
@@ -57,6 +59,7 @@ if (import.meta.env.DEV) {
     __view: (o: Partial<ViewOptions>) => {
       Object.assign(state.view, o);
       if (o.quality) world.setQuality(o.quality);
+      if (o.shape) world.setCase(o.shape === 'case');
       refresh();
     },
     // 성능 점검용: 그리기 호출·삼각형·지오메트리·텍스처 수
@@ -105,6 +108,23 @@ function loadSavedTheme(): Theme {
     // 저장소를 못 쓰면 기본 테마
   }
   return 'island';
+}
+
+function loadSavedShape(): Shape {
+  try {
+    if (localStorage.getItem(SHAPE_KEY) === 'case') return 'case';
+  } catch {
+    // 저장소를 못 쓰면 기본 모양
+  }
+  return 'land';
+}
+
+function saveShape(s: Shape) {
+  try {
+    localStorage.setItem(SHAPE_KEY, s);
+  } catch {
+    // 무시: 다음 방문 때 기본 모양으로 시작할 뿐이다
+  }
 }
 
 function saveTheme(t: Theme) {
@@ -283,6 +303,10 @@ function applyFrame(frame: Frame) {
 syncSettings = renderSettings($('settingsBody'), state.view, (next) => {
   if (next.quality !== state.view.quality) world.setQuality(next.quality);
   if (next.frame !== state.view.frame) applyFrame(next.frame);
+  if (next.shape !== state.view.shape) {
+    world.setCase(next.shape === 'case');
+    saveShape(next.shape);
+  }
   if (next.theme !== state.view.theme) {
     world.setTheme(next.theme);
     saveTheme(next.theme);
@@ -291,6 +315,7 @@ syncSettings = renderSettings($('settingsBody'), state.view, (next) => {
   refresh();
 });
 applyFrame(state.view.frame);
+world.setCase(state.view.shape === 'case');
 
 $('settingsBtn').addEventListener('click', () => {
   if (settingsPanel.hidden) openPanel(settingsPanel);

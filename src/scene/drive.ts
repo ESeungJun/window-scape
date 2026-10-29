@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Env } from './env';
 import type { Rng } from '../util';
-import { Diorama, pathCurve, type Layout } from './diorama';
+import { Diorama, TILE_HALF, pathCurve, type Layout } from './diorama';
 
 /**
  * 드라이브 테마: 바닷가 해안도로 디오라마(모델: tools/blender/drive.py).
@@ -51,13 +51,18 @@ export class Drive extends Diorama {
     if (this.road) {
       const len = this.road.getLength();
       for (const c of this.cars) {
-        // 끝(안개 속)에 닿으면 처음(반대편 안개 속)으로
+        // 끝(안개 속)에 닿으면 처음(반대편 안개 속)으로. 순간이동이 보이지 않게 길 끝 가까이에서 작아졌다 커진다
         c.u = (c.u + (c.speed * dt) / len) % 1;
         const u = c.dir > 0 ? c.u : 1 - c.u;
         this.road.getPointAt(u, p);
         this.road.getTangentAt(u, tan).multiplyScalar(c.dir);
         c.obj.position.set(p.x - tan.z * LANE, p.y, p.z + tan.x * LANE);
         c.obj.rotation.set(0, Math.atan2(-tan.z, tan.x), 0);
+        // 디오라마 모양: 받침 가장자리에서 작아져 사라진다
+        const k = this.cased ? (TILE_HALF - 0.2 - Math.max(Math.abs(p.x), Math.abs(p.z))) / 0.6 : (Math.min(u, 1 - u) * len) / 4;
+        const scale = THREE.MathUtils.clamp(k, 0, 1);
+        c.obj.scale.setScalar(scale);
+        c.obj.visible = scale > 0;
       }
     }
     if (this.sea && this.sail) {
