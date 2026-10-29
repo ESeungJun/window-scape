@@ -267,11 +267,6 @@ j = grow(look.jetty(jb.x, jb.y, ja, n=12), 1.4)
 j.location.z = LEVEL + 0.04
 bt = jb + Vector((math.cos(ja), math.sin(ja))) * 1.3 + Vector((-math.sin(ja), math.cos(ja))) * -0.55
 o = grow(look.rowboat('boat_0', bt.x, bt.y, LEVEL - 0.03, ja + 0.1), 1.4)
-# 사람들
-for k, (t, off, rot, shirt, pose) in enumerate(((-3.2, 0.45, FACE, CLOTH_R, 'sit'), (0.9, 0.5, FACE - 1, look.CLOTH_B, 'stand'),
-                                                (1.6, 1.4, FACE + 2, CLOTH_W, 'wave'), (-5.3, -0.1, FACE, look.CLOTH_G, 'stand'))):
-    p = beach_point(t, off)
-    grow(look.villager(f'man_{k}', p.x, p.y, rot, shirt, hat=k % 2 == 0, pose=pose), 1.3)
 
 # 바위섬 등대
 grow(lighthouse(ISLET.x, ISLET.y + 0.1), 1.05)

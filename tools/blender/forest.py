@@ -114,7 +114,8 @@ def paint_far(x, y, z):
 
 
 tile.surround('far_ground', W, D, 0.2, hfar, paint_far)
-tile.liquid_far('liquid_river_far', W, D, lambda x, y: hfar(x, y) if poly_dist((x, y), RIVER) < 1.2 else 9.0, LEVEL)
+tile.liquid_far('liquid_river_far', W, D, lambda x, y: hfar(x, y) if poly_dist((x, y), RIVER) < 1.2 else 9.0, LEVEL,
+                uv=lambda x, y, s: (0.5 + 0.5 * min(1.0, poly_dist((x, y), RIVER)), x * 0.3))  # 호수에서 +x 쪽으로 흘러 나간다
 pts = catmull(STREAM, 10)
 tile.liquid_ribbon('liquid_stream', pts, 0.5, lambda p, i: height(p.x, p.y) + 0.14 if i < 3 else LEVEL + 0.004)
 for p in pts:
