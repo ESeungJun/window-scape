@@ -806,26 +806,15 @@ print('far items', len(items), 'trees', len(spots), flush=True)
 tile.far_houses('far_town', items)
 tile.far_trees('far_trees', spots)
 
-# 카메라가 먼 집 사이로 파고들지 않게: 높이 격자(1 간격)에 집 지붕 높이를 넣는다(집 둘레 한 칸까지)
-roofs = {}
-for it in items:
-    x, y, z, w, d, h, rh = it[:7]
-    r = max(w, d) / 2 + 1.0
-    for gx in range(math.floor(x - r), math.ceil(x + r) + 1):
-        for gy in range(math.floor(y - r), math.ceil(y + r) + 1):
-            if (gx - x) ** 2 + (gy - y) ** 2 <= r * r:
-                roofs[(gx, gy)] = max(roofs.get((gx, gy), -9.0), z + h + rh)
+# 먼 성당(종탑·돔)도 카메라 높이 격자에 넣는다(먼 집·나무는 tile 이 넣는다)
 for cx, cy in plazas[:7]:
-    # 먼 성당(종탑·돔)
-    for gx in range(math.floor(cx - 3), math.ceil(cx + 3) + 1):
-        for gy in range(math.floor(cy - 3), math.ceil(cy + 3) + 1):
-            roofs[(gx, gy)] = max(roofs.get((gx, gy), -9.0), TOP + 4.0)
+    tile.mark_top(cx, cy, 2.0, TOP + 4.0)
 
 setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
 # 도로 중심선(앱 좌표): 차가 오른쪽 차선을 달리게 앱이 옆으로 비낀다
 layout = {
-    'ground': tile.heightmap(lambda x, y: max(hfar(x, y), roofs.get((round(x), round(y)), -9.0))),
+    'ground': tile.heightmap(hfar),
     'paths': {'ring': [three(p, TOP + 0.02) for p in ROUTE[::3]], 'river': [three(Vector((MID, y)), LEVEL) for y in (-7.2, 0, 7.2)]},
     'lights': [three(Vector((DX, NAVE_Y0 - 0.6)), 1.0), three(FT, 1.2), three(cafe[0], 1.0), three(Vector((MID, PV_Y)), 1.0)]
               + [three(o.location, 1.2) for o in lamps[::3]],

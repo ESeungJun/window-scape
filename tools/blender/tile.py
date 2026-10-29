@@ -10,6 +10,19 @@ import lib
 from lib import CLIFF, CLIFF_LEDGE, blob, finish, mat, new_obj, rnd
 
 SHADOW_R = 18.0  # 앱 그림자 범위(world.ts 땅 테마 ±16)를 조금 넘는 반지름
+# 먼 나무·집 꼭대기 높이(1 간격 격자). heightmap 이 땅 높이와 함께 넣어 앱 카메라가 그 속으로 파고들지 않게 한다
+TOPS = {}
+
+
+def mark_top(x, y, r, h, half=40.0):
+    """(x, y) 둘레 반지름 r(+ 두 칸)의 격자점에 꼭대기 높이 h 를 남긴다(바로 옆 나무·집 위로도 카메라가 뜨게)"""
+    if abs(x) > half + r + 2 or abs(y) > half + r + 2:
+        return
+    r += 2.0
+    for gx in range(math.floor(x - r), math.ceil(x + r) + 1):
+        for gy in range(math.floor(y - r), math.ceil(y + r) + 1):
+            if (gx - x) ** 2 + (gy - y) ** 2 <= r * r and TOPS.get((gx, gy), -9.0) < h:
+                TOPS[(gx, gy)] = h
 WATER_SIDE = mat('water_side', '#4f9cc4', 0.3, 0.04, 2.0)
 
 
@@ -262,6 +275,7 @@ def far_trees(name, spots):
     get = lambda m: bms.setdefault((m.name, near), (m, bmesh.new()))[1]
     for x, y, z, h, kind in spots:
         near = math.hypot(x, y) < SHADOW_R
+        mark_top(x, y, 0.4 * h, z + 1.05 * h)
         typ, m = kind if isinstance(kind, tuple) else (kind, kind)
         if typ == 'bush':
             # 덤불(울타리 덤불): 줄기 없이 낮은 공
@@ -308,6 +322,7 @@ def far_houses(name, items, glass=None):
         x, y, z, w, d, h, rh, rot, wall, roof = it[:10]
         style = it[10] if len(it) > 10 else 'gable'
         near = math.hypot(x, y) < SHADOW_R
+        mark_top(x, y, max(w, d) / 2, z + h + rh)
         if style == 'hip' and d > w:
             # 용마루가 긴 쪽을 따라가게 돌린다
             w, d, rot = d, w, rot + math.pi / 2
@@ -351,6 +366,17 @@ def far_houses(name, items, glass=None):
 
 
 def heightmap(hfn, half=40.0, n=81):
-    """앱 카메라가 땅속으로 들어가지 않게 쓰는 높이 격자(앱 좌표: x, z = -y). h[i * n + j] = 높이(x_i, z_j)"""
+    """앱 카메라가 땅속(과 먼 나무·집 속)으로 들어가지 않게 쓰는 높이 격자(앱 좌표: x, z = -y). h[i * n + j] = 높이(x_i, z_j).
+    TOPS 가 1 간격 격자라 half·n 은 격자점이 정수가 되게 둔다"""
+    # 가운데 땅의 나무·집도 넣는다(카메라가 타일 가장자리 큰 나무 속으로 들어가지 않게). 바닥·물처럼 넓은 것은 뺀다
+    for o in lib.bpy.data.objects:
+        if o.type != 'MESH' or o.name.startswith(('far_', 'liquid_', 'mover_')):
+            continue
+        cs = [o.matrix_world @ Vector(c) for c in o.bound_box]
+        x0, x1 = min(c.x for c in cs), max(c.x for c in cs)
+        y0, y1 = min(c.y for c in cs), max(c.y for c in cs)
+        r = max(x1 - x0, y1 - y0) / 2
+        if r < 3.0:
+            mark_top((x0 + x1) / 2, (y0 + y1) / 2, r, max(c.z for c in cs), half)
     g = [-half + 2 * half * k / (n - 1) for k in range(n)]
-    return {'half': half, 'n': n, 'h': [round(hfn(x, -z), 2) for x in g for z in g]}
+    return {'half': half, 'n': n, 'h': [round(max(hfn(x, -z), TOPS.get((round(x), round(-z)), -9.0)), 2) for x in g for z in g]}
