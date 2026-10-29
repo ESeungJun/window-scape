@@ -492,3 +492,93 @@ def car(name, color, kind='hatch'):
     P.append(box(f'{name}_bump', (0.06, Wd + 0.02, 0.06), (L / 2, 0, 0.1), STONE, bevel=0.02))
     P.append(box(f'{name}_bumpb', (0.06, Wd + 0.02, 0.06), (-L / 2, 0, 0.1), STONE, bevel=0.02))
     return bake(P, name, origin=(0, 0, 0))
+
+
+# ── 동물(앞 = +x, 기준점 = 발 가운데) ─────────────────────
+FUR_DEER = mat('fur_deer', '#a8744a', 0.9, 0.06)
+FUR_FOX = mat('fur_fox', '#d9772e', 0.9, 0.05)
+FUR_RABBIT = mat('fur_rabbit', '#a39283', 0.95, 0.05)
+FUR_WHITE = mat('fur_white', '#f2ece2', 0.95, 0.03)
+FUR_DARK = mat('fur_dark', '#3a2c24', 0.85, 0.04)
+ANTLER = mat('antler', '#d8c6a4', 0.8, 0.05)
+
+
+def deer(name, x, y, rot, graze=False, antlers=False):
+    """사슴: 가는 다리, 흰 엉덩이·꼬리, 수컷은 뿔. graze 면 고개를 숙여 풀을 뜯는다"""
+    P = [blob(f'{name}_body', 0.2, (0, 0, 0.5), FUR_DEER, scale=(1.65, 0.75, 0.8), sub=3),
+         blob(f'{name}_belly', 0.16, (0, 0, 0.44), FUR_WHITE, scale=(1.6, 0.7, 0.55), sub=2),
+         blob(f'{name}_rump', 0.09, (-0.3, 0, 0.53), FUR_WHITE, scale=(0.6, 1.1, 1.1), sub=2),
+         blob(f'{name}_tail', 0.04, (-0.35, 0, 0.6), FUR_WHITE, scale=(0.8, 0.8, 1.4), sub=1)]
+    for dx in (0.2, -0.22):
+        for dy in (-0.08, 0.08):
+            P.append(cyl(f'{name}_leg', 0.03, 0.022, 0.4, (dx, dy, 0.2), FUR_DEER, seg=6))
+            P.append(cyl(f'{name}_hoof', 0.024, 0.024, 0.04, (dx, dy, 0.02), FUR_DARK, seg=6))
+    hx, hz, tilt = (0.42, 0.34, 1.0) if graze else (0.36, 0.86, -0.35)
+    P.append(cyl(f'{name}_neck', 0.06, 0.075, 0.34, ((0.25 + hx) / 2, 0, (0.58 + hz) / 2), FUR_DEER, seg=8,
+                 rot=(0, math.atan2(hx - 0.25, hz - 0.58), 0)))
+    P.append(blob(f'{name}_head', 0.08, (hx, 0, hz), FUR_DEER, scale=(1.3, 0.85, 0.9), sub=2))
+    P.append(blob(f'{name}_snout', 0.045, (hx + 0.1, 0, hz - 0.03 - (0.03 if graze else 0)), FUR_DARK, scale=(1.0, 0.9, 0.8), sub=1))
+    for s in (-1, 1):
+        P.append(blob(f'{name}_ear', 0.04, (hx - 0.03, s * 0.08, hz + 0.07), FUR_DEER, scale=(0.5, 1.6, 0.9), sub=1))
+        if antlers:
+            P.append(cyl(f'{name}_antler', 0.012, 0.008, 0.22, (hx - 0.04, s * 0.06, hz + 0.16), ANTLER, seg=5, rot=(s * 0.4, -0.3 + tilt * 0.3, 0)))
+            P.append(cyl(f'{name}_tine', 0.01, 0.006, 0.1, (hx + 0.0, s * 0.09, hz + 0.2), ANTLER, seg=5, rot=(s * 0.2, 0.7, 0)))
+    o = bake(P, name, origin=(0, 0, 0))
+    o.location = (x, y, surface(x, y))
+    o.rotation_euler = (0, 0, rot)
+    block(x, y, 0.35)
+    return o
+
+
+def fox(name, x, y, rot):
+    """여우: 주황 털, 흰 가슴·꼬리 끝, 검은 발, 뾰족한 귀, 굵은 꼬리를 감고 앉아 있다"""
+    P = [blob(f'{name}_body', 0.13, (-0.02, 0, 0.16), FUR_FOX, scale=(1.5, 0.85, 1.0), sub=3),
+         blob(f'{name}_chest', 0.08, (0.11, 0, 0.2), FUR_WHITE, scale=(0.8, 0.9, 1.2), sub=2),
+         blob(f'{name}_head', 0.085, (0.17, 0, 0.32), FUR_FOX, scale=(1.1, 1.0, 0.9), sub=2),
+         cyl(f'{name}_snout', 0.045, 0.012, 0.13, (0.29, 0, 0.3), FUR_WHITE, seg=8, rot=(0, math.pi / 2, 0)),
+         blob(f'{name}_nose', 0.015, (0.355, 0, 0.3), FUR_DARK, sub=1),
+         blob(f'{name}_tail', 0.08, (-0.17, 0.12, 0.08), FUR_FOX, scale=(1.8, 0.8, 0.7), sub=2),
+         blob(f'{name}_tailtip', 0.05, (-0.03, 0.2, 0.06), FUR_WHITE, scale=(1.3, 0.9, 0.8), sub=1)]
+    for s in (-1, 1):
+        P.append(cyl(f'{name}_ear', 0.035, 0.004, 0.09, (0.15, s * 0.05, 0.42), FUR_FOX, seg=4, rot=(s * -0.25, 0, 0)))
+        P.append(cyl(f'{name}_leg', 0.022, 0.02, 0.16, (0.1, s * 0.05, 0.08), FUR_DARK, seg=6))
+    o = bake(P, name, origin=(0, 0, 0))
+    o.location = (x, y, surface(x, y))
+    o.rotation_euler = (0, 0, rot)
+    block(x, y, 0.25)
+    return o
+
+
+def rabbit(name, x, y, rot):
+    """토끼: 동그란 몸, 긴 귀, 흰 꼬리. 앱이 제자리에서 깡충거리게 mover_ 로 쓴다"""
+    P = [blob(f'{name}_body', 0.08, (0, 0, 0.08), FUR_RABBIT, scale=(1.3, 1.0, 1.0), sub=2),
+         blob(f'{name}_head', 0.055, (0.09, 0, 0.14), FUR_RABBIT, sub=2),
+         blob(f'{name}_tail', 0.028, (-0.11, 0, 0.1), FUR_WHITE, sub=1)]
+    for s in (-1, 1):
+        P.append(blob(f'{name}_ear', 0.02, (0.07, s * 0.022, 0.23), FUR_RABBIT, scale=(0.8, 0.6, 2.6), sub=1))
+    o = bake(P, name, origin=(0, 0, 0))
+    o.location = (x, y, surface(x, y))
+    o.rotation_euler = (0, 0, rot)
+    block(x, y, 0.15)
+    return o
+
+
+def wildflowers(W, D, height, clusters, spread=0.7, where=None):
+    """들꽃 무리(색마다 한 덩어리 flowers_k: 앱이 눈 쌓이면 숨긴다). where(x, y) 가 참인 곳에만"""
+    from tile import free, pick
+    cols = ['#ffffff', '#f2d14a', '#f29ab8', '#b9a2ff', '#ef6a5a']
+    bms = [bmesh.new() for _ in cols]
+    for c in range(clusters):
+        for _ in range(60):
+            cx, cy = pick(W, D, 0.5)
+            if free(cx, cy, 0.3, W, D) and (where is None or where(cx, cy)):
+                break
+        k = c % len(cols)
+        for j in range(9):
+            fx, fy = cx + (rnd.random() - 0.5) * spread, cy + (rnd.random() - 0.5) * spread
+            if not free(fx, fy, 0.0, W, D):
+                continue
+            z = height(fx, fy) + 0.05
+            bmesh.ops.create_icosphere(bms[k], subdivisions=1, radius=0.04 + rnd.random() * 0.015, matrix=Matrix.Translation((fx, fy, z)))
+    for k, c in enumerate(cols):
+        finish(new_obj(f'flowers_{k}', bms[k]), mat(f'flower_{k}', c, 0.6, 0.05))

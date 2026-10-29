@@ -8,7 +8,7 @@ import { Diorama, pathCurve, type Layout } from './diorama';
  * 자동차가 한쪽 바위 곶의 터널에서 나와 해안도로를 달려 반대편 터널로 들어간다(터널 안에서 처음으로 돌아간다).
  * 모래사장과 바다, 바위섬 등대, 바다를 도는 돛단배, 바람 따라 도는 언덕 위 풍력 발전기.
  */
-const LANE = 0.27;
+const LANE = 0.55;
 
 interface Car {
   obj: THREE.Object3D;
@@ -38,7 +38,8 @@ export class Drive extends Diorama {
     let k = 0;
     for (const m of movers) {
       if (m.name.startsWith('mover_car')) {
-        this.cars.push({ obj: m, u: k * 0.37, dir: k === 1 ? -1 : 1, speed: 0.9 + k * 0.12 });
+        // 같은 차로는 같은 속도(서로 겹치지 않게)
+        this.cars.push({ obj: m, u: k * 0.23, dir: k % 2 ? -1 : 1, speed: k % 2 ? 1.8 : 2.1 });
         k++;
       } else if (m.name.startsWith('mover_rotor')) this.rotors.push(m);
       else if (m.name === 'mover_sailboat') this.sail = m;

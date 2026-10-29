@@ -6,6 +6,7 @@ import { Diorama, pathCurve, type Layout } from './diorama';
  * 도시 테마: 피렌체를 모티브로 한 강변 옛 도시 디오라마(모델: tools/blender/city.py).
  * 가게가 얹힌 옛 다리, 붉은 돔 성당과 종탑, 탑이 선 시청 궁전과 광장, 강을 따라 늘어선 팔라초.
  * 자동차들이 강을 두 번 건너는 순환 도로를 오른쪽 차선으로 돌고, 나룻배 한 척이 강을 오르내린다.
+ * 강변 대관람차가 천천히 돌고, 곤돌라는 늘 아래로 매달린다.
  */
 const LANE = 0.27;
 
@@ -24,6 +25,11 @@ export class City extends Diorama {
   private boat?: THREE.Object3D;
   private boatU = 0.2;
   private boatDir = 1;
+  private wheel?: THREE.Object3D;
+  /** 바퀴 축(바퀴의 로컬 x, 카메라 쪽을 본다)과 곤돌라의 처음 자리(축에서 본 거리) */
+  private readonly axis = new THREE.Vector3(1, 0, 0);
+  private readonly gondolas: { obj: THREE.Object3D; from: THREE.Vector3 }[] = [];
+  private spin = 0;
   private readonly p = new THREE.Vector3();
   private readonly tan = new THREE.Vector3();
 
@@ -43,11 +49,25 @@ export class City extends Diorama {
         this.cars.push({ obj: m, u: k * 0.27, dir, speed: 0.75 });
         k++;
       } else if (m.name === 'mover_boat') this.boat = m;
+      else if (m.name === 'mover_wheel') this.wheel = m;
+    }
+    if (this.wheel) {
+      this.axis.applyQuaternion(this.wheel.quaternion);
+      for (const m of movers.filter((m) => m.name.startsWith('mover_gondola'))) {
+        this.gondolas.push({ obj: m, from: m.position.clone().sub(this.wheel.position) });
+      }
     }
   }
 
   protected tick(dt: number): void {
     const { p, tan } = this;
+    if (this.wheel) {
+      const step = dt * 0.12;
+      this.spin += step;
+      this.wheel.rotateOnWorldAxis(this.axis, step);
+      // 곤돌라는 바퀴와 같은 각도만큼 축을 돈 자리로 옮기기만 한다(돌리지 않아 늘 아래로 매달린다)
+      for (const g of this.gondolas) g.obj.position.copy(g.from).applyAxisAngle(this.axis, this.spin).add(this.wheel.position);
+    }
     if (this.ring) {
       const len = this.ring.getLength();
       for (const c of this.cars) {
