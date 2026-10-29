@@ -2,9 +2,12 @@ import * as THREE from 'three';
 
 const VERTEX = /* glsl */ `
   varying vec2 vUv;
+  #include <fog_pars_vertex>
   void main() {
     vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+    #include <fog_vertex>
   }
 `;
 
@@ -26,6 +29,7 @@ const RIVER_FRAGMENT = /* glsl */ `
   uniform vec3 deep;
   uniform vec3 light;
   varying vec2 vUv;
+  #include <fog_pars_fragment>
   ${NOISE}
   void main() {
     float edge = abs(vUv.x - 0.5) * 2.0;
@@ -37,6 +41,7 @@ const RIVER_FRAGMENT = /* glsl */ `
     gl_FragColor = vec4(col * bright, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
+    #include <fog_fragment>
   }
 `;
 
@@ -65,6 +70,7 @@ const FALL_FRAGMENT = /* glsl */ `
 export function riverMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: {
+      ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
       time: { value: 0 },
       bright: { value: 1 },
       deep: { value: new THREE.Color('#2f8cc4') },
@@ -73,6 +79,8 @@ export function riverMaterial(): THREE.ShaderMaterial {
     vertexShader: VERTEX,
     fragmentShader: RIVER_FRAGMENT,
     side: THREE.DoubleSide,
+    // 땅 테마의 먼 바다·강이 지평선에서 하늘에 녹아들게
+    fog: true,
   });
 }
 

@@ -67,13 +67,14 @@ export class Clouds {
   }
 
   /** 섬 아래 구름바다. 땅에 붙은 테마에서는 숨긴다 */
-  setSea(visible: boolean): void {
+  setSea(visible: boolean, scale = 1): void {
     this.sea.visible = visible;
-    // 땅 테마에서는 언덕에 걸리지 않게 하늘 구름을 띄운다
-    this.skyLayer.position.y = visible ? 0 : 5;
+    // 땅 테마에서는 언덕에 걸리지 않게 하늘 구름을 띄운다. 큰 섬(scale > 1)은 카메라가 높고 멀어서 구름도 넓고 높게
+    this.skyLayer.scale.setScalar(scale);
+    this.skyLayer.position.y = visible ? (scale - 1) * 20 : 5;
   }
 
-  update(dt: number, env: Env): void {
+  update(dt: number, env: Env, blueSea = false): void {
     this.skyMat.color.copy(WHITE).lerp(STORM_GREY, env.cloudDark);
     for (const c of this.sky) {
       const vis = smoothstep(c.threshold - 0.12, c.threshold + 0.12, env.cloudCover);
@@ -85,6 +86,7 @@ export class Clouds {
       c.obj.rotation.y = -c.angle;
     }
     this.seaMat.color.copy(WHITE).lerp(STORM_GREY, env.cloudDark * 0.55);
+    if (blueSea) this.seaMat.color.lerp(env.skyTop, 0.6);
     this.sea.rotation.y += dt * (0.004 + env.wind * 0.012);
   }
 }

@@ -26,14 +26,14 @@ so WINDOW SCAPE is a native macOS widget. It started as a single sky island and 
 <table>
   <tr>
     <td align="center" width="50%"><b>Sky Island</b><br>A floating isle with a windmill and waterfalls<br><img src="docs/images/theme-island.jpg" alt="Sky Island theme"></td>
-    <td align="center" width="50%"><b>Coastal Drive</b><br>Cars cruising a seaside highway<br><img src="docs/images/theme-drive.jpg" alt="Coastal Drive theme"></td>
+    <td align="center" width="50%"><b>Coastal Drive</b><br>Cars leaving a tunnel along the shore, a lighthouse isle and a sailboat<br><img src="docs/images/theme-drive.jpg" alt="Coastal Drive theme"></td>
   </tr>
   <tr>
-    <td align="center"><b>Pastel Town</b><br>A toy-like town ringed by a river<br><img src="docs/images/theme-city.jpg" alt="Pastel Town theme"></td>
-    <td align="center"><b>Walking Castle</b><br>A four-legged castle strolling through wildflowers<br><img src="docs/images/theme-castle.jpg" alt="Walking Castle theme"></td>
+    <td align="center"><b>Florence Town</b><br>A shop-lined bridge, a red-domed cathedral, terracotta roofs<br><img src="docs/images/theme-city.jpg" alt="Florence Town theme"></td>
+    <td align="center"><b>Walking Castle</b><br>A four-legged castle roaming a dirt road through the fields<br><img src="docs/images/theme-castle.jpg" alt="Walking Castle theme"></td>
   </tr>
   <tr>
-    <td align="center"><b>Forest</b><br>A deep forest, a winding stream and a deer<br><img src="docs/images/theme-forest.jpg" alt="Forest theme"></td>
+    <td align="center"><b>Forest</b><br>A riverside log cabin in an endless pine forest<br><img src="docs/images/theme-forest.jpg" alt="Forest theme"></td>
     <td align="center"><b>Desktop widget</b><br>Small and calm: just the scene and the temperature<br><img src="docs/images/widget.png" alt="Desktop widget"></td>
   </tr>
 </table>
@@ -49,7 +49,7 @@ inspired by the idea of a moving castle, not a copy of any film's design.
     <td align="center" width="50%"><b>Winter morning · snow</b><br><img src="docs/images/weather-snow.jpg" alt="Snow-covered winter forest"></td>
   </tr>
   <tr>
-    <td align="center"><b>Night · lit windows</b><br><img src="docs/images/weather-night.jpg" alt="Pastel town at night"></td>
+    <td align="center"><b>Night · lit windows</b><br><img src="docs/images/weather-night.jpg" alt="Florence town with lit windows at night"></td>
     <td align="center"><b>Sunset</b><br><img src="docs/images/weather-sunset.jpg" alt="Coastal road at sunset"></td>
   </tr>
 </table>

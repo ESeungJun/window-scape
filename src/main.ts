@@ -12,7 +12,7 @@ import { renderSettings, type Frame, type ViewOptions } from './ui/settings';
 import { Ambience } from './ui/sound';
 import { setupDesktopSettings } from './ui/desktop-settings';
 import { isDesktopApp, nativeLocation, setupWidget } from './widget';
-import { loadProps } from './scene/props';
+import { MODEL_ERROR } from './scene/props';
 
 const SEOUL: Place = { name: '서울', lat: 37.5665, lon: 126.978 };
 const PLACE_KEY = 'sky-isle:place';
@@ -27,8 +27,6 @@ const GEO_ERRORS: Record<number, string> = {
 const $ = <T extends Element = HTMLElement>(id: string) => document.querySelector<T>(`#${id}`)!;
 
 // 저장된 테마로 바로 시작한다(하늘섬을 먼저 만들었다 바꾸지 않게)
-// 소품 모델을 먼저 불러 둔다(테마들이 바로 복제해 쓴다)
-await loadProps();
 const world = new World($('scene'), loadSavedTheme());
 const ambience = new Ambience();
 if (isDesktopApp) {
@@ -53,6 +51,21 @@ const state = {
     frame: new URLSearchParams(location.search).has('showcase') ? 'showcase' : 'full',
   } as ViewOptions,
 };
+// 개발 서버에서만: 화면 비교용으로 시간·날씨·계절·화질을 바꾼다(예: __view({ time: 'night', cond: 'rain' }))
+if (import.meta.env.DEV) {
+  Object.assign(window, {
+    __view: (o: Partial<ViewOptions>) => {
+      Object.assign(state.view, o);
+      if (o.quality) world.setQuality(o.quality);
+      refresh();
+    },
+    // 성능 점검용: 그리기 호출·삼각형·지오메트리·텍스처 수
+    __info: () => {
+      const r = world['renderer'].info;
+      return { ...r.render, ...r.memory, programs: r.programs?.length };
+    },
+  });
+}
 
 const now = {
   badge: $('badge'), place: $('place'), temp: $('temp'), cond: $('cond'), condIcon: $('condIcon'), range: $('range'), cards: $('cards'),
@@ -117,6 +130,8 @@ function toast(message: string) {
   clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => (toastEl.hidden = true), 4500);
 }
+
+window.addEventListener(MODEL_ERROR, () => toast('풍경 모델을 불러오지 못했어요. 앱을 다시 열어 주세요.'));
 
 // ── 장면과 화면 갱신 ───────────────────────────────────
 
