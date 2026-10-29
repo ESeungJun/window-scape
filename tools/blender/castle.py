@@ -1,7 +1,7 @@
 # 움직이는 성 테마: 네 다리로 초원을 걷는 성 디오라마. 앱: public/models/castle.glb + castle_light.png(라이트맵)
 #   blender -b -P tools/blender/castle.py -- public/models glb 384
 #   ffmpeg -i public/models/castle_light.png -c:v libwebp -quality 90 public/models/castle_light.webp  (png 는 지운다)
-# 지평선까지 트인 초원(둘레는 밭 조각보·산울타리·나무숲·먼 언덕, far_*) 한가운데: 완만한 초원 언덕, 연못을 도는 농장 길, 가운데를 크게 도는 흙길(성이 걷는다), 연못과 갈대, 붉은 헛간과 곡물 창고, 양 우리, 밭, 오두막.
+# 지평선까지 구르는 초록 언덕(둘레는 오르내리는 풀밭 언덕·나무숲·먼 밭, far_*) 한가운데: 완만한 초원 언덕, 연못을 도는 농장 길, 언덕을 오르내리며 크게 도는 시골길(성이 걷는다), 연못과 갈대, 붉은 헛간과 곡물 창고, 양 우리, 밭, 오두막.
 # 성은 특정 작품의 디자인을 옮기지 않은 독자 디자인: 구리 선체 위에 돌 탑과 반목조 오두막을 얹고, 프로펠러와 빨랫줄, 새 다리 넷.
 # 성(mover_castle)과 다리·몸통은 앱이 움직인다(src/scene/castle.ts).
 import os, sys
@@ -80,16 +80,17 @@ ROAM_LINE = ROAM + [ROAM[0]]
 
 
 def far_land(x, y):
-    """먼 땅: 완만한 구릉, 더 멀리 둥근 언덕 능선"""
+    """먼 땅: 성이 오르내리는 둥근 풀밭 언덕들, 더 멀리 높은 언덕 능선"""
     r = math.hypot(x, y)
     a = math.atan2(y, x)
     ridge = 0.6 + 0.25 * math.sin(a * 2 + 0.7) + 0.15 * math.sin(a * 5 + 2.1)
-    return (TOP + 0.3 + 0.7 * math.sin(x * 0.12 + 0.6) * math.cos(y * 0.1 - 0.3) * smooth(8, 20, r)
+    rolls = 0.55 + 0.45 * math.sin(x * 0.36 + 0.8) * math.cos(y * 0.31 - 0.4) + 0.3 * math.sin(x * 0.17 - y * 0.21 + 1.1)
+    return (TOP + 0.3 + 2.6 * max(0.0, rolls) * smooth(8.5, 11.0, r)
             + 1.5 * smooth(-3.0, -10.5, (x - y) / math.sqrt(2)) + 7 * ridge * smooth(30, 80, r))
 
 
 def raw(x, y):
-    t = smooth(0, 12, max(abs(x), abs(y)) - W / 2)
+    t = smooth(0, 4, max(abs(x), abs(y)) - W / 2)
     return farm(x, y) * (1 - t) + far_land(x, y) * t
 
 
@@ -143,7 +144,8 @@ def field_of(x, y):
 
 def paint_far(x, y, z):
     d = max(abs(x), abs(y)) - W / 2
-    if d < 2.5 or z > TOP + 5.0:
+    # 가까운 언덕은 온통 풀밭, 밭 조각보는 먼 들판에만
+    if math.hypot(x, y) < 34 or z > TOP + 5.0:
         return GRASS
     return field_of(x, y)
 
@@ -168,31 +170,53 @@ for p in LOOP[::2]:
     block(p.x, p.y, 1.1)
 
 # 성이 걷는 넓은 흙길: 가운데 땅 안쪽은 굽고(roam_path), 바깥은 먼 풍경(far_roam)
-inside = lambda p: abs(p.x) < 8.3 and abs(p.y) < 8.3
+inside = lambda p: abs(p.x) < W / 2 and abs(p.y) < D / 2
+
+
+def edge_cross(a, b):
+    """a·b 사이에서 타일 가장자리를 지나는 점(길을 가장자리에서 딱 자른다: 디오라마 받침 밖으로 삐져나오지 않게)"""
+    lo, hi = 0.0, 1.0
+    for _ in range(24):
+        m = (lo + hi) / 2
+        lo, hi = (m, hi) if inside(a.lerp(b, m)) == inside(a) else (lo, m)
+    return a.lerp(b, (lo + hi) / 2)
+
+
 n = len(ROAM)
 start_i = next(i for i in range(n) if not inside(ROAM[i]) and inside(ROAM[(i + 1) % n]))
-order = [(start_i + k) % n for k in range(n + 1)]
-runs, cur, cur_in = [], [order[0]], True
-for i in order[1:]:
-    cur.append(i)
+# 구간마다 (점, 길 방향, 번호). 안팎이 바뀌는 곳에는 가장자리 점을 두 구간에 함께 넣는다
+tan_of = lambda i: (ROAM[(i + 1) % n] - ROAM[i - 1]).normalized()
+runs, cur, cur_in = [], [(ROAM[start_i], tan_of(start_i), start_i)], False
+for k in range(1, n + 1):
+    i, h = (start_i + k) % n, (start_i + k - 1) % n
     if inside(ROAM[i]) != cur_in:
+        c = (edge_cross(ROAM[h], ROAM[i]), tan_of(i), i)
+        cur.append(c)
         runs.append((cur_in, cur))
-        cur, cur_in = [i], inside(ROAM[i])
+        cur, cur_in = [c], inside(ROAM[i])
+    cur.append((ROAM[i], tan_of(i), i))
 runs.append((cur_in, cur))
-for k, (is_in, idx) in enumerate(runs):
+# 수레바퀴 자국 두 줄 사이로 풀이 자란 시골길
+LANE_DIRT = mat('lane_dirt', '#d6c095', 0.95, 0.06, 6.0)
+for k, (is_in, pts) in enumerate(runs):
     bm = bmesh.new()
-    L, R_ = [], []
-    for i in idx:
-        tan = (ROAM[(i + 1) % n] - ROAM[i - 1]).normalized()
-        for side, out in ((0.75, L), (-0.75, R_)):
-            q = ROAM[i] + Vector((-tan.y, tan.x)) * side * (0.9 + 0.15 * math.sin(i * 1.3))
-            out.append(bm.verts.new((q.x, q.y, height(q.x, q.y) + 0.04)))
-    for j in range(len(idx) - 1):
-        bm.faces.new([L[j], R_[j], R_[j + 1], L[j + 1]])
-    finish(new_obj(('roam_path_' if is_in else 'far_roam_') + str(k), bm), PATH)
+    for c in (-0.4, 0.4):
+        L, R_ = [], []
+        for p, tan, i in pts:
+            nrm = Vector((-tan.y, tan.x))
+            w = 0.3 + 0.04 * math.sin(i * 1.3 + c * 5)
+            for side, out in ((c + w, L), (c - w, R_)):
+                q = p + nrm * side
+                if is_in:
+                    q = Vector((max(-W / 2, min(W / 2, q.x)), max(-D / 2, min(D / 2, q.y))))
+                out.append(bm.verts.new((q.x, q.y, height(q.x, q.y) + 0.04)))
+        for j in range(len(pts) - 1):
+            bm.faces.new([L[j], R_[j], R_[j + 1], L[j + 1]])
+    finish(new_obj(('roam_path_' if is_in else 'far_roam_') + str(k), bm), LANE_DIRT)
 for p in ROAM[::2]:
     if inside(p):
         block(p.x, p.y, 1.6)
+PATHS_TAKEN = len(lib.taken)  # 여기까지는 길 자리(이 뒤로 놓인 집·헛간·울타리·연못과만 겹침을 본다)
 
 # ── 연못: 갈대, 연잎, 오리, 둘레 돌 ──────────────────────
 REED = mat('reed', '#7f9a50', 0.95, 0.06)
@@ -272,7 +296,7 @@ look.fence_line('pen', [corner(-1.2, -1.3), corner(1.2, -1.3), corner(1.2, 1.3),
 block(pen.x, pen.y, 1.6)
 for k, (a, b) in enumerate(((-0.5, -0.4), (0.3, 0.2), (0.6, -0.6), (-0.3, 0.7), (0.5, 0.8))):
     grow(sheep(f'sheep_{k}', pen.x + a, pen.y + b, rnd.random() * math.tau), 1.5)
-for k, (dx, dy) in enumerate(((1.4, -1.0), (0.9, -1.6), (-1.4, -1.9))):
+for k, (dx, dy) in enumerate(((1.4, -1.0), (-1.4, -1.9))):
     grow(look.haystack(f'hay_{k}', bp.x + dx, bp.y + dy))
 field = Vector((-1.4, 6.9))
 grow(look.crop_field('field', field.x, field.y, 0.0, rows=4, cols=8), 1.2)
@@ -280,7 +304,6 @@ block(field.x, field.y, 2.0)
 for k, (p, w, d, h, roof) in enumerate(((Vector((6.5, 4.2)), 1.15, 0.95, 1.0, TILE), (Vector((3.9, 6.6)), 1.1, 0.9, 0.95, ROOF_BROWN))):
     grow(look.house(f'house_{k}', p.x, p.y, FACE + 0.2 * (k - 0.5), w, d, h, roof), 1.3)
 look.fence_line('fence_a', [(6.4, 0.6), (7.4, 1.8), (7.5, 4.0)])
-look.fence_line('fence_b', [(-7.5, -2.6), (-6.6, -3.4)])
 look.signpost(1.4, 6.3, FACE + 0.4).scale = (1.3, 1.3, 1.3)
 
 # ── 걷는 성 ──────────────────────────────────────────
@@ -428,10 +451,21 @@ smoke.parent = body
 root.location = (start.x, start.y, ROAMZ[60])
 root.scale = (1.4, 1.4, 1.4)
 
+# 길가 등불(나무보다 먼저 자리를 잡고, 집·헛간·울타리와 겹치는 자리는 건너뛴다)
+path_lamps = []
+for k, i in enumerate(range(0, n, 6)):
+    tan = (ROAM[(i + 1) % n] - ROAM[i - 1]).normalized()
+    q = ROAM[i] + Vector((-tan.y, tan.x)) * (1.25 if k % 2 else -1.25)
+    clear_ = all((q.x - a) ** 2 + (q.y - b) ** 2 > (r + 0.15) ** 2 for a, b, r in lib.taken[PATHS_TAKEN:])
+    if abs(q.x) < 7.6 and abs(q.y) < 7.6 and clear_ and (q - POND).length > POND_R + 0.6 and loop_near(q.x, q.y)[0] > 0.8 and roam_near(q.x, q.y)[0] > 1.05:
+        grow(look.lantern(f'lantern_lane_{k}', q.x, q.y), 1.4)
+        path_lamps.append(three(q, height(q.x, q.y) + 1.3))
+print('lane lamps', len(path_lamps), flush=True)
+
 # ── 나무, 덤불, 들꽃 ──────────────────────────────────
 trees = 0
 for i in range(8000):
-    if trees >= 28:
+    if trees >= 18:
         break
     x, y = tile.pick(W, D, 0.4)
     if (x - y) / math.sqrt(2) > 5.0 and rnd.random() < 0.8:
@@ -452,7 +486,7 @@ for i in range(8000):
     block(x, y, 0.4 * hh)
     trees += 1
 print('trees', trees, flush=True)
-for i in range(30):
+for i in range(12):
     for _ in range(60):
         x, y = tile.pick(W, D, 0.4)
         if tile.free(x, y, 0.22, W, D):
@@ -461,21 +495,22 @@ for i in range(30):
             break
 # ── 둘레: 밭 가장자리 산울타리, 나무숲 ─────────────────────
 spots = []
+# 먼 들판의 산울타리는 지평선 가까이에만(가까운 언덕은 트인 풀밭)
 for axis_, size, off in ((0, FW, -1.3), (1, FD, 0.7)):
     for k in range(-12, 13):
         c = k * size + off
-        if tile.speckle(k, axis_ + 0.5) < 0.35:
+        if tile.speckle(k, axis_ + 0.5) < 0.6:
             continue
         t = -60.0
         while t < 60.0:
             x, y = (c, t) if axis_ == 0 else (t, c)
             t += 0.42 + rnd.random() * 0.12
-            if max(abs(x), abs(y)) - W / 2 < 2.5 or math.hypot(x, y) > 48 or rnd.random() < 0.08:
+            if max(abs(x), abs(y)) - W / 2 < 2.5 or not 34 < math.hypot(x, y) < 60 or rnd.random() < 0.08:
                 continue
             if abs(math.hypot(x, y) - 13) < 4.5 and tile.poly_dist((x, y), ROAM_LINE) < 1.4:
                 continue
             spots.append((x, y, hfar(x, y) - 0.05, 0.6 + rnd.random() * 0.25, ('bush', BUSH)))
-for g in range(70):
+for g in range(65):
     cx_, cy_ = (rnd.random() - 0.5) * 120, (rnd.random() - 0.5) * 120
     if max(abs(cx_), abs(cy_)) - W / 2 < 4 or math.hypot(cx_, cy_) > 60:
         continue
@@ -485,35 +520,31 @@ for g in range(70):
             continue
         spots.append((x, y, hfar(x, y) - 0.05, (1.6 + rnd.random() * 0.9) * 1.35,
                       'pine' if rnd.random() < 0.25 else LEAF[('green', 'orange', 'red', 'yellow', 'green')[rnd.randrange(5)]]))
+# 먼 길섶 꽃무리(타일 밖 길 양옆)
+FLOWER_MATS = [mat(f'lane_flower_{k}', c, 0.6, 0.05) for k, c in enumerate(('#ffffff', '#f2d14a', '#f29ab8', '#b9a2ff', '#ef6a5a'))]
+for i in range(0, n, 2):
+    tan = (ROAM[(i + 1) % n] - ROAM[i - 1]).normalized()
+    for e in (-1, 1):
+        q = ROAM[i] + Vector((-tan.y, tan.x)) * e * (1.1 + rnd.random() * 0.8)
+        if max(abs(q.x), abs(q.y)) - W / 2 > 0.6 and rnd.random() < 0.7:
+            spots.append((q.x, q.y, hfar(q.x, q.y) - 0.02, 0.16 + rnd.random() * 0.1, ('bush', FLOWER_MATS[rnd.randrange(5)])))
 print('far spots', len(spots), flush=True)
 tile.far_trees('far_trees', spots)
 
-cols = ['#ffffff', '#f2d14a', '#f29ab8', '#b9a2ff', '#ef6a5a']
-bms = [bmesh.new() for _ in cols]
-for c in range(40):
-    for _ in range(40):
-        cx_, cy_ = tile.pick(W, D, 0.5)
-        if tile.free(cx_, cy_, 0.3, W, D):
-            break
-    k = c % len(cols)
-    for j in range(9):
-        fx, fy = cx_ + (rnd.random() - 0.5) * 0.7, cy_ + (rnd.random() - 0.5) * 0.7
-        if not tile.free(fx, fy, 0.0, W, D):
-            continue
-        z = height(fx, fy) + 0.05
-        bmesh.ops.create_icosphere(bms[k], subdivisions=1, radius=0.04 + rnd.random() * 0.015, matrix=Matrix.Translation((fx, fy, z)))
-for k, c in enumerate(cols):
-    finish(new_obj(f'flowers_{k}', bms[k]), mat(f'flower_{k}', c, 0.6, 0.05))
+# 길섶: 성이 걷는 길 양옆 들꽃과 등불
+look.wildflowers(W, D, height, [(60, 0.45, lambda x, y: 0.95 < roam_near(x, y)[0] < 1.5), (12, 0.7, None)])
 
 if os.environ.get('CLOSE'):
     setup_render((start.x + 6.5, start.y - 7.5, 5.0), (start.x, start.y, 2.0))
 else:
     setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
+tile.case(W, D, height, water=None)
 layout = {
     'ground': tile.heightmap(hfar),
-    'paths': {'loop': [three(p, z) for p, z in list(zip(ROAM, ROAMZ))[::3]]},
-    'lights': [three(bp + CAM * 1.4, 1.2)] + [three(bpy.data.objects[f'house_{k}'].location.xy + CAM * 0.95, 1.2) for k in range(2)],
+    # inner: 디오라마 모양(둘레 땅이 없다)일 때 걷는 농장 안 연못 둘레 길
+    'paths': {'loop': [three(p, z) for p, z in list(zip(ROAM, ROAMZ))[::3]], 'inner': [three(p, z) for p, z in list(zip(LOOP, LOOPZ))[::2]]},
+    'lights': [three(bp + CAM * 1.4, 1.2)] + [three(bpy.data.objects[f'house_{k}'].location.xy + CAM * 0.95, 1.2) for k in range(2)] + path_lamps,
 }
 
 if MODE == 'glb':

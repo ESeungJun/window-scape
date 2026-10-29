@@ -10,6 +10,7 @@ import { Sway, Waterfall, waterBrightness, type Stage } from './kit';
  * 땅에 놓인 디오라마 테마(드라이브·도시·성·숲)의 공통 틀. 모양은 Blender 에서 직접 모델링한 public/models/<이름>.glb
  * (만드는 법: tools/blender/<이름>.py, 공용 바닥: tools/blender/tile.py)이고 빛은 구운 라이트맵에 하늘빛을 곱해 쓴다.
  * 가운데 네모 땅은 구운 빛, 그 둘레를 지평선까지 잇는 먼 풍경(far_*)은 탁 트인 하늘빛을 받는다.
+ * 디오라마 모양(setCase)에서는 먼 풍경과 타일 밖 물체를 숨기고 받침(case_*)을 보이며, 하늘섬처럼 구름바다 위에 뜬다.
  * 여기서는 그 위에 물(liquid_*), 폭포, 나무 흔들림, 계절 색, 밤 불빛을 입히고,
  * 움직이는 것(mover_*)은 테마별 하위 클래스가 onLoad/tick 에서 움직인다.
  */
@@ -58,9 +59,25 @@ export class Smoke {
   }
 }
 
+/** 가운데 네모 땅의 반 폭(tools/blender 의 W / 2) */
+export const TILE_HALF = 8;
+
 export abstract class Diorama implements Stage {
   readonly group = new THREE.Group();
-  readonly kind = 'ground' as const;
+  /** 디오라마 모양(둘레 땅 대신 받침)인지 */
+  protected cased = false;
+  /** 디오라마 모양에서 숨기는 것(먼 풍경·타일 밖 물체·불빛)과 보이는 받침 */
+  private readonly outside: THREE.Object3D[] = [];
+  private readonly caseParts: THREE.Object3D[] = [];
+  private readonly landDistance: number;
+  /** 받침 가장자리에서 자를 재질(받침 자신은 빼고)과 그 네 평면 */
+  private readonly clipped = new Set<THREE.Material>();
+  private readonly clipPlanes = [
+    new THREE.Plane(new THREE.Vector3(1, 0, 0), TILE_HALF + 0.02),
+    new THREE.Plane(new THREE.Vector3(-1, 0, 0), TILE_HALF + 0.02),
+    new THREE.Plane(new THREE.Vector3(0, 0, 1), TILE_HALF + 0.02),
+    new THREE.Plane(new THREE.Vector3(0, 0, -1), TILE_HALF + 0.02),
+  ];
   readonly baked = true;
   readonly view: { target: THREE.Vector3; distance: number };
   protected readonly sway = new Sway();
@@ -75,19 +92,27 @@ export abstract class Diorama implements Stage {
   private smoke?: { fx: Smoke; at: THREE.Vector3 };
   private ground?: Layout['ground'];
 
+  get kind(): 'floating' | 'ground' {
+    return this.cased ? 'floating' : 'ground';
+  }
+
   constructor(rng: Rng, name: string, distance: number) {
     this.view = { target: new THREE.Vector3(0, 0.6, 0), distance };
+    this.landDistance = distance;
     loadModel(`models/${name}.glb`, (root) => {
-      // 먼 풍경은 라이트맵 자리가 없으므로 재질을 따로 둔다(가운데 땅과 같은 재질을 쓰면 라이트맵 엉뚱한 곳을 읽는다)
+      // 먼 풍경·받침은 라이트맵 자리가 없으므로 재질을 따로 둔다(가운데 땅과 같은 재질을 쓰면 라이트맵 엉뚱한 곳을 읽는다).
+      // 받침은 가장자리에서 잘리지 않게 먼 풍경과도 따로
       const far = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+      const stand = new Map<THREE.Material, THREE.MeshStandardMaterial>();
       root.traverse((o) => {
         const mesh = o as THREE.Mesh;
-        if (!mesh.isMesh || !o.name.startsWith('far_')) return;
+        if (!mesh.isMesh || !/^(far|case)_/.test(o.name)) return;
+        const own = o.name.startsWith('case_') ? stand : far;
         const m = mesh.material as THREE.MeshStandardMaterial;
-        if (!far.has(m)) far.set(m, m.clone());
-        mesh.material = far.get(m)!;
+        if (!own.has(m)) own.set(m, m.clone());
+        mesh.material = own.get(m)!;
       });
-      for (const m of far.values()) applyOpenSky(m);
+      for (const m of [...far.values(), ...stand.values()]) applyOpenSky(m);
       trackMaterials(root, this.seasonal, this.glass);
       // 그림자 범위 밖 먼 풍경과 먼 땅은 그림자를 드리우지 않는다(그림자 그리기 비용을 아낀다)
       root.traverse((o) => {
@@ -115,20 +140,56 @@ export abstract class Diorama implements Stage {
       }
       // 밤에 고이는 따뜻한 불빛
       for (const [x, y, z] of layout.lights ?? []) {
-        const light = new THREE.PointLight('#ffc46b', 0, 4.5, 2);
+        const light = new THREE.PointLight('#ffc46b', 0, 7, 1.6);
         light.position.set(x, y, z);
         this.group.add(light);
         this.lights.push(light);
+        if (Math.max(Math.abs(x), Math.abs(z)) > TILE_HALF) this.outside.push(light);
+      }
+      // 맨 위 물체마다: 받침, 또는 디오라마 모양에서 숨길 것(먼 풍경, 가운데가 타일 밖인 것)
+      const box = new THREE.Box3();
+      const c = new THREE.Vector3();
+      root.updateMatrixWorld(true);
+      for (const o of root.children) {
+        if (o.name.startsWith('case_')) this.caseParts.push(o);
+        else if (o.name.startsWith('far_') || o.name.includes('_far')) this.outside.push(o);
+        else if (o.name !== 'layout') {
+          box.setFromObject(o).getCenter(c);
+          if (Math.max(Math.abs(c.x), Math.abs(c.z)) > TILE_HALF + 0.4) this.outside.push(o);
+        }
       }
       this.ground = layout.ground;
       if (layout.smoke) {
         this.smoke = { fx: new Smoke(rng, 60, 1.4), at: new THREE.Vector3(...layout.smoke) };
         this.group.add(this.smoke.fx.points);
       }
+      // 받침 밖으로 걸친 것(나무 가지·길 끝 등)을 자를 재질: 받침과 물(셰이더 재질) 말고 모두
+      root.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh || o.name.startsWith('case_')) return;
+        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          if ((m as THREE.MeshStandardMaterial).isMeshStandardMaterial) this.clipped.add(m);
+        }
+      });
       this.group.add(root);
       this.onLoad(root, layout, movers);
+      this.setCase(this.cased);
     });
   }
+
+  /** 디오라마 모양(true) / 지평선까지 이어진 땅(false) */
+  setCase(on: boolean): void {
+    this.cased = on;
+    // 받침까지 화면에 들어오게 조금 물러난다
+    this.view.distance = this.landDistance * (on ? 1.4 : 1);
+    for (const o of this.outside) o.visible = !on;
+    for (const o of this.caseParts) o.visible = on;
+    for (const m of this.clipped) m.clippingPlanes = on ? this.clipPlanes : null;
+    this.onCase(on);
+  }
+
+  /** 모양이 바뀔 때(테마별로 타일 밖을 다니는 것 정리) */
+  protected onCase(_on: boolean): void {}
 
   /** 모델을 다 불러온 뒤 한 번(움직이는 것 준비) */
   protected onLoad(_root: THREE.Object3D, _layout: Layout, _movers: THREE.Object3D[]): void {}
@@ -137,9 +198,9 @@ export abstract class Diorama implements Stage {
   protected tick(_dt: number, _t: number, _env: Env): void {}
 
   update(dt: number, t: number, env: Env): void {
-    for (const l of this.lights) l.intensity = env.nightLights * 3.5;
+    for (const l of this.lights) l.intensity = env.nightLights * 7;
     for (const [m, fn] of this.seasonal) fn(env, m.color);
-    for (const m of this.glass) m.emissiveIntensity = 0.15 + env.nightLights * 2.6;
+    for (const m of this.glass) m.emissiveIntensity = 0.15 + env.nightLights * 3.4;
     const bright = waterBrightness(env);
     for (const m of [this.water, this.still]) {
       m.uniforms.time.value = t;
@@ -155,6 +216,8 @@ export abstract class Diorama implements Stage {
   groundHeight(x: number, z: number): number {
     const g = this.ground;
     if (!g) return 0;
+    // 디오라마 모양: 받침 밖은 땅이 없다(카메라가 아래에서 올려다볼 수 있게)
+    if (this.cased && Math.max(Math.abs(x), Math.abs(z)) > TILE_HALF + 1) return -Infinity;
     const f = (v: number) => THREE.MathUtils.clamp(((v + g.half) / (2 * g.half)) * (g.n - 1), 0, g.n - 1.001);
     const fx = f(x);
     const fz = f(z);

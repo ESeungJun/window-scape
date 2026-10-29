@@ -46,6 +46,8 @@ export class World {
   /** 한 번 만든 테마는 보관해 두고 다시 고를 때 재사용한다 */
   private readonly stages = new Map<Theme, Stage>();
   private stage: Stage;
+  /** 땅 테마를 디오라마 모양으로 볼지 */
+  private cased = false;
   private readonly precip: Precipitation;
   private readonly sunDir = new THREE.Vector3();
   private last = performance.now() / 1000;
@@ -63,6 +65,8 @@ export class World {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // 디오라마 모양: 받침 가장자리에서 장면을 자른다(재질별 clippingPlanes)
+    this.renderer.localClippingEnabled = true;
     container.appendChild(this.renderer.domElement);
     this.skyLight = new SkyLight(this.renderer);
     this.composer = new EffectComposer(this.renderer);
@@ -146,14 +150,25 @@ export class World {
     if (next === this.stage) return;
     this.scene.remove(this.stage.group);
     this.stage = next;
+    next.setCase?.(this.cased);
     this.scene.add(next.group);
+    this.applyStageView();
+  }
+
+  /** 땅 테마의 모양: 디오라마(받침 위, 구름바다에 뜸) / 지평선까지 이어진 땅 */
+  setCase(on: boolean): void {
+    if (on === this.cased) return;
+    this.cased = on;
+    if (!this.stage.setCase) return;
+    this.stage.setCase(on);
     this.applyStageView();
   }
 
   /** 테마 종류에 맞춰 구름바다·떠다니는 섬·카메라 범위·그림자 범위를 바꾼다 */
   private applyStageView(): void {
     const floating = this.stage.kind === 'floating';
-    this.floaters.group.visible = floating;
+    // 떠다니는 작은 섬은 하늘섬에만(디오라마 받침 둘레에는 띄우지 않는다)
+    this.floaters.group.visible = floating && !this.stage.setCase;
     const c = this.controls;
     c.minDistance = floating ? 14 : 10;
     c.maxDistance = floating ? 45 : 42;

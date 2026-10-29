@@ -26,20 +26,22 @@ so WINDOW SCAPE is a native macOS widget. It started as a single sky island and 
 <table>
   <tr>
     <td align="center" width="50%"><b>Sky Island</b><br>A floating isle with a windmill and waterfalls<br><img src="docs/images/theme-island.jpg" alt="Sky Island theme"></td>
-    <td align="center" width="50%"><b>Coastal Drive</b><br>Cars leaving a tunnel along the shore, a lighthouse isle and a sailboat<br><img src="docs/images/theme-drive.jpg" alt="Coastal Drive theme"></td>
+    <td align="center" width="50%"><b>Coastal Drive</b><br>Cars on a two-lane shore road running to the horizon, a lighthouse isle and a sailboat<br><img src="docs/images/theme-drive.jpg" alt="Coastal Drive theme"></td>
   </tr>
   <tr>
-    <td align="center"><b>Florence Town</b><br>A shop-lined bridge, a red-domed cathedral, terracotta roofs<br><img src="docs/images/theme-city.jpg" alt="Florence Town theme"></td>
-    <td align="center"><b>Walking Castle</b><br>A four-legged castle roaming a dirt road through the fields<br><img src="docs/images/theme-castle.jpg" alt="Walking Castle theme"></td>
+    <td align="center"><b>Florence Town</b><br>A shop-lined bridge, a red-domed cathedral and a riverside Ferris wheel<br><img src="docs/images/theme-city.jpg" alt="Florence Town theme"></td>
+    <td align="center"><b>Walking Castle</b><br>A four-legged castle walking up and down rolling green hills<br><img src="docs/images/theme-castle.jpg" alt="Walking Castle theme"></td>
   </tr>
   <tr>
-    <td align="center"><b>Forest</b><br>A riverside log cabin in an endless pine forest<br><img src="docs/images/theme-forest.jpg" alt="Forest theme"></td>
+    <td align="center"><b>Forest</b><br>A lakeside log cabin, a wildflower meadow with deer, a fox and rabbits<br><img src="docs/images/theme-forest.jpg" alt="Forest theme"></td>
     <td align="center"><b>Desktop widget</b><br>Small and calm: just the scene and the temperature<br><img src="docs/images/widget.png" alt="Desktop widget"></td>
   </tr>
 </table>
 
 The Walking Castle is an original design — a ramshackle castle on mechanical legs —
 inspired by the idea of a moving castle, not a copy of any film's design.
+
+Apart from the sky island, each world can also be shown as a diorama on a wooden plinth instead of land running to the horizon (Settings → Shape).
 
 ## It follows the sky
 

@@ -319,7 +319,8 @@ def far_trees(name, spots):
 
 def far_houses(name, items, glass=None):
     """먼 마을: 벽 상자 + 지붕 + 층마다 창(밤에 불이 켜진다). 재질마다 한 물체.
-    items: (x, y, z, 폭, 깊이, 벽 높이, 지붕 높이, 회전, 벽 재질, 지붕 재질[, 'gable' | 'hip']). gable 은 폭 방향이 용마루"""
+    items: (x, y, z, 폭, 깊이, 벽 높이, 지붕 높이, 회전, 벽 재질, 지붕 재질[, 'gable' | 'hip' | 'flat']). gable 은 폭 방향이 용마루,
+    flat 은 지붕 재질로 얇은 옥상판(지붕 높이는 쓰지 않는다)"""
     glass = glass or lib.GLASS
     bms = {}
     get = lambda m: bms.setdefault((m.name, near), (m, bmesh.new()))[1]
@@ -336,7 +337,9 @@ def far_houses(name, items, glass=None):
         bmesh.ops.create_cube(get(wall), size=1.0, matrix=M @ lib.Matrix.Translation((0, 0, h / 2)) @ lib.Matrix.Diagonal((w, d, h, 1)))
         bm = get(roof)
         o = 0.1
-        if style == 'hip':
+        if style == 'flat':
+            bmesh.ops.create_cube(bm, size=1.0, matrix=M @ lib.Matrix.Translation((0, 0, h + 0.04)) @ lib.Matrix.Diagonal((w + 0.06, d + 0.06, 0.08, 1)))
+        elif style == 'hip':
             r_ = (w - d) / 2
             A, B, C, D_, R1, R2 = V(bm, (-w / 2 - o, -d / 2 - o, h), (w / 2 + o, -d / 2 - o, h), (w / 2 + o, d / 2 + o, h),
                                    (-w / 2 - o, d / 2 + o, h), (-r_, 0, h + rh), (r_ + 1e-3, 0, h + rh))
@@ -385,3 +388,45 @@ def heightmap(hfn, half=40.0, n=81):
             mark_top((x0 + x1) / 2, (y0 + y1) / 2, r, max(c.z for c in cs), half)
     g = [-half + 2 * half * k / (n - 1) for k in range(n)]
     return {'half': half, 'n': n, 'h': [round(max(hfn(x, -z), TOPS.get((round(x), round(-z)), -9.0)), 2) for x in g for z in g]}
+
+
+WALNUT = mat('walnut', '#6b4630', 0.55, 0.08, 6.0)
+BRASS = mat('brass', '#c9a24e', 0.3, 0.03)
+
+
+def case(W, D, hfn, water=None):
+    """디오라마 모양(앱 설정 '디오라마')일 때만 보이는 받침(case_*: 굽지 않는다). 타일 가장자리 땅 높이에서 곧게 내린
+    지층 단면 + 물 단면, 그 아래 호두나무 받침·놋쇠 띠·발·이름판. 지평선 모양에서는 앱이 숨긴다"""
+    step = 0.2
+    nx, ny = round(W / step), round(D / step)
+    edge = ([(-W / 2 + step * i, -D / 2) for i in range(nx)] + [(W / 2, -D / 2 + step * i) for i in range(ny)]
+            + [(W / 2 - step * i, D / 2) for i in range(nx)] + [(-W / 2, D / 2 - step * i) for i in range(ny)])
+    hs = [hfn(x, y) for x, y in edge]
+    z0 = min(hs) - 1.2
+    bm = bmesh.new()
+    top = [bm.verts.new((x, y, h - 0.02)) for (x, y), h in zip(edge, hs)]
+    bot = [bm.verts.new((x, y, z0)) for x, y in edge]
+    n = len(edge)
+    for i in range(n):
+        j = (i + 1) % n
+        bm.faces.new([bot[i], bot[j], top[j], top[i]])
+    bm.faces.new(bot[::-1])
+    finish(new_obj('case_soil', bm), CLIFF, smooth=False)
+    if water is not None:
+        bm = bmesh.new()
+        for i in range(n):
+            j = (i + 1) % n
+            (ax, ay), (bx, by) = edge[i], edge[j]
+            if hs[i] < water - 0.005 or hs[j] < water - 0.005:
+                bm.faces.new([bm.verts.new(v) for v in ((ax, ay, min(hs[i], water)), (bx, by, min(hs[j], water)), (bx, by, water), (ax, ay, water))])
+        for f in bm.faces:
+            if f.normal.dot(f.calc_center_median().to_2d().to_3d()) < 0:
+                f.normal_flip()
+        if bm.faces:
+            finish(new_obj('case_water', bm), WATER_SIDE, smooth=False)
+        else:
+            bm.free()
+    lib.box('case_plinth', (W + 1.6, D + 1.6, 1.6), (0, 0, z0 - 0.8), WALNUT, bevel=0.12)
+    lib.box('case_trim', (W + 1.75, D + 1.75, 0.12), (0, 0, z0 - 0.08), BRASS, bevel=0.03)
+    lib.box('case_foot', (W + 2.2, D + 2.2, 0.35), (0, 0, z0 - 1.75), WALNUT, bevel=0.1)
+    lib.box('case_plate', (4.0, 0.08, 0.6), (0, -D / 2 - 0.84, z0 - 0.8), BRASS, bevel=0.05)
