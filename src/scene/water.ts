@@ -2,9 +2,11 @@ import * as THREE from 'three';
 
 const VERTEX = /* glsl */ `
   varying vec2 vUv;
+  varying vec2 vWorld;
   #include <fog_pars_vertex>
   void main() {
     vUv = uv;
+    vWorld = (modelMatrix * vec4(position, 1.0)).xz;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
@@ -32,12 +34,38 @@ const RIVER_FRAGMENT = /* glsl */ `
   #include <fog_pars_fragment>
   ${NOISE}
   void main() {
+    // 강폭 방향으로는 촘촘하고 흐르는 방향으로는 길게 늘어진 결이 물살을 따라 천천히 내려간다
     float edge = abs(vUv.x - 0.5) * 2.0;
-    float flow = noise(vec2(vUv.x * 3.0, vUv.y * 1.2 - time * 1.4));
-    float ripple = noise(vec2(vUv.x * 7.0 + 3.0, vUv.y * 2.5 - time * 2.2));
-    vec3 col = mix(deep, light, smoothstep(0.2, 1.0, edge) * 0.6 + flow * 0.25);
-    col += smoothstep(0.72, 0.9, ripple) * 0.35;
-    col = mix(col, vec3(0.95), smoothstep(0.8, 1.0, edge) * 0.6);
+    float flow = noise(vec2(vUv.x * 4.0, vUv.y * 0.9 - time * 0.9));
+    float ripple = noise(vec2(vUv.x * 10.0 + 3.0, vUv.y * 1.8 - time * 1.3));
+    vec3 col = mix(deep, light, smoothstep(0.3, 1.0, edge) * 0.5 + flow * 0.2);
+    col += smoothstep(0.75, 0.92, ripple) * 0.14;
+    col = mix(col, vec3(0.95), smoothstep(0.85, 1.0, edge) * 0.35);
+    gl_FragColor = vec4(col * bright, 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+    #include <fog_fragment>
+  }
+`;
+
+// 고인 물(바다·호수·연못): 흐르지 않고 제자리에서 느리게 일렁인다. vUv.x: 물가 정도(0.5 깊음 ~ 1 물가), vWorld: 위치
+const STILL_FRAGMENT = /* glsl */ `
+  uniform float time;
+  uniform float bright;
+  uniform vec3 deep;
+  uniform vec3 light;
+  varying vec2 vUv;
+  varying vec2 vWorld;
+  #include <fog_pars_fragment>
+  ${NOISE}
+  void main() {
+    float shore = (vUv.x - 0.5) * 2.0;
+    float a = noise(vWorld * 0.22 + vec2(time * 0.03, time * 0.02));
+    float b = noise(vWorld * 0.7 + vec2(-time * 0.03, time * 0.04));
+    vec3 col = mix(deep, light, smoothstep(0.2, 1.0, shore) * 0.5 + (a * 0.6 + b * 0.4) * 0.14);
+    // 햇빛에 반짝이는 작은 잔물결
+    col += smoothstep(0.86, 0.97, noise(vWorld * 2.4 + vec2(time * 0.1, -time * 0.08))) * 0.07;
+    col = mix(col, vec3(0.95), smoothstep(0.88, 1.0, shore) * 0.3);
     gl_FragColor = vec4(col * bright, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -67,7 +95,7 @@ const FALL_FRAGMENT = /* glsl */ `
   }
 `;
 
-export function riverMaterial(): THREE.ShaderMaterial {
+export function riverMaterial(still = false): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: {
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
@@ -77,7 +105,7 @@ export function riverMaterial(): THREE.ShaderMaterial {
       light: { value: new THREE.Color('#8fd8f2') },
     },
     vertexShader: VERTEX,
-    fragmentShader: RIVER_FRAGMENT,
+    fragmentShader: still ? STILL_FRAGMENT : RIVER_FRAGMENT,
     side: THREE.DoubleSide,
     // 땅 테마의 먼 바다·강이 지평선에서 하늘에 녹아들게
     fog: true,

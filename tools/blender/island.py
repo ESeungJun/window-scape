@@ -98,16 +98,11 @@ o.location = (br.x, br.y, TOP)
 o.rotation_euler = (0, 0, math.atan2(tan.y, tan.x) + H)
 grow(o, 1.2)
 
-# ── 호숫가: 선착장 끝 낚시꾼, 나룻배, 물가 낚시 오두막, 모닥불 ─────
+# ── 호숫가: 선착장, 나룻배, 물가 낚시 오두막, 모닥불 ─────
 jb = at(LAKE, LROT, -0.6, -(LAKE_R[1] + 0.55))
 ja = math.atan2(LAKE.y - jb.y, LAKE.x - jb.x)
 fwd = Vector((math.cos(ja), math.sin(ja)))
 grow(look.jetty(jb.x, jb.y, ja, n=7))
-deck = TOP + 0.1 * G
-fisher = grow(look.villager('man_fish', *(jb + fwd * 0.85 * G), ja, look.CLOTH_R, hat=True, pose='sit'))
-fisher.location.z = deck - 0.2 * G
-rod = jb + fwd * 1.2 * G
-cyl('fish_rod', 0.01, 0.007, 1.1, (rod.x, rod.y, deck + 0.45), DARKWOOD, seg=5, rot=(0, 0.9, ja))
 boat = at(LAKE, LROT, 0.7, 0.3)
 grow(look.rowboat('boat', boat.x, boat.y, TOP - 0.02, LROT + 0.5), 1.2)
 hut = at(LAKE, LROT, LAKE_R[0] + 0.15, 0.35)
@@ -117,8 +112,6 @@ grow(look.campfire(camp.x, camp.y), G, 0.55)
 b0, b1 = at(camp, FACE, -0.8, 0.1), at(camp, FACE, 0.1, 0.85)
 grow(look.bench('bench_0', b0.x, b0.y, FACE - 1.4))
 grow(look.bench('bench_1', b1.x, b1.y, FACE + 3.0))
-grow(look.villager('man_bench0', *at(b0, FACE - 1.4, 0, 0.04), FACE - 1.4 - H, look.CLOTH_B, pose='sit'))
-grow(look.villager('man_bench1', *at(b1, FACE + 3.0, 0, 0.04), FACE + 3.0 - H, CLOTH_W, hat=True, pose='sit'))
 
 # ── 양 우리, 밭 ────────────────────────────────────
 pen = scr(4.6, 1.7)
@@ -140,17 +133,6 @@ block(field.x, field.y, 1.6)
 e, a = rim_at(-1.2, -1.0, 0.93)
 grow(look.lookout(e.x, e.y, a), 1.25)
 
-# ── 마을 사람들 ────────────────────────────────────
-grow(look.villager('man_vendor', *at(stall, FACE, 0.0, 0.42 * 1.3), FACE - H, look.CLOTH_G, hat=True))
-grow(look.villager('man_buyer', *at(stall, FACE, 0.15, -0.85 * 1.3), FACE + H, look.CLOTH_R))
-grow(look.villager('man_buyer2', *at(stall, FACE, -0.45, -0.95 * 1.3), FACE + H - 0.4, CLOTH_W))
-grow(look.villager('man_well', *at(plaza, FACE, 0.5, -0.3), FACE + 2.6, look.CLOTH_R))
-grow(look.villager('man_wave', *scr(-0.5, -0.6), FACE - H, look.CLOTH_B, pose='wave'))
-grow(look.villager('man_bridge', br.x, br.y, FACE - H, look.CLOTH_G)).location.z = TOP + 0.1
-grow(look.villager('man_shep', *(pen + c * -1.4 + s * -1.1), 0.4, look.CLOTH_G, hat=True))
-grow(look.villager('man_field', *at(field, FACE, 0.0, -0.9), FACE - H, look.CLOTH_B, hat=True))
-grow(look.villager('man_hut', *at(hut, LROT + H, -0.5, -0.1), LROT, CLOTH_W))
-grow(look.villager('man_look', *at(e, a, 0.85, 0.15), a, CLOTH_W), 1.25).location.z = surface(e.x, e.y) + 0.05
 
 # 길가 등불(밤에 점점이 켜진다)
 for k, (u, v) in enumerate(((-0.9, 0.7), (-2.6, -0.4), (-1.8, -1.2), (-0.5, -1.2), (0.2, 0.4), (1.3, 1.3), (2.8, 1.6),

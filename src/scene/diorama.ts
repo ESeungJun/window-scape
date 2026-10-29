@@ -64,7 +64,9 @@ export abstract class Diorama implements Stage {
   readonly baked = true;
   readonly view: { target: THREE.Vector3; distance: number };
   protected readonly sway = new Sway();
+  /** 흐르는 강(이름에 river·stream)과 고인 물(바다·호수·연못) */
   private readonly water = riverMaterial();
+  private readonly still = riverMaterial(true);
   private readonly falls: Waterfall[] = [];
   private readonly lights: THREE.PointLight[] = [];
   private readonly seasonal: [THREE.MeshStandardMaterial, (env: Env, out: THREE.Color) => void][] = [];
@@ -99,7 +101,7 @@ export abstract class Diorama implements Stage {
         if (o.name.startsWith('mover_') && !o.parent?.name.startsWith('mover_')) movers.push(o);
         const mesh = o as THREE.Mesh;
         if (mesh.isMesh && o.name.startsWith('liquid_')) {
-          mesh.material = this.water;
+          mesh.material = /river|stream/.test(o.name) ? this.water : this.still;
           mesh.castShadow = false;
         }
       });
@@ -139,8 +141,10 @@ export abstract class Diorama implements Stage {
     for (const [m, fn] of this.seasonal) fn(env, m.color);
     for (const m of this.glass) m.emissiveIntensity = 0.15 + env.nightLights * 2.6;
     const bright = waterBrightness(env);
-    this.water.uniforms.time.value = t;
-    this.water.uniforms.bright.value = bright;
+    for (const m of [this.water, this.still]) {
+      m.uniforms.time.value = t;
+      m.uniforms.bright.value = bright;
+    }
     for (const f of this.falls) f.update(dt, t, bright);
     this.sway.update(dt, env);
     for (const f of this.flowers) f.visible = env.snowCover < 0.6;

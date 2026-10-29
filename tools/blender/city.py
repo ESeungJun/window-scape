@@ -79,7 +79,7 @@ def paint(x, y, z):
 
 
 tile.build(W, D, height, paint, water=LEVEL, step=0.2, ground=True)
-tile.liquid_plane('liquid_river', W, D, height, LEVEL, step=0.2)
+tile.liquid_plane('liquid_river', W, D, height, LEVEL, step=0.2, uv=lambda x, y, s: (0.5 + (x - MID) / (RX1 - RX0), -y * 0.3))
 
 # ── 둘레 시가지: 크기가 제각각인 구역, 강은 구역 밖에서 굽이치며 이어진다 ─────────
 CITY_R = 40.0
@@ -160,7 +160,7 @@ def paint_far(x, y, z):
 
 
 tile.surround('far_ground', W, D, 0.2, hfar, paint_far, keep=6.0)
-tile.liquid_far('liquid_river_far', W, D, hfar, LEVEL, margin=0.3)
+tile.liquid_far('liquid_river_far', W, D, hfar, LEVEL, margin=0.3, uv=lambda x, y, s: (0.5 + (x - river_x(y)) / (RX1 - RX0), -y * 0.3))
 
 # 강둑: 돌벽 + 갓돌
 for sx, x in ((-1, RX0), (1, RX1)):
@@ -407,6 +407,20 @@ def tower_house(name, x, y, rot, wall):
     return o
 
 
+ROUTE_LOOP = ROUTE + ROUTE[:1]
+
+
+def on_road(c, w, d, rot):
+    """집 자리(처마 포함)가 순환 도로에 걸치는지: 바닥 네모 위 3x3 점 중 하나라도 차도 안이면"""
+    co, si = math.cos(rot), math.sin(rot)
+    for u in (-1, 0, 1):
+        for v in (-1, 0, 1):
+            dx, dy = u * (w / 2 + 0.15), v * (d / 2 + 0.15)
+            if tile.poly_dist((c.x + dx * co - dy * si, c.y + dx * si + dy * co), ROUTE_LOOP) < RW / 2 + 0.12:
+                return True
+    return False
+
+
 def row(prefix, start, end, rot, depth, floors_rng, skip=None, towers=0.0):
     """start→end 직선을 따라 폭이 제각각인 팔라초를 빈틈없이 잇는다(앞 = rot 방향의 -y)"""
     a, b = Vector(start), Vector(end)
@@ -416,7 +430,7 @@ def row(prefix, start, end, rot, depth, floors_rng, skip=None, towers=0.0):
     while t < L - 0.6:
         w = min(0.95 + rnd.random() * 1.15, L - t)
         c = a + (b - a) * ((t + w / 2) / L)
-        if not (skip and skip(c)):
+        if not (skip and skip(c)) and not on_road(c, w, depth, rot):
             wall = WALLS[rnd.randrange(len(WALLS))]
             if rnd.random() < towers and w > 0.9:
                 tower_house(f'{prefix}_t{k}', c.x, c.y, rot, RUSTIC if rnd.random() < 0.5 else wall)
@@ -434,7 +448,7 @@ row('pal_w', (-4.35, -1.8), (-4.35, 4.7), H, 0.8, (2, 4))
 row('pal_r', (5.6, PV_Y + 0.9), (5.6, 4.7), -H, 0.8, (3, 4), towers=0.2)
 row('pal_ow', (-7.0, -7.5), (-7.0, 7.5), H, 1.6, (3, 5), towers=0.1)
 row('pal_ob', (-6.0, 7.0), (7.5, 7.0), 0.0, 1.6, (3, 5), lambda c: RX0 - 0.6 < c.x < RX1 + 0.6, towers=0.1)
-row('pal_or', (7.3, -3.0), (7.3, 6.0), -H, 1.0, (2, 3))
+row('pal_or', (7.6, -3.0), (7.6, 6.0), -H, 0.75, (2, 3))
 
 # ── 성당: 줄무늬 대리석 본당과 정면, 팔각 북 위 붉은 갈비뼈 돔과 등탑, 세 반원 제단 ─────────
 DX, DY = -2.1, 3.25  # 돔 가운데
@@ -609,16 +623,7 @@ def parasol(name, x, y, cloth):
 cafe = [Vector((-0.6, -2.3)), Vector((-1.0, -1.5)), Vector((-0.5, -3.3))]
 for k, p in enumerate(cafe):
     parasol(f'parasol_{k}', p.x, p.y, (CLOTH_W, look.CLOTH_G, CLOTH_W)[k])
-for k, (p, rot, shirt, pose) in enumerate((
-        (FT + Vector((0.7, -0.4)), 2.4, look.CLOTH_B, 'stand'), (FT + Vector((-0.6, 0.6)), -0.6, CLOTH_R, 'wave'),
-        (cafe[0] + Vector((0.3, 0.05)), 3.4, look.CLOTH_G, 'sit'), (cafe[1] + Vector((-0.3, 0.1)), 0.2, CLOTH_W, 'sit'),
-        (Vector((MID - 0.6, PV_Y + 0.05)), 0.0, CLOTH_R, 'stand'), (Vector((MID + 0.5, PV_Y - 0.1)), 3.0, look.CLOTH_B, 'stand'),
-        (Vector((-2.1, -0.75)), 1.6, CLOTH_W, 'stand'), (Vector((-1.2, 0.0)), -1.2, look.CLOTH_G, 'stand'),
-        (Vector((6.0, -3.0)), 2.0, CLOTH_R, 'stand'))):
-    o = look.villager(f'man_{k}', p.x, p.y, rot, shirt, hat=k % 3 == 0, pose=pose)
-    o.scale = (1.3, 1.3, 1.3)
-    if in_river(p.x):
-        o.location.z = TOP + 0.02
+
 
 # 강: 묶어 둔 나룻배, 앱이 움직이는 배(mover_boat, 다리 아치 밑을 지나도록 낮게)
 for k, (yy, rot) in enumerate(((-3.0, 0.05), (2.6, -0.04), (-6.8, 0.0))):
