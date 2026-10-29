@@ -1,7 +1,7 @@
 # 움직이는 성 테마: 네 다리로 초원을 걷는 성 디오라마. 앱: public/models/castle.glb + castle_light.png(라이트맵)
 #   blender -b -P tools/blender/castle.py -- public/models glb 384
 #   ffmpeg -i public/models/castle_light.png -c:v libwebp -quality 90 public/models/castle_light.webp  (png 는 지운다)
-# 지평선까지 트인 초원(둘레는 밭 조각보·산울타리·나무숲·먼 언덕, far_*) 한가운데: 완만한 초원 언덕, 연못을 도는 농장 길, 가운데를 크게 도는 흙길(성이 걷는다), 연못과 갈대, 붉은 헛간과 곡물 창고, 양 우리, 밭, 오두막.
+# 지평선까지 구르는 초록 언덕(둘레는 오르내리는 풀밭 언덕·나무숲·먼 밭, far_*) 한가운데: 완만한 초원 언덕, 연못을 도는 농장 길, 언덕을 오르내리며 크게 도는 시골길(성이 걷는다), 연못과 갈대, 붉은 헛간과 곡물 창고, 양 우리, 밭, 오두막.
 # 성은 특정 작품의 디자인을 옮기지 않은 독자 디자인: 구리 선체 위에 돌 탑과 반목조 오두막을 얹고, 프로펠러와 빨랫줄, 새 다리 넷.
 # 성(mover_castle)과 다리·몸통은 앱이 움직인다(src/scene/castle.ts).
 import os, sys
@@ -80,16 +80,17 @@ ROAM_LINE = ROAM + [ROAM[0]]
 
 
 def far_land(x, y):
-    """먼 땅: 완만한 구릉, 더 멀리 둥근 언덕 능선"""
+    """먼 땅: 성이 오르내리는 둥근 풀밭 언덕들, 더 멀리 높은 언덕 능선"""
     r = math.hypot(x, y)
     a = math.atan2(y, x)
     ridge = 0.6 + 0.25 * math.sin(a * 2 + 0.7) + 0.15 * math.sin(a * 5 + 2.1)
-    return (TOP + 0.3 + 0.7 * math.sin(x * 0.12 + 0.6) * math.cos(y * 0.1 - 0.3) * smooth(8, 20, r)
+    rolls = 0.55 + 0.45 * math.sin(x * 0.36 + 0.8) * math.cos(y * 0.31 - 0.4) + 0.3 * math.sin(x * 0.17 - y * 0.21 + 1.1)
+    return (TOP + 0.3 + 2.6 * max(0.0, rolls) * smooth(8.5, 11.0, r)
             + 1.5 * smooth(-3.0, -10.5, (x - y) / math.sqrt(2)) + 7 * ridge * smooth(30, 80, r))
 
 
 def raw(x, y):
-    t = smooth(0, 12, max(abs(x), abs(y)) - W / 2)
+    t = smooth(0, 4, max(abs(x), abs(y)) - W / 2)
     return farm(x, y) * (1 - t) + far_land(x, y) * t
 
 
@@ -143,10 +144,8 @@ def field_of(x, y):
 
 def paint_far(x, y, z):
     d = max(abs(x), abs(y)) - W / 2
-    if d < 2.5 or z > TOP + 5.0:
-        return GRASS
-    # 성이 걷는 길 양옆은 밭 대신 풀밭(길섶 꽃)
-    if math.hypot(x, y) < 17 and tile.poly_dist((x, y), ROAM_LINE) < 2.4:
+    # 가까운 언덕은 온통 풀밭, 밭 조각보는 먼 들판에만
+    if math.hypot(x, y) < 34 or z > TOP + 5.0:
         return GRASS
     return field_of(x, y)
 
@@ -480,6 +479,7 @@ for i in range(12):
             break
 # ── 둘레: 밭 가장자리 산울타리, 나무숲 ─────────────────────
 spots = []
+# 먼 들판의 산울타리는 지평선 가까이에만(가까운 언덕은 트인 풀밭)
 for axis_, size, off in ((0, FW, -1.3), (1, FD, 0.7)):
     for k in range(-12, 13):
         c = k * size + off
@@ -489,12 +489,12 @@ for axis_, size, off in ((0, FW, -1.3), (1, FD, 0.7)):
         while t < 60.0:
             x, y = (c, t) if axis_ == 0 else (t, c)
             t += 0.42 + rnd.random() * 0.12
-            if max(abs(x), abs(y)) - W / 2 < 2.5 or math.hypot(x, y) > 48 or rnd.random() < 0.08:
+            if max(abs(x), abs(y)) - W / 2 < 2.5 or not 34 < math.hypot(x, y) < 60 or rnd.random() < 0.08:
                 continue
             if abs(math.hypot(x, y) - 13) < 4.5 and tile.poly_dist((x, y), ROAM_LINE) < 1.4:
                 continue
             spots.append((x, y, hfar(x, y) - 0.05, 0.6 + rnd.random() * 0.25, ('bush', BUSH)))
-for g in range(40):
+for g in range(65):
     cx_, cy_ = (rnd.random() - 0.5) * 120, (rnd.random() - 0.5) * 120
     if max(abs(cx_), abs(cy_)) - W / 2 < 4 or math.hypot(cx_, cy_) > 60:
         continue

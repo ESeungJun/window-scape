@@ -319,7 +319,8 @@ def far_trees(name, spots):
 
 def far_houses(name, items, glass=None):
     """먼 마을: 벽 상자 + 지붕 + 층마다 창(밤에 불이 켜진다). 재질마다 한 물체.
-    items: (x, y, z, 폭, 깊이, 벽 높이, 지붕 높이, 회전, 벽 재질, 지붕 재질[, 'gable' | 'hip']). gable 은 폭 방향이 용마루"""
+    items: (x, y, z, 폭, 깊이, 벽 높이, 지붕 높이, 회전, 벽 재질, 지붕 재질[, 'gable' | 'hip' | 'flat']). gable 은 폭 방향이 용마루,
+    flat 은 지붕 재질로 얇은 옥상판(지붕 높이는 쓰지 않는다)"""
     glass = glass or lib.GLASS
     bms = {}
     get = lambda m: bms.setdefault((m.name, near), (m, bmesh.new()))[1]
@@ -336,7 +337,9 @@ def far_houses(name, items, glass=None):
         bmesh.ops.create_cube(get(wall), size=1.0, matrix=M @ lib.Matrix.Translation((0, 0, h / 2)) @ lib.Matrix.Diagonal((w, d, h, 1)))
         bm = get(roof)
         o = 0.1
-        if style == 'hip':
+        if style == 'flat':
+            bmesh.ops.create_cube(bm, size=1.0, matrix=M @ lib.Matrix.Translation((0, 0, h + 0.04)) @ lib.Matrix.Diagonal((w + 0.06, d + 0.06, 0.08, 1)))
+        elif style == 'hip':
             r_ = (w - d) / 2
             A, B, C, D_, R1, R2 = V(bm, (-w / 2 - o, -d / 2 - o, h), (w / 2 + o, -d / 2 - o, h), (w / 2 + o, d / 2 + o, h),
                                    (-w / 2 - o, d / 2 + o, h), (-r_, 0, h + rh), (r_ + 1e-3, 0, h + rh))

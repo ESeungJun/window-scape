@@ -38,6 +38,9 @@ COTTO = [banded(f'cotto_{k}', c, 14.0, 0.3, 0.3, 0.85) for k, c in enumerate((
 WALLS = [mat(f'wall_{k}', c, 0.9, 0.05, 8.0) for k, c in enumerate(
     ('#ead3a4', '#ddb47c', '#cf9a68', '#f0e4c8', '#dcae92', '#e7c88e', '#c99872', '#efdcb4'))]
 SHUT = [mat('shut_g', '#55684a', 0.8, 0.04), mat('shut_b', '#6a5038', 0.8, 0.04)]
+# 좁은 박공집·가게집의 파스텔 벽, 가게 차양 천
+PASTEL = [mat(f'pastel_{k}', c, 0.9, 0.05, 8.0) for k, c in enumerate(('#e9b8a0', '#f0d58a', '#b9cdb0', '#c9b6d6', '#e8a87c', '#a9c4d4'))]
+AWN = [mat(f'awn_{k}', c, 0.95, 0.03) for k, c in enumerate(('#b5473a', '#3f6e5a', '#2f5b7c', '#d9a23b'))]
 CYPRESS = mat('cypress', '#3f5a3d', 0.95, 0.08, 5.0)
 UMBRELLA = mat('umbrella', '#5f7a45', 0.95, 0.08, 5.0)
 OLIVE = mat('olive', '#9aa17a', 0.95, 0.08, 5.0)
@@ -410,6 +413,95 @@ def tower_house(name, x, y, rot, wall):
     return o
 
 
+def gable_end(name, w, z, rise, y, m):
+    """박공 끝 세모 벽(앞뒤)"""
+    bm = bmesh.new()
+    f = bm.faces.new([bm.verts.new(v) for v in ((-w / 2, y, z), (w / 2, y, z), (0, y, z + rise))])
+    bmesh.ops.solidify(bm, geom=[f], thickness=0.03)
+    return finish(new_obj(name, bm), m, smooth=False)
+
+
+def narrow_house(name, x, y, rot, w, d, wall, roof):
+    """좁고 높은 박공집(앞 = -y, 박공이 길 쪽): 파스텔 벽, 층마다 창 둘, 꽃 상자 발코니, 1층 가게 차양"""
+    floors = rnd.randint(3, 4)
+    fh = 0.5
+    top = 0.55 + floors * fh
+    P = [box(f'{name}_wall', (w, d, top), (0, 0, top / 2), wall, bevel=0.01)]
+    rise = w * 0.42
+    P.append(gable_prism(f'{name}_roof', w, d + 0.1, top, rise, roof, o=0.06))
+    for e in (-1, 1):
+        P.append(gable_end(f'{name}_gable', w, top, rise, e * (d / 2 - 0.015), wall))
+    fy = -d / 2 - 0.015
+    awn = AWN[rnd.randrange(len(AWN))]
+    P.append(box(f'{name}_shop', (w * 0.7, 0.03, 0.34), (0, fy, 0.24), GLASS, bevel=0))
+    P.append(box(f'{name}_awn', (w * 0.82, 0.3, 0.03), (0, fy - 0.13, 0.48), awn, rot=(-0.35, 0, 0), bevel=0.005))
+    for f in range(floors):
+        cz = 0.55 + f * fh + fh * 0.5
+        for cx in (-w * 0.22, w * 0.22):
+            P.append(box(f'{name}_glass', (0.13, 0.02, 0.24), (cx, fy, cz), GLASS, bevel=0))
+            P.append(box(f'{name}_glassb', (0.13, 0.02, 0.24), (cx, -fy, cz), GLASS, bevel=0))
+        if f == 0:
+            P.append(box(f'{name}_balc', (w * 0.75, 0.16, 0.04), (0, fy - 0.07, cz - 0.15), PIETRA, bevel=0.005))
+            P.append(box(f'{name}_flowers', (w * 0.7, 0.08, 0.06), (0, fy - 0.11, cz - 0.1), look.CLOTH_G, bevel=0.01))
+    P.append(cyl(f'{name}_rose', 0.07, 0.07, 0.02, (0, fy, top + rise * 0.35), GLASS, seg=10, rot=(H, 0, 0)))
+    o = bake(P, name, origin=(0, 0, 0))
+    o.location = (x, y, TOP - 0.02)
+    o.rotation_euler = (0, 0, rot)
+    block(x, y, max(w, d) * 0.6)
+    return o
+
+
+def shop_house(name, x, y, rot, w, d, wall):
+    """낮은 가게집(앞 = -y): 2층, 줄무늬 차양 가게 둘, 평지붕 옥상 정원(난간·화분 덤불)"""
+    top = 1.45
+    P = [box(f'{name}_wall', (w, d, top), (0, 0, top / 2), wall, bevel=0.01),
+         box(f'{name}_parapet', (w + 0.04, d + 0.04, 0.1), (0, 0, top + 0.05), PIETRA, bevel=0.005),
+         box(f'{name}_terrace', (w - 0.1, d - 0.1, 0.02), (0, 0, top + 0.06), PIAZZA, bevel=0)]
+    fy = -d / 2 - 0.015
+    n = max(1, round(w / 0.55))
+    for k in range(n):
+        cx = (k - (n - 1) / 2) * w / n
+        awn = AWN[(k + rnd.randrange(4)) % len(AWN)]
+        P.append(box(f'{name}_shop', (w / n * 0.7, 0.03, 0.36), (cx, fy, 0.25), GLASS, bevel=0))
+        for j in range(4):
+            P.append(box(f'{name}_awn', (w / n * 0.8 / 4, 0.34, 0.025), (cx + (j - 1.5) * w / n * 0.2, fy - 0.15, 0.52),
+                         awn if j % 2 else CLOTH_W, rot=(-0.4, 0, 0), bevel=0.003))
+        P.append(box(f'{name}_win', (0.15, 0.02, 0.26), (cx, fy, 1.0), GLASS, bevel=0))
+        P.append(box(f'{name}_winb', (0.15, 0.02, 0.26), (cx, -fy, 1.0), GLASS, bevel=0))
+    for k in range(rnd.randint(2, 4)):
+        px, py = (rnd.random() - 0.5) * (w - 0.4), (rnd.random() - 0.5) * (d - 0.4)
+        P.append(cyl(f'{name}_pot', 0.06, 0.05, 0.1, (px, py, top + 0.12), TILE, seg=8))
+        P.append(blob(f'{name}_plant', 0.11, (px, py, top + 0.25), UMBRELLA, sub=1))
+    o = bake(P, name, origin=(0, 0, 0))
+    o.location = (x, y, TOP - 0.02)
+    o.rotation_euler = (0, 0, rot)
+    block(x, y, max(w, d) * 0.6)
+    return o
+
+
+def chapel(name, x, y, rot, w, d):
+    """작은 성당(앞 = -y): 줄무늬 대리석 정면, 둥근 장미창, 박공 지붕, 꼭대기 종 박공"""
+    h = 1.5
+    P = [box(f'{name}_nave', (w, d, h), (0, 0, h / 2), MARBLE, bevel=0.01)]
+    rise = w * 0.32
+    P.append(gable_prism(f'{name}_roof', w, d + 0.08, h, rise, COTTO[2], o=0.05))
+    fy = -d / 2 - 0.02
+    P.append(gable_end(f'{name}_front', w + 0.06, h, rise + 0.03, fy, MARBLE))
+    P.append(gable_end(f'{name}_back', w, h, rise, d / 2 - 0.015, MARBLE))
+    for z in (0.5, 1.0):
+        P.append(box(f'{name}_band', (w + 0.07, 0.03, 0.06), (0, fy - 0.01, z), MARBLE_G, bevel=0))
+    P.append(cyl(f'{name}_rose', 0.17, 0.17, 0.03, (0, fy - 0.02, 1.22), GLASS, seg=14, rot=(H, 0, 0)))
+    P.append(cyl(f'{name}_rosef', 0.21, 0.21, 0.02, (0, fy - 0.01, 1.22), MARBLE_G, seg=14, rot=(H, 0, 0)))
+    P.append(box(f'{name}_door', (0.3, 0.03, 0.46), (0, fy - 0.02, 0.23), DARKWOOD, bevel=0))
+    P.append(box(f'{name}_bell', (0.34, 0.08, 0.42), (0, fy + 0.04, h + rise + 0.2), MARBLE, bevel=0.01))
+    P.append(box(f'{name}_bellh', (0.14, 0.1, 0.18), (0, fy + 0.04, h + rise + 0.2), GOLD, bevel=0))
+    o = bake(P, name, origin=(0, 0, 0))
+    o.location = (x, y, TOP - 0.02)
+    o.rotation_euler = (0, 0, rot)
+    block(x, y, max(w, d) * 0.6)
+    return o
+
+
 ROUTE_LOOP = ROUTE + ROUTE[:1]
 
 
@@ -435,8 +527,15 @@ def row(prefix, start, end, rot, depth, floors_rng, skip=None, towers=0.0):
         c = a + (b - a) * ((t + w / 2) / L)
         if not (skip and skip(c)) and not on_road(c, w, depth, rot):
             wall = WALLS[rnd.randrange(len(WALLS))]
-            if rnd.random() < towers and w > 0.9:
+            u = rnd.random()
+            if u < towers and w > 0.9:
                 tower_house(f'{prefix}_t{k}', c.x, c.y, rot, RUSTIC if rnd.random() < 0.5 else wall)
+            elif u < towers + 0.22 and w < 1.4:
+                narrow_house(f'{prefix}_n{k}', c.x, c.y, rot, w - 0.03, depth * 0.9, PASTEL[rnd.randrange(len(PASTEL))], COTTO[rnd.randrange(3)])
+            elif u < towers + 0.4:
+                shop_house(f'{prefix}_s{k}', c.x, c.y, rot, w - 0.03, depth * 0.85, PASTEL[rnd.randrange(len(PASTEL))] if rnd.random() < 0.5 else wall)
+            elif u < towers + 0.47 and w > 1.2:
+                chapel(f'{prefix}_c{k}', c.x, c.y, rot, min(w - 0.1, 1.3), depth * 0.95)
             else:
                 palazzo(f'{prefix}_{k}', c.x, c.y, rot, w - 0.03, depth * (0.85 + rnd.random() * 0.15), rnd.randint(*floors_rng), wall,
                         COTTO[rnd.randrange(3)], altana=w > 1.3 and rnd.random() < 0.35)
@@ -784,9 +883,16 @@ for sx in XS:
                 if rnd.random() < 0.04:
                     items.append((x, y, TOP - 0.02, 0.9, 0.9, 4.0 + rnd.random() * 1.5, 0.3, rot, RUSTIC, Hr(), 'hip'))
                     continue
-                floors = rnd.randint(2, 5)
-                items.append((x, y, TOP - 0.02, w - 0.04, dd, 0.7 + floors * 0.55, min(w, dd) * 0.28, rot, Wr(), Hr(),
-                              'hip' if rnd.random() < 0.8 else 'gable'))
+                # 높이·모양이 제각각: 낮은 집(1~2층)부터 높은 팔라초(5~6층), 모임·박공(파스텔 좁은 집)·평지붕(옥상 테라스)
+                u = rnd.random()
+                floors = rnd.choice((1, 2)) if u < 0.3 else rnd.choice((3, 4)) if u < 0.8 else rnd.choice((5, 6))
+                v = rnd.random()
+                if v < 0.25:
+                    items.append((x, y, TOP - 0.02, min(w, 1.2) - 0.04, dd, 0.7 + floors * 0.55, 0.5, rot, PASTEL[rnd.randrange(len(PASTEL))], Hr(), 'gable'))
+                elif v < 0.42:
+                    items.append((x, y, TOP - 0.02, w - 0.04, dd, 0.7 + floors * 0.55, 0.0, rot, Wr(), PIAZZA, 'flat'))
+                else:
+                    items.append((x, y, TOP - 0.02, w - 0.04, dd, 0.7 + floors * 0.55, min(w, dd) * 0.28, rot, Wr(), Hr(), 'hip'))
         if belt(cx, cy):
             # 공원: 우산소나무·사이프러스
             for k in range(int((x1 - x0) * (y1 - y0) / 2.2)):

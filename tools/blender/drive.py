@@ -1,9 +1,9 @@
 # 드라이브 테마: 바닷가 해안도로 디오라마. 앱: public/models/drive.glb + drive_light.png(라이트맵)
 #   blender -b -P tools/blender/drive.py -- public/models glb 384
 #   ffmpeg -i public/models/drive_light.png -c:v libwebp -quality 90 public/models/drive_light.webp  (png 는 지운다)
-# 해안도로 한 구간: 양쪽 바위 곶의 터널을 잇는 길(자동차가 터널에서 나와 다른 터널로 들어간다),
-# 앞쪽은 모래사장과 바다(파라솔·탈의실·선착장), 돛단배, 뒤쪽 언덕엔 하얀 집들·휴게소·풍력 발전기.
-# 둘레(far_*)는 수평선까지 트인 바다와 바위섬 등대, 곶 너머로 이어지는 해안도로, 뒤쪽 산과 바닷가 마을.
+# 해안도로 한 구간: 터널 없이 양쪽 지평선 끝까지 쭉 이어지는 2차로(자동차가 안개 속에서 나와 반대편 안개 속으로 달려간다),
+# 앞쪽은 모래사장과 바다(파라솔·구조대 망루·선착장), 돛단배, 뒤쪽 언덕엔 하얀 집 둘·풍력 발전기.
+# 둘레(far_*)는 수평선까지 트인 바다와 바위섬 등대, 해안을 따라 이어지는 길, 뒤쪽 산과 바닷가 마을.
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import *  # noqa: F401,F403
@@ -19,10 +19,8 @@ LEVEL = TOP - 0.06
 ROADZ = TOP + 0.3
 ROAD = [Vector(p) for p in ((-70.0, -64.0), (-42.0, -38.5), (-26.0, -24.5), (-15.0, -13.0), (-9.2, -8.0), (-6.6, -5.9), (-3.6, -3.5),
                             (-0.6, -0.9), (2.4, 1.3), (5.0, 3.7), (7.0, 6.0), (9.2, 8.0), (15.5, 13.0), (26.0, 23.0), (42.0, 38.0), (70.0, 63.0))]
-CAPES = [Vector((-7.6, -7.6)), Vector((7.7, 7.6))]
 ISLET = Vector((16.3, 0.7))  # 등대 바위섬(타일 밖 바다, 옆으로 비켜 앞을 가리지 않게)
 ISLES = [Vector((26.0, -20.0)), Vector((40.0, -6.0)), Vector((15.0, -34.0))]  # 먼 바위섬
-PORTAL = 2.7  # 곶 중심에서 터널 입구까지
 RW = 1.15  # 도로 반폭(2차로)
 
 
@@ -33,31 +31,19 @@ def coast(x, y):
     return s, 2.9 + 0.45 * math.sin(t * 0.55 + 1.0) + 0.25 * math.sin(t * 1.3)
 
 
-def cape(x, y):
-    return min((Vector((x, y)) - c).length for c in CAPES)
-
-
 def height(x, y):
     s, sc = coast(x, y)
     # 뒤쪽 언덕
     h = ROADZ + 2.6 * smooth(-1.0, -9.5, s) + 0.35 * math.sin(x * 0.9 + 0.4) * math.cos(y * 0.7) * smooth(-1.0, -5.0, s)
     # 길은 평평하게
     rd = poly_dist((x, y), ROAD)
-    cd = cape(x, y)
-    if cd > PORTAL:
-        h = h + (ROADZ - h) * smooth(RW + 1.0, RW + 0.2, rd)
+    h = h + (ROADZ - h) * smooth(RW + 1.0, RW + 0.2, rd)
     # 바닷가: 길 → 모래사장 → 바다
     if s > sc - 1.2:
         k = smooth(sc - 1.2, sc + 1.6, s)
         h = h + (TOP - 0.02 - h) * k
     if s > sc + 1.6:
         h = TOP - 0.02 - 0.95 * smooth(sc + 1.6, sc + 4.0, s)
-    # 터널이 뚫린 바위 곶(터널 입구까지는 길 폭만큼 깎아 낸다)
-    ch = ROADZ + 3.6 * smooth(4.2, 1.6, cd) + 0.35 * math.sin(x * 2.1) * math.sin(y * 1.7) * smooth(4.2, 2.4, cd)
-    if cd > PORTAL - 0.05:
-        ch = ch + (ROADZ - ch) * smooth(RW + 0.4, RW + 0.1, rd)
-    if cd < 4.2:
-        h = max(h, ch)
     return h
 
 
@@ -90,7 +76,7 @@ def slope(x, y):
 
 def paint(x, y, z):
     s, sc = coast(x, y)
-    if ((cape(x, y) < 3.8 and z > ROADZ + 0.5) or min((Vector((x, y)) - c).length for c in [ISLET] + ISLES) < 1.8 or slope(x, y) > 1.3
+    if (min((Vector((x, y)) - c).length for c in [ISLET] + ISLES) < 1.8 or slope(x, y) > 1.3
             or z > ROADZ + 5.5):
         return ROCK
     if s > sc - 0.6 and z < ROADZ - 0.05:
@@ -103,7 +89,7 @@ tile.liquid_plane('liquid_sea', W, D, height, LEVEL)
 def paint_far(x, y, z):
     """먼 땅: 기울기 대신 높이로만 고른다(길쭉한 먼 칸에서 기울기 판정이 들쭉날쭉해진다)"""
     s_, sc_ = coast(x, y)
-    if (cape(x, y) < 3.8 and z > ROADZ + 0.5) or min((Vector((x, y)) - c).length for c in [ISLET] + ISLES) < 1.8 or z > ROADZ + 5.5:
+    if min((Vector((x, y)) - c).length for c in [ISLET] + ISLES) < 1.8 or z > ROADZ + 5.5:
         return ROCK
     if s_ > sc_ - 0.6 and z < ROADZ - 0.05:
         return SAND
@@ -113,92 +99,82 @@ def paint_far(x, y, z):
 tile.surround('far_ground', W, D, 0.2, hfar, paint_far, keep=10.0)
 tile.liquid_far('liquid_sea_far', W, D, hfar, LEVEL, margin=0.8)
 
-# ── 도로: 아스팔트, 가운데 점선, 바다 쪽 가드레일 ─────────────
+# ── 도로: 2차로 아스팔트(가장자리 실선·가운데 점선), 바다 쪽 가드레일. 터널 없이 양쪽 지평선까지 쭉 ─────────────
 ASPHALT = mat('road', '#5d5f66', 0.9, 0.05, 10.0)
 PAINT_W = mat('paint', '#f1ece0', 0.8, 0.02)
 RAIL = mat('rail', '#d8dadf', 0.5, 0.03)
-full = catmull(ROAD, 12)
-pts = [p for p in full if abs(p.x) < 7.95 and abs(p.y) < 7.95]
-bm = bmesh.new()
-L, R_ = [], []
-for i, p in enumerate(pts):
-    tan = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
-    side = Vector((-tan.y, tan.x)) * RW
-    L.append(bm.verts.new((p.x + side.x, p.y + side.y, ROADZ + 0.015)))
-    R_.append(bm.verts.new((p.x - side.x, p.y - side.y, ROADZ + 0.015)))
-for i in range(len(pts) - 1):
-    bm.faces.new([L[i], R_[i], R_[i + 1], L[i + 1]])
-finish(new_obj('road', bm), ASPHALT)
+full = [p for p in catmull(ROAD, 12) if p.length < 60]
+inside = lambda p, m: abs(p.x) < W / 2 - m and abs(p.y) < D / 2 - m
+
+
+def runs(pts, keep):
+    """keep(p) 가 참인 연속 구간들"""
+    out, cur = [], []
+    for p in pts:
+        if keep(p):
+            cur.append(p)
+        elif cur:
+            out.append(cur)
+            cur = []
+    return out + ([cur] if cur else [])
+
+
+def road_parts(name, pts, z):
+    """한 구간의 아스팔트·가장자리 실선·가운데 점선·바다 쪽 가드레일"""
+    n = len(pts)
+    nrm = [Vector((-t.y, t.x)) for t in [(pts[min(i + 1, n - 1)] - pts[max(i - 1, 0)]).normalized() for i in range(n)]]
+
+    def strip(oname, a, b, zz, m):
+        bm = bmesh.new()
+        L = [bm.verts.new((p.x + q.x * a, p.y + q.y * a, zz)) for p, q in zip(pts, nrm)]
+        R_ = [bm.verts.new((p.x + q.x * b, p.y + q.y * b, zz)) for p, q in zip(pts, nrm)]
+        for i in range(n - 1):
+            bm.faces.new([L[i], R_[i], R_[i + 1], L[i + 1]])
+        return finish(new_obj(oname, bm), m, smooth=False)
+
+    strip(name, RW, -RW, z, ASPHALT)
+    P = [strip('edge_l', RW - 0.09, RW - 0.16, z + 0.007, PAINT_W), strip('edge_r', -RW + 0.16, -RW + 0.09, z + 0.007, PAINT_W)]
+    # 길이를 따라 재며 점선과 가드레일 기둥(0.8 마다)을 놓는다
+    dist, posts = 0.0, []
+    for i in range(1, n):
+        a, b = pts[i - 1], pts[i]
+        seg, tan = (b - a).length, (b - a).normalized()
+        sea = nrm[i] if nrm[i].x - nrm[i].y > 0 else -nrm[i]
+        t = 0.0
+        while t < seg:
+            c, d = a + tan * t, dist + t
+            if d % 0.9 < 0.45 and (d + 0.1) % 0.9 >= 0.1:
+                P.append(box('dash', (0.4, 0.07, 0.01), (c.x, c.y, z + 0.007), PAINT_W, rot=(0, 0, math.atan2(tan.y, tan.x)), bevel=0))
+            if d % 0.8 < 0.1:
+                posts.append((c + sea * (RW + 0.22), math.atan2(tan.y, tan.x)))
+            t += 0.1
+        dist += seg
+    for k, (q, rot) in enumerate(posts):
+        P.append(box('rail_post', (0.05, 0.05, 0.26), (q.x, q.y, ROADZ + 0.13), RAIL, bevel=0.01))
+        if k + 1 < len(posts):
+            q2 = posts[k + 1][0]
+            m = (q + q2) / 2
+            P.append(box('rail_bar', ((q2 - q).length + 0.04, 0.03, 0.08), (m.x, m.y, ROADZ + 0.22), RAIL,
+                         rot=(0, 0, math.atan2(q2.y - q.y, q2.x - q.x)), bevel=0.01))
+    bake(P, f'{name}_marks')
+
+
+pts = runs(full, lambda p: inside(p, 0.05))[0]
+road_parts('road', pts, ROADZ + 0.015)
 for p in pts:
     block(p.x, p.y, RW + 0.5)
-# 곶 너머로 이어지는 길(먼 풍경)
-for k, part in enumerate(([p for p in full if p.x < -7.6 and p.y < -7.6], [p for p in full if p.x > 7.6 and p.y > 7.6])):
-    bm = bmesh.new()
-    L, R_ = [], []
-    for i, p in enumerate(part):
-        tan = (part[min(i + 1, len(part) - 1)] - part[max(i - 1, 0)]).normalized()
-        side = Vector((-tan.y, tan.x)) * RW
-        L.append(bm.verts.new((p.x + side.x, p.y + side.y, ROADZ + 0.015)))
-        R_.append(bm.verts.new((p.x - side.x, p.y - side.y, ROADZ + 0.015)))
-    for i in range(len(part) - 1):
-        bm.faces.new([L[i], R_[i], R_[i + 1], L[i + 1]])
-    finish(new_obj(f'far_road_{k}', bm), ASPHALT)
-dist = 0.0
-P = []
-for i in range(1, len(pts)):
-    a, b = pts[i - 1], pts[i]
-    seg = (b - a).length
-    tan = (b - a).normalized()
-    t = 0.0
-    while t < seg:
-        c = a + tan * t
-        if (dist + t) % 0.9 < 0.45 and cape(c.x, c.y) > PORTAL and abs(c.x) < 7.9 and abs(c.y) < 7.9:
-            P.append(box('dash', (0.4, 0.07, 0.01), (c.x, c.y, ROADZ + 0.022), PAINT_W, rot=(0, 0, math.atan2(tan.y, tan.x)), bevel=0))
-        t += 0.1
-    dist += seg
-bake(P, 'road_dash')
-# 양쪽 가장자리 흰 실선(터널 안쪽은 빼고)
-bm = bmesh.new()
-for sgn in (1, -1):
-    prev = None
-    for i, p in enumerate(pts):
-        tan = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
-        n = Vector((-tan.y, tan.x)) * sgn
-        a, b = p + n * (RW - 0.16), p + n * (RW - 0.09)
-        cur = (bm.verts.new((a.x, a.y, ROADZ + 0.022)), bm.verts.new((b.x, b.y, ROADZ + 0.022))) if cape(p.x, p.y) > PORTAL else None
-        if prev and cur:
-            bm.faces.new([prev[0], prev[1], cur[1], cur[0]] if sgn > 0 else [prev[1], prev[0], cur[0], cur[1]])
-        prev = cur
-finish(new_obj('road_edge', bm), PAINT_W, smooth=False)
-P = []
-for i in range(0, len(pts) - 1, 2):
-    p = pts[i]
-    tan = (pts[i + 1] - p).normalized()
-    side = Vector((tan.y, -tan.x))  # 바다 쪽(오른쪽 아래)
-    if side.x - side.y < 0:
-        side = -side
-    q = p + side * (RW + 0.22)
-    if cape(q.x, q.y) < PORTAL + 0.7 or abs(q.x) > 7.8 or abs(q.y) > 7.8:
-        continue
-    P.append(box('rail_post', (0.05, 0.05, 0.26), (q.x, q.y, ROADZ + 0.13), RAIL, bevel=0.01))
-    nxt = pts[min(i + 2, len(pts) - 1)] + side * (RW + 0.22)
-    if cape(nxt.x, nxt.y) >= PORTAL + 0.7:
-        m = (q + nxt) / 2
-        P.append(box('rail_bar', ((nxt - q).length + 0.04, 0.03, 0.08), (m.x, m.y, ROADZ + 0.22), RAIL, rot=(0, 0, math.atan2(tan.y, tan.x)),
-                     bevel=0.01))
-bake(P, 'guardrail')
+for k, part in enumerate(runs(full, lambda p: not inside(p, 0.25))):
+    road_parts(f'far_road_{k}', part, ROADZ + 0.012)
 # 언덕 쪽 길가 가로등(밤에 길을 밝힌다)
 LAMP_POLE = mat('lamp_pole', '#4a4e57', 0.6, 0.03)
 lamps = []
-for i in range(6, len(pts) - 6, 13):
+for i in range(5, len(pts) - 4, 13):
     p = pts[i]
     tan = (pts[i + 1] - p).normalized()
     side = Vector((-tan.y, tan.x))
     if side.x - side.y > 0:
         side = -side
     q = p + side * (RW + 0.3)
-    if cape(q.x, q.y) < PORTAL + 0.8:
-        continue
     P = [cyl('lp_base', 0.08, 0.09, 0.1, (0, 0, 0.05), STONE, seg=8),
          cyl('lp_post', 0.035, 0.045, 1.9, (0, 0, 0.95), LAMP_POLE, seg=8),
          box('lp_arm', (0.5, 0.05, 0.05), (0.22, 0, 1.88), LAMP_POLE, bevel=0.01),
@@ -211,42 +187,6 @@ for i in range(6, len(pts) - 6, 13):
     block(q.x, q.y, 0.3)
     lamps.append(o)
 print('lamps', len(lamps), flush=True)
-
-# 터널 입구: 곶 둘레를 지나는 곳에 돌 아치(안은 어둡게)
-TUNNEL = mat('tunnel', '#2a2a2e', 1.0, 0.0)
-portals = []
-for c, far in [(c, f) for c in CAPES for f in (False, True)]:
-    # 타일 쪽 입구와 곶 너머(먼 풍경 쪽) 출구
-    side = [k for k in range(1, len(full) - 1) if ((full[k] - c).dot(c) > 0) == far]
-    i = min(side, key=lambda k: abs((full[k] - c).length - PORTAL))
-    p = full[i]
-    tan = (full[i + 1] - full[i - 1]).normalized()
-    if (c - p).dot(tan) < 0:
-        tan = -tan
-    face = box('portal', (0.5, 1.95, 1.6), (0, 0, 0.75), STONE, bevel=0.03)
-    cut = box('portal_cut', (1.2, 1.24, 0.75), (0, 0, 0.3), STONE, bevel=0.0)
-    cut2 = cyl('portal_cut2', 0.62, 0.62, 1.2, (0, 0, 0.65), STONE, seg=24, rot=(0, H, 0))
-    for c_ in (cut, cut2):
-        b = face.modifiers.new('cut', 'BOOLEAN')
-        b.operation = 'DIFFERENCE'
-        b.object = c_
-    bpy.context.view_layer.objects.active = face
-    for m in list(face.modifiers):
-        bpy.ops.object.modifier_apply(modifier=m.name)
-    for c_ in (cut, cut2):
-        bpy.data.objects.remove(c_, do_unlink=True)
-    PP = [face, box('portal_dark', (1.6, 1.3, 1.5), (0.85, 0, 0.6), TUNNEL, bevel=0.0),
-          box('portal_cap', (0.62, 2.05, 0.12), (0, 0, 1.58), STONE, bevel=0.03)]
-    for k in range(11):
-        a = math.pi * k / 10
-        PP.append(box('portal_vous', (0.54, 0.12, 0.16), (-0.02, math.cos(a) * 0.68, 0.65 + math.sin(a) * 0.68), CLIFF_LEDGE[1],
-                      rot=(-a + H, 0, 0), bevel=0.012))
-    o = bake(PP, f'{"far_" if far else ""}portal_{len(portals)}', origin=(0, 0, 0))
-    o.location = (p.x, p.y, ROADZ)
-    o.rotation_euler = (0, 0, math.atan2(tan.y, tan.x))
-    # 2차로가 들어가게 넓히되 높이는 곶 높이에 맞춘다
-    o.scale = (1.3, 1.78, 1.45)
-    portals.append(p)
 
 # ── 바닷가 ─────────────────────────────────────────
 def beach_point(t, off):
@@ -333,9 +273,10 @@ sb = bake(P, 'mover_sailboat', origin=(0, 0, 0))
 sb.location = (5.8, -2.8, LEVEL)
 sb.scale = (1.3, 1.3, 1.3)
 
-for k, (c, kind) in enumerate((('#d9583b', 'hatch'), ('#4f86b8', 'van'), ('#e8c25a', 'hatch'), ('#f2f0ea', 'hatch'), ('#5b9a6e', 'van'))):
+for k, (c, kind) in enumerate((('#d9583b', 'hatch'), ('#4f86b8', 'van'), ('#e8c25a', 'hatch'), ('#f2f0ea', 'hatch'), ('#5b9a6e', 'van'),
+                                ('#c8453a', 'hatch'), ('#8fb3d1', 'hatch'), ('#efe4c6', 'van'))):
     o = look.car(f'mover_car_{k}', c, kind)
-    p = pts[20 + k * 10]
+    p = pts[(5 + k * 9) % len(pts)]
     o.location = (p.x, p.y, ROADZ + 0.02)
     o.scale = (1.5, 1.5, 1.5)
 
@@ -346,7 +287,7 @@ for i in range(10000):
         break
     x, y = tile.pick(W, D, 0.4)
     s, sc = coast(x, y)
-    if s > sc - 1.3 or cape(x, y) < 2.4 or poly_dist((x, y), ROAD) < RW + 1.2:
+    if s > sc - 1.3 or poly_dist((x, y), ROAD) < RW + 1.2:
         continue
     hh = (0.95 + rnd.random() * 0.5) * 1.3
     if not tile.free(x, y, 0.42 * hh, W, D, 0.4):
@@ -366,19 +307,12 @@ for i in range(12):
             bush(f'bush_{i}', x, y, 0.2)
             block(x, y, 0.22)
             break
-for c in CAPES:
-    for k in range(7):
-        a = rnd.random() * math.tau
-        p = c + Vector((math.cos(a), math.sin(a))) * (1.0 + rnd.random() * 1.6)
-        if abs(p.x) < 7.7 and abs(p.y) < 7.7 and poly_dist(p, ROAD) > RW + 0.6:
-            look.boulder(f'cape_rock_{k}_{c.x:.0f}', p.x, p.y, 0.3 + rnd.random() * 0.35)
-
 # ── 둘레: 언덕의 나무, 해안 마을 둘 ───────────────────────
 spots, items = [], []
 for k in range(900):
     x, y = (rnd.random() - 0.5) * 120, (rnd.random() - 0.5) * 120
     s_, sc_ = coast(x, y)
-    if max(abs(x), abs(y)) - W / 2 < 2.0 or s_ > sc_ - 1.6 or math.hypot(x, y) > 62 or poly_dist((x, y), ROAD) < RW + 1.0 or cape(x, y) < 3.4:
+    if max(abs(x), abs(y)) - W / 2 < 2.0 or s_ > sc_ - 1.6 or math.hypot(x, y) > 62 or poly_dist((x, y), ROAD) < RW + 1.0:
         continue
     z = hfar(x, y)
     if z > ROADZ + 7.5:
@@ -399,8 +333,8 @@ setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
 layout = {
     'ground': tile.heightmap(hfar),
-    # 길 중심선(터널 안에서 시작해 반대편 터널 안에서 끝난다)
-    'paths': {'road': [three(p, ROADZ + 0.02) for p in pts[::2]],
+    # 길 중심선(양쪽 안개 속 먼 끝에서 끝난다)
+    'paths': {'road': [three(p, ROADZ + 0.02) for p in full if p.length < 45][::2],
               'sea': [three(Vector((5.9 + math.cos(a) * 1.5 + math.sin(a) * 0.2, -2.9 + math.sin(a) * 1.1 + math.cos(a) * 0.9)), LEVEL)
                       for a in [k / 12 * math.tau for k in range(12)]]},
     'lights': [three(ISLET, TOP + 4.4)] + [three(o.location, ROADZ + 1.9) for o in lamps]
