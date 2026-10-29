@@ -27,11 +27,11 @@ Blender랑 Three.js로 만든 작은 섬이 실제 날씨에 맞춰 바뀌는 �
 <table>
   <tr>
     <td align="center" width="50%"><b>하늘섬</b><br>구름바다 위에 뜬 섬, 풍차와 폭포<br><img src="docs/images/theme-island.jpg" alt="하늘섬 테마"></td>
-    <td align="center" width="50%"><b>해안도로</b><br>터널 사이 2차로 해안도로를 달리는 자동차, 등대 섬과 돛단배<br><img src="docs/images/theme-drive.jpg" alt="해안도로 테마"></td>
+    <td align="center" width="50%"><b>해안도로</b><br>지평선까지 뻗은 2차로 해안도로를 달리는 자동차, 등대 섬과 돛단배<br><img src="docs/images/theme-drive.jpg" alt="해안도로 테마"></td>
   </tr>
   <tr>
     <td align="center"><b>피렌체 도시</b><br>강 위 가게 다리, 붉은 돔 성당, 강변 대관람차<br><img src="docs/images/theme-city.jpg" alt="피렌체 도시 테마"></td>
-    <td align="center"><b>움직이는 성</b><br>들꽃이 핀 시골길을 크게 돌며 걷는 성<br><img src="docs/images/theme-castle.jpg" alt="움직이는 성 테마"></td>
+    <td align="center"><b>움직이는 성</b><br>들꽃 핀 초록 언덕을 오르내리며 걷는 성<br><img src="docs/images/theme-castle.jpg" alt="움직이는 성 테마"></td>
   </tr>
   <tr>
     <td align="center"><b>숲</b><br>호숫가 통나무집, 사슴·여우·토끼가 노니는 들꽃 풀밭<br><img src="docs/images/theme-forest.jpg" alt="숲 테마"></td>
