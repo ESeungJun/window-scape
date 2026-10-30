@@ -87,8 +87,9 @@ Blender랑 Three.js로 만든 작은 섬이 실제 날씨에 맞춰 바뀌는 �
 
 ## 만든 방법
 
-- 3D - [Three.js](https://threejs.org/). 모델 파일 없이 섬·건물·나무·성까지 전부 코드로 만들었어요.
-- 데스크톱 앱 - [Tauri 2](https://tauri.app/). 앱이 10MB 정도라 늘 띄워놔도 가벼워요.
+- 3D - [Three.js](https://threejs.org/)로 그리고, 섬·건물·나무·성 모델은 [Blender](https://www.blender.org/) 파이썬 스크립트(`tools/blender/`)로 만들었어요.
+  하늘빛과 틈 그늘은 Blender에서 라이트맵으로 구워 두고, 앱에서는 시간대·날씨 하늘빛을 곱하고 해만 실시간으로 비춰요.
+- 데스크톱 앱 - [Tauri 2](https://tauri.app/). 설치 파일이 20MB 안쪽이라 늘 띄워놔도 가벼워요.
 - 날씨 데이터 - [Open-Meteo](https://open-meteo.com/) (CC BY 4.0). API 키 없이 쓸 수 있어서 좋더라고요.
 
 거의 Claude Code랑 같이 만들었는데요,
@@ -111,6 +112,9 @@ npm run build                        # 타입 검사 + 웹 빌드
 
 | 경로 | 역할 |
 |---|---|
+| `tools/blender/*.py` | 테마별 모델을 만드는 Blender 스크립트 (`blender -b -P tools/blender/island.py -- public/models glb 384`) |
+| `public/models/` | 구운 장면(`*.glb`, Draco 압축)과 라이트맵(`*_light.webp`) |
+| `src/scene/{props,baked,diorama}.ts` | 모델 불러오기, 라이트맵 적용, 디오라마 공통 움직임(물·불빛·연기·흔들림) |
 | `src/scene/kit.ts` | 테마 공용 재료·소품·지형·나무 인스턴싱·폭포 |
 | `src/scene/{island,drive,city,castle,forest}.ts` | 테마 다섯 개 |
 | `src/scene/world.ts` | 렌더러·카메라·조명, 테마 전환, 프레임 루프 |

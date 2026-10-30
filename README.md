@@ -86,8 +86,9 @@ It starts in the top-right corner, kept on top of other windows; use the window 
 
 ## Built with
 
-- **[Three.js](https://threejs.org/)** — every island, building, tree and castle is generated in code; no model files.
-- **[Tauri 2](https://tauri.app/)** — a ~10 MB native app that's light enough to keep running all day.
+- **[Three.js](https://threejs.org/)** renders the scenes; the islands, buildings, trees and castle are modelled by [Blender](https://www.blender.org/) Python scripts (`tools/blender/`).
+  Sky light and contact shadows are baked into lightmaps in Blender; the app tints them with the time-of-day and weather sky and only the sun is real-time.
+- **[Tauri 2](https://tauri.app/)** — a native app under 20 MB (installer) that's light enough to keep running all day.
 - **[Open-Meteo](https://open-meteo.com/)** (CC BY 4.0) — free weather data, no API key needed.
 
 Built together with Claude Code.
@@ -108,6 +109,9 @@ In the web version, press `F` or open `?showcase` to frame the scene in a rounde
 
 | Path | Role |
 |---|---|
+| `tools/blender/*.py` | Blender scripts that build each theme (`blender -b -P tools/blender/island.py -- public/models glb 384`) |
+| `public/models/` | Baked scenes (`*.glb`, Draco-compressed) and lightmaps (`*_light.webp`) |
+| `src/scene/{props,baked,diorama}.ts` | Model loading, lightmap shading, shared diorama motion (water, lights, smoke, sway) |
 | `src/scene/kit.ts` | Shared materials, props, terrain, instanced trees, waterfalls |
 | `src/scene/{island,drive,city,castle,forest}.ts` | The five worlds |
 | `src/scene/world.ts` | Renderer, camera, lights, theme switching, frame loop |
