@@ -66,6 +66,7 @@ Apart from the sky island, each world can also be shown as a diorama on a wooden
 - **Pin to desktop or keep on top** — tuck it behind your windows like wallpaper, or float it above everything.
 - **Opacity** — fade it down to 30% for a subtle ambient view.
 - **Responsive** — resize freely; small shows just the scene, larger adds the 7-day bar and hourly chart.
+- **Step inside** — tap the walker icon to drop a tiny character into the scene and wander around in third person (click to walk, or WASD). Still experimental.
 - **Auto-update** — new versions download and install themselves.
 - **And more** — current-location weather, city search, launch at login, and optional waterfall and rain ambience.
 

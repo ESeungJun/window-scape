@@ -29,6 +29,9 @@
       <button id="locate" class="icon-btn" type="button" aria-label="현재 위치로">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /><circle cx="12" cy="12" r="7.5" /></svg>
       </button>
+      <button id="exploreBtn" class="icon-btn" type="button" aria-label="풍경 안으로 들어가기" title="들어가기">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2.2" /><path d="M12 8.5v6M12 14.5l-3 6M12 14.5l3 6M8 11.5h8" /></svg>
+      </button>
       <button id="settingsBtn" class="icon-btn" type="button" aria-label="보기 설정" aria-expanded="false" aria-controls="settings">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
       </button>
@@ -56,6 +59,11 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h3l4 3.5v-11L8 10H5z" /><path d="M16 9a4 4 0 0 1 0 6" /></svg>
       <span>소리 켜기</span>
     </button>
+
+    <div id="explore" class="explore glass" hidden>
+      <span class="explore__hint">클릭한 곳으로 걸어가요 · WASD</span>
+      <button id="exploreExit" class="explore__exit" type="button">나가기</button>
+    </div>
 
     <div id="toast" class="toast" role="status" hidden></div>
     </div>
