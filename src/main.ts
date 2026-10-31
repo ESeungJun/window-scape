@@ -62,6 +62,8 @@ if (import.meta.env.DEV) {
       if (o.shape) world.setCase(o.shape === 'case');
       refresh();
     },
+    // 들어가기 모드 점검용
+    __world: world,
     // 성능 점검용: 그리기 호출·삼각형·지오메트리·텍스처 수
     __info: () => {
       const r = world['renderer'].info;
@@ -336,6 +338,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-close]').forEach((b) =>
 document.addEventListener('keydown', (e) => {
   const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
   if (e.key === 'Escape') {
+    if (world.exploring) world.leave();
     settingsPanel.hidden = true;
     closeHourly();
     syncSettingsButton();
@@ -381,6 +384,25 @@ soundBtn.addEventListener('click', async () => {
   soundBtn.querySelector('span')!.textContent = on ? '소리 끄기' : '소리 켜기';
 });
 world.onFrame = (env) => ambience.update(env);
+
+// ── 들어가기 모드 ──
+const exploreBar = $('explore');
+$('exploreBtn').addEventListener('click', () => {
+  settingsPanel.hidden = true;
+  closeHourly();
+  syncSettingsButton();
+  if (!world.enter()) toast('설 자리를 찾지 못했어요. 잠시 뒤에 다시 해 주세요.');
+});
+$('exploreExit').addEventListener('click', () => world.leave());
+world.onExplore = (on) => {
+  document.body.classList.toggle('exploring', on);
+  exploreBar.hidden = !on;
+};
+const exploreHint = exploreBar.querySelector('.explore__hint')!;
+const walkHint = exploreHint.textContent;
+world.onRide = (on) => {
+  exploreHint.textContent = on ? '대관람차를 타고 있어요 · 움직이면 내려요' : walkHint;
+};
 
 renderInfo();
 loadPlace(state.place);

@@ -13,15 +13,30 @@ import { createStage, type Theme } from './themes';
 import { Precipitation } from './precipitation';
 import { SkyDome, SkyLight } from './sky';
 import { updateSkyTint } from './baked';
+import { Explorer } from './explore';
 
 export type Quality = 'auto' | 'low' | 'medium' | 'high';
 
 const SUN_AZIMUTH = 0.9;
 const AUTO_ROTATE_DELAY_MS = 6000;
+/** 들어가기 모드: 카메라가 캐릭터 뒤 위쪽에서 따라가는 거리·내려다보는 각도, 들어가고 나오는 데 걸리는 시간 */
+const EXPLORE_DISTANCE = 2.6;
+/** 대관람차를 탔을 때 카메라 거리 */
+const RIDE_DISTANCE = 3.6;
+const EXPLORE_PITCH = 0.42;
+const EXPLORE_FLY_S = 1.1;
+/** 이만큼 안 움직이고 뗀 포인터는 클릭(걸어가기), 더 움직이면 시점 돌리기 */
+const CLICK_SLOP_PX = 6;
+/** 카메라 가림 검사 광선(카메라 자리에서 옆·위로 벌린 정도) */
+const CLEAR_RAYS: [number, number][] = [[0, 0], [0.45, 0.3], [-0.45, 0.3], [0.45, -0.3], [-0.45, -0.3]];
 
 /** 렌더러·카메라·조명과 장면 구성 요소를 묶고 매 프레임 연출 값을 반영한다. */
 export class World {
   onFrame?: (env: Env) => void;
+  /** 들어가기 모드가 켜지거나 꺼질 때 */
+  onExplore?: (on: boolean) => void;
+  /** 들어가기 모드에서 탈것(대관람차)에 타거나 내릴 때 */
+  onRide?: (on: boolean) => void;
 
   private readonly env: Env = createEnv();
   private readonly target: Env = createEnv();
@@ -60,6 +75,21 @@ export class World {
   private readonly focusPoint = new THREE.Vector3();
   private readonly focusDelta = new THREE.Vector3();
   private static readonly ORIGIN = new THREE.Vector3();
+  private readonly explorer = new Explorer();
+  /** 들어가기 전 카메라(나올 때 돌아갈 자리) */
+  private readonly saved = { pos: new THREE.Vector3(), target: new THREE.Vector3(), min: 0, max: 0, polar: 0 };
+  /** 들어가고 나오는 카메라 이동. 0~1 로 진행하고, 끝나면 null */
+  private fly: { t: number; leaving: boolean; pos: THREE.Vector3; target: THREE.Vector3 } | null = null;
+  private readonly followPoint = new THREE.Vector3();
+  private readonly flyPos = new THREE.Vector3();
+  private readonly flyTarget = new THREE.Vector3();
+  /** 들어가기 모드에서 사용자가 고른 카메라 거리(휠로 바꾼다). 물체에 가리면 실제로는 그보다 당겨 온다 */
+  private exploreDist = EXPLORE_DISTANCE;
+  private camDist = EXPLORE_DISTANCE;
+  private readonly camDir = new THREE.Vector3();
+  private readonly camSide = new THREE.Vector3();
+  private readonly camUp = new THREE.Vector3();
+  private readonly camRay = new THREE.Vector3();
 
   constructor(private readonly container: HTMLElement, theme: Theme = 'island') {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -102,8 +132,19 @@ export class World {
       clearTimeout(this.idleTimer);
     });
     this.controls.addEventListener('end', () => {
+      if (this.explorer.active) return;
       this.idleTimer = window.setTimeout(() => (this.controls.autoRotate = true), AUTO_ROTATE_DELAY_MS);
     });
+    this.listenClicks(this.renderer.domElement);
+    this.explorer.onRide = (on) => {
+      // 타면 조금 물러나서 바퀴와 풍경이 같이 보이게
+      if (on) this.exploreDist = Math.max(this.exploreDist, RIDE_DISTANCE);
+      this.onRide?.(on);
+    };
+    this.renderer.domElement.addEventListener('wheel', (e) => {
+      if (!this.explorer.active) return;
+      this.exploreDist = THREE.MathUtils.clamp(this.exploreDist * Math.exp(e.deltaY * 0.0015), 1.2, 6);
+    }, { passive: true });
 
     this.sun.shadow.camera.left = -10;
     this.sun.shadow.camera.right = 10;
@@ -148,6 +189,7 @@ export class World {
   setTheme(theme: Theme): void {
     const next = this.stageFor(theme);
     if (next === this.stage) return;
+    this.leave(true);
     this.scene.remove(this.stage.group);
     this.stage = next;
     next.setCase?.(this.cased);
@@ -158,6 +200,7 @@ export class World {
   /** 땅 테마의 모양: 디오라마(받침 위, 구름바다에 뜸) / 지평선까지 이어진 땅 */
   setCase(on: boolean): void {
     if (on === this.cased) return;
+    this.leave(true);
     this.cased = on;
     if (!this.stage.setCase) return;
     this.stage.setCase(on);
@@ -200,6 +243,146 @@ export class World {
     else c.target.copy(this.stage.view.target);
     this.camera.position.copy(c.target).addScaledVector(dir, this.stage.view.distance * (narrow ? 1.45 : 1));
     c.update();
+  }
+
+  get exploring(): boolean {
+    return this.explorer.active;
+  }
+
+  /** 들어가기 모드: 풍경 안에 캐릭터를 내려놓고 카메라가 뒤에서 따라간다. 설 곳을 못 찾으면 false */
+  enter(): boolean {
+    if (this.explorer.active) return true;
+    // 나오는 중에 다시 누르면 나오기를 끝내고 바로 들어간다
+    if (this.fly?.leaving) {
+      this.fly = null;
+      this.restoreView();
+    }
+    if (!this.explorer.start(this.stage)) return false;
+    const c = this.controls;
+    const s = this.saved;
+    s.pos.copy(this.camera.position);
+    s.target.copy(c.target);
+    s.min = c.minDistance;
+    s.max = c.maxDistance;
+    s.polar = c.maxPolarAngle;
+    clearTimeout(this.idleTimer);
+    c.autoRotate = false;
+    c.enabled = false;
+    this.fly = { t: 0, leaving: false, pos: s.pos.clone(), target: s.target.clone() };
+    this.onExplore?.(true);
+    return true;
+  }
+
+  /** 들어가기 모드에서 나와 원래 시점으로 돌아간다. now 면 날아가지 않고 바로 */
+  leave(now = false): void {
+    if (!this.explorer.active) {
+      // 나오는 중에 테마·모양을 바꾸면 날아가기를 끝내 둔다(끝에 옛 테마 시점을 덮어쓰지 않게)
+      if (now && this.fly?.leaving) {
+        this.fly = null;
+        this.restoreView();
+      }
+      return;
+    }
+    this.explorer.stop();
+    const c = this.controls;
+    if (now) {
+      this.fly = null;
+      this.restoreView();
+    } else {
+      c.enabled = false;
+      this.fly = { t: 0, leaving: true, pos: this.camera.position.clone(), target: c.target.clone() };
+    }
+    this.onExplore?.(false);
+  }
+
+  private restoreView(): void {
+    const c = this.controls;
+    const s = this.saved;
+    c.minDistance = s.min;
+    c.maxDistance = s.max;
+    c.maxPolarAngle = s.polar;
+    c.enableZoom = true;
+    c.target.copy(s.target);
+    this.camera.position.copy(s.pos);
+    c.enabled = true;
+    c.autoRotate = true;
+    c.update();
+  }
+
+  /** 끌지 않고 짧게 누른 곳으로 캐릭터를 걸어가게 한다(끌면 OrbitControls 가 시점을 돌린다) */
+  private listenClicks(el: HTMLElement): void {
+    let down: { x: number; y: number; id: number } | null = null;
+    el.addEventListener('pointerdown', (e) => {
+      down = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    });
+    el.addEventListener('pointerup', (e) => {
+      const d = down;
+      down = null;
+      if (!d || d.id !== e.pointerId || !this.explorer.active || this.fly) return;
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > CLICK_SLOP_PX) return;
+      const r = el.getBoundingClientRect();
+      const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      this.explorer.pick(ndc, this.camera);
+    });
+  }
+
+  /** 들어가기 모드의 카메라: 들어가고 나올 때는 날아가고, 그 사이에는 캐릭터를 부드럽게 따라간다 */
+  private updateExploreCamera(dt: number): void {
+    const c = this.controls;
+    const fly = this.fly;
+    if (fly) {
+      fly.t = Math.min(1, fly.t + dt / EXPLORE_FLY_S);
+      const k = fly.t * fly.t * (3 - 2 * fly.t);
+      if (fly.leaving) {
+        this.flyTarget.copy(this.saved.target);
+        this.flyPos.copy(this.saved.pos);
+      } else {
+        // 지금 보는 방향 그대로 캐릭터 뒤 위쪽으로
+        this.explorer.focus(this.flyTarget);
+        const dir = this.flyPos.subVectors(fly.pos, fly.target).setY(0).normalize();
+        dir.multiplyScalar(Math.cos(EXPLORE_PITCH)).setY(Math.sin(EXPLORE_PITCH)).multiplyScalar(EXPLORE_DISTANCE);
+        this.flyPos.add(this.flyTarget);
+      }
+      c.target.lerpVectors(fly.target, this.flyTarget, k);
+      this.camera.position.lerpVectors(fly.pos, this.flyPos, k);
+      this.camera.lookAt(c.target);
+      if (fly.t < 1) return;
+      this.fly = null;
+      if (fly.leaving) return this.restoreView();
+      c.minDistance = 0.6;
+      c.maxDistance = 6;
+      c.maxPolarAngle = Math.PI * 0.47;
+      // 거리는 직접 정한다(물체에 가리면 당겨 오기 위해)
+      c.enableZoom = false;
+      c.enabled = true;
+      this.exploreDist = this.camDist = EXPLORE_DISTANCE;
+      return;
+    }
+    this.explorer.focus(this.followPoint);
+    this.focusDelta.subVectors(this.followPoint, c.target).multiplyScalar(1 - Math.exp(-dt * 6));
+    c.target.add(this.focusDelta);
+    this.camera.position.add(this.focusDelta);
+  }
+
+  /** 캐릭터와 카메라 사이에 물체가 있으면 그 앞으로 당기고, 비면 원래 거리로 천천히 물러난다 */
+  private keepCameraClear(dt: number): void {
+    const tg = this.controls.target;
+    const dir = this.camDir.subVectors(this.camera.position, tg).normalize();
+    // 가운데 하나와 화면 네 귀퉁이 쪽 광선: 화면 가장자리에 걸친 잎·지붕도 잡는다
+    const right = this.camSide.crossVectors(dir, this.camera.up).normalize();
+    const up = this.camUp.crossVectors(right, dir);
+    let want = this.exploreDist;
+    for (const [a, b] of CLEAR_RAYS) {
+      const ray = this.camRay.copy(dir).multiplyScalar(this.exploreDist).addScaledVector(right, a).addScaledVector(up, b);
+      const len = ray.length();
+      const hit = this.explorer.occlusion(tg, ray.normalize(), len + 0.3);
+      // 대관람차를 타는 동안엔 바퀴 너머 풍경을 보도록 당기지 않는다
+      if (hit !== null && !this.explorer.isRiding) want = Math.min(want, Math.max(0.6, (hit - 0.2) * (this.exploreDist / len)));
+    }
+    this.explorer.endOcclusion(false);
+    // 가릴 때는 바로, 비었을 때는 천천히
+    this.camDist = want < this.camDist ? want : this.camDist + (want - this.camDist) * (1 - Math.exp(-dt * 3));
+    this.camera.position.copy(tg).addScaledVector(dir, this.camDist);
   }
 
   private stageFor(theme: Theme): Stage {
@@ -309,18 +492,23 @@ export class World {
     updateSharedMaterials(env);
     this.stage.update(dt, this.time, env);
     this.floaters.update(dt, this.time);
+    this.explorer.update(dt, this.time, this.camera);
     // 돌아다니는 주인공이 있으면 카메라가 부드럽게 따라간다(보는 각도는 유지).
     // 사용자가 시점을 돌리는 동안과 그 뒤 잠시(자동 회전이 다시 켜질 때까지)는 멈춘다
-    if (this.stage.focus && this.controls.autoRotate) {
+    const flying = this.fly !== null;
+    if (this.explorer.active || flying) this.updateExploreCamera(dt);
+    else if (this.stage.focus && this.controls.autoRotate) {
       this.stage.focus(this.focusPoint);
       this.focusDelta.subVectors(this.focusPoint, this.controls.target).multiplyScalar(1 - Math.exp(-dt * 0.8));
       this.controls.target.add(this.focusDelta);
       this.camera.position.add(this.focusDelta);
     }
-    this.controls.update(dt);
+    if (!flying) this.controls.update(dt);
+    if (this.explorer.active && !flying) this.keepCameraClear(dt);
     // 땅 테마: 카메라가 언덕·먼 나무·집 속으로 들어가지 않게 위로 밀어 올린다.
     // 부드럽게 올려 높이 격자 칸이 바뀔 때 들썩이지 않게 하되, 여유(0.8) 절반 아래로는 절대 내려가지 않는다
-    if (this.stage.groundHeight) {
+    // 들어가기 모드는 가리는 물체를 숨기거나 카메라를 당기므로 밀어 올리지 않는다(나무 높이까지 솟는다)
+    if (this.stage.groundHeight && !this.explorer.active && !flying) {
       const p = this.camera.position;
       const floor = this.stage.groundHeight(p.x, p.z) + 0.8;
       if (p.y < floor) p.y = Math.max(floor - 0.4, p.y + (floor - p.y) * (1 - Math.exp(-dt * 6)));
