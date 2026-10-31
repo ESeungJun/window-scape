@@ -21,6 +21,8 @@ const SUN_AZIMUTH = 0.9;
 const AUTO_ROTATE_DELAY_MS = 6000;
 /** 들어가기 모드: 카메라가 캐릭터 뒤 위쪽에서 따라가는 거리·내려다보는 각도, 들어가고 나오는 데 걸리는 시간 */
 const EXPLORE_DISTANCE = 2.6;
+/** 대관람차를 탔을 때 카메라 거리 */
+const RIDE_DISTANCE = 3.6;
 const EXPLORE_PITCH = 0.42;
 const EXPLORE_FLY_S = 1.1;
 /** 이만큼 안 움직이고 뗀 포인터는 클릭(걸어가기), 더 움직이면 시점 돌리기 */
@@ -33,6 +35,8 @@ export class World {
   onFrame?: (env: Env) => void;
   /** 들어가기 모드가 켜지거나 꺼질 때 */
   onExplore?: (on: boolean) => void;
+  /** 들어가기 모드에서 탈것(대관람차)에 타거나 내릴 때 */
+  onRide?: (on: boolean) => void;
 
   private readonly env: Env = createEnv();
   private readonly target: Env = createEnv();
@@ -132,6 +136,11 @@ export class World {
       this.idleTimer = window.setTimeout(() => (this.controls.autoRotate = true), AUTO_ROTATE_DELAY_MS);
     });
     this.listenClicks(this.renderer.domElement);
+    this.explorer.onRide = (on) => {
+      // 타면 조금 물러나서 바퀴와 풍경이 같이 보이게
+      if (on) this.exploreDist = Math.max(this.exploreDist, RIDE_DISTANCE);
+      this.onRide?.(on);
+    };
     this.renderer.domElement.addEventListener('wheel', (e) => {
       if (!this.explorer.active) return;
       this.exploreDist = THREE.MathUtils.clamp(this.exploreDist * Math.exp(e.deltaY * 0.0015), 1.2, 6);
@@ -356,7 +365,8 @@ export class World {
       const ray = this.camRay.copy(dir).multiplyScalar(this.exploreDist).addScaledVector(right, a).addScaledVector(up, b);
       const len = ray.length();
       const hit = this.explorer.occlusion(tg, ray.normalize(), len + 0.3);
-      if (hit !== null) want = Math.min(want, Math.max(0.6, (hit - 0.2) * (this.exploreDist / len)));
+      // 대관람차를 타는 동안엔 바퀴 너머 풍경을 보도록 당기지 않는다
+      if (hit !== null && !this.explorer.isRiding) want = Math.min(want, Math.max(0.6, (hit - 0.2) * (this.exploreDist / len)));
     }
     this.explorer.endOcclusion(false);
     // 가릴 때는 바로, 비었을 때는 천천히

@@ -35,6 +35,15 @@ const BODY_RADIUS = 0.07;
 /** 밟지도 막히지도 않고 헤치고 지나가는 풀숲 */
 const SOFT = /^(bush|grass|flower|reed)/;
 const SOFT_MAT = /^(bush|flower)/;
+/** 차에 치이면 튀어 오르는 속도·옆으로 날아가는 속도, 다시 치일 수 있을 때까지(초) */
+const HIT_UP = 3.2;
+const HIT_SIDE = 1.6;
+const HIT_COOLDOWN = 1.2;
+/** 곤돌라로 뛰어드는 데 걸리는 시간: 기본 + 거리당 */
+const LEAP_S = 0.5;
+const LEAP_PER = 0.05;
+/** 곤돌라(0.33 폭) 안에 들어가게 줄이는 비율 */
+const RIDE_SCALE = 0.6;
 
 export class Explorer {
   readonly avatar = new THREE.Group();
@@ -43,7 +52,23 @@ export class Explorer {
   private meshes: THREE.Object3D[] = [];
   private solid: THREE.Object3D[] = [];
   /** 지나가는 차와 차 자기 좌표의 크기 상자. 캐릭터와 겹치면 밀어낸다 */
-  private cars: { obj: THREE.Object3D; box: THREE.Box3 }[] = [];
+  private cars: { obj: THREE.Object3D; box: THREE.Box3; last: THREE.Vector3; vel: THREE.Vector3 }[] = [];
+  /** 공중에서 옆으로 날아가는 속도(차에 치였을 때) */
+  private readonly fly = new THREE.Vector3();
+  private hitCooldown = 0;
+  /** 타고 있는 곤돌라와 탄 자리(내리면 돌아온다) */
+  private riding?: THREE.Object3D;
+  private readonly boardedAt = new THREE.Vector3();
+  /** 타는 동안 반투명하게 바꾼 곤돌라 재질의 원래 것(속이 막힌 상자라 안에 탄 캐릭터가 안 보인다) */
+  private glassed = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
+  /** 곤돌라로 뛰어드는 중: 곤돌라, 곤돌라 안 앉을 자리, 지난 시간·걸릴 시간, 포물선 높이 */
+  private leap?: { gondola: THREE.Object3D; seat: THREE.Vector3; t: number; dur: number; height: number };
+  /** 탈것에 타거나 내릴 때 */
+  onRide?: (on: boolean) => void;
+
+  get isRiding(): boolean {
+    return !!this.riding;
+  }
   /** 막혔을 때 지난번에 돌아간 쪽(1/-1). 같은 쪽을 먼저 해 봐서 좌우로 떨지 않게 */
   private slideSide = 1;
   private stuck = 0;
@@ -65,6 +90,7 @@ export class Explorer {
   private readonly v2 = new THREE.Vector3();
   private readonly dir = new THREE.Vector3();
   private readonly slide = new THREE.Vector3();
+  private readonly q = new THREE.Quaternion();
   /** 카메라를 가려서 숨겨 둔 물체(이번 프레임에 다시 가리는지 보고 되돌린다) */
   private hidden = new Set<THREE.Object3D>();
   private hiding = new Set<THREE.Object3D>();
@@ -121,7 +147,9 @@ export class Explorer {
       if (!soft) this.solid.push(o);
     });
     stage.group.traverse((o) => {
-      if (o.name.startsWith('mover_car') && !o.parent?.name.startsWith('mover_')) this.cars.push({ obj: o, box: localBox(o) });
+      if (o.name.startsWith('mover_car') && !o.parent?.name.startsWith('mover_')) {
+        this.cars.push({ obj: o, box: localBox(o), last: o.getWorldPosition(new THREE.Vector3()), vel: new THREE.Vector3() });
+      }
     });
     const spot = this.findSpawn(stage);
     if (!spot) return false;
@@ -132,11 +160,19 @@ export class Explorer {
     this.hasGoal = false;
     this.keys.clear();
     this.airborne = this.jumpQueued = false;
+    this.fly.set(0, 0, 0);
+    this.riding = this.leap = undefined;
+    this.avatar.scale.setScalar(1);
     this.active = true;
     return true;
   }
 
   stop(): void {
+    if (this.riding) this.onRide?.(false);
+    this.unglass();
+    this.riding = this.leap = undefined;
+    this.avatar.scale.setScalar(1);
+    this.body.rotation.set(0, 0, 0);
     this.endOcclusion();
     this.active = false;
     this.keys.clear();
@@ -152,6 +188,9 @@ export class Explorer {
     if (!this.active || !this.stage) return false;
     this.ray.setFromCamera(ndc, camera);
     const hit = this.firstHit();
+    if (this.riding) return false;
+    const gondola = hit && (rideOf(hit.object) ?? (isWheel(hit.object) ? this.lowestGondola() : undefined));
+    if (gondola) return this.leapInto(gondola), true;
     if (!hit || isWater(hit.object)) return false;
     const p = this.stage.group.worldToLocal(hit.point.clone());
     if (!this.inBounds(p.x, p.z)) return false;
@@ -161,6 +200,85 @@ export class Explorer {
     this.marker.visible = true;
     this.markerAge = 0;
     return true;
+  }
+
+  /** 바퀴·받침대를 눌렀을 때 탈 곤돌라: 지금 제일 아래 있는 것 */
+  private lowestGondola(): THREE.Object3D | undefined {
+    let best: THREE.Object3D | undefined;
+    let low = Infinity;
+    this.stage!.group.traverse((o) => {
+      if (rideOf(o) !== o) return;
+      const y = o.getWorldPosition(this.v1).y;
+      if (y < low) [low, best] = [y, o];
+    });
+    return best;
+  }
+
+  /** 곤돌라를 눌렀을 때: 어디서든 포물선을 그리며 뛰어든다(길찾기 없이 강 건너에서도 탈 수 있게) */
+  private leapInto(gondola: THREE.Object3D): void {
+    if (this.leap) return;
+    const box = localBox(gondola);
+    const seat = box.getCenter(new THREE.Vector3()).setY(box.min.y + 0.03);
+    const to = this.stage!.group.worldToLocal(gondola.localToWorld(this.v1.copy(seat)));
+    const dist = to.distanceTo(this.avatar.position);
+    this.boardedAt.copy(this.avatar.position);
+    this.leap = { gondola, seat, t: 0, dur: LEAP_S + dist * LEAP_PER, height: 0.4 + dist * 0.12 };
+    this.hasGoal = this.airborne = false;
+    this.fly.set(0, 0, 0);
+    this.marker.visible = false;
+  }
+
+  /** 뛰어드는 한 프레임. 다 날아가면 곤돌라에 앉힌다 */
+  private leapStep(dt: number): void {
+    const leap = this.leap!;
+    leap.t += dt;
+    const k = Math.min(1, leap.t / leap.dur);
+    // 곤돌라는 계속 도니까 매 프레임 지금 자리로 겨눈다
+    const to = this.stage!.group.worldToLocal(leap.gondola.localToWorld(this.v1.copy(leap.seat)));
+    this.avatar.position.lerpVectors(this.boardedAt, to, k).y += Math.sin(Math.PI * k) * leap.height;
+    this.avatar.scale.setScalar(THREE.MathUtils.lerp(1, RIDE_SCALE, k));
+    this.body.rotation.x = k * Math.PI * 2;
+    this.body.position.y = 0;
+    if (k >= 1) {
+      this.leap = undefined;
+      this.board(leap.gondola, leap.seat);
+    }
+  }
+
+  /** 곤돌라 바닥에 앉힌다. 곤돌라 무리에 붙여서 같이 돈다 */
+  private board(gondola: THREE.Object3D, seat: THREE.Vector3): void {
+    this.avatar.position.copy(seat);
+    this.avatar.scale.setScalar(RIDE_SCALE / gondola.getWorldScale(this.v2).x);
+    this.avatar.rotation.set(0, this.avatar.rotation.y, 0);
+    gondola.add(this.avatar);
+    gondola.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || o === this.avatar || this.avatar.getObjectById(o.id)) return;
+      this.glassed.set(m, m.material);
+      const glass = (mat: THREE.Material) => Object.assign(mat.clone(), { transparent: true, opacity: 0.35, depthWrite: false });
+      m.material = Array.isArray(m.material) ? m.material.map(glass) : glass(m.material);
+    });
+    this.riding = gondola;
+    this.body.rotation.set(0, 0, 0);
+    this.onRide?.(true);
+  }
+
+  /** 탔던 자리로 내려온다 */
+  private alight(): void {
+    this.unglass();
+    this.stage!.group.add(this.avatar);
+    this.avatar.position.copy(this.boardedAt);
+    this.avatar.scale.setScalar(1);
+    this.riding = undefined;
+    this.onRide?.(false);
+  }
+
+  private unglass(): void {
+    for (const [m, mat] of this.glassed) {
+      for (const g of [m.material].flat()) g.dispose();
+      m.material = mat;
+    }
+    this.glassed.clear();
   }
 
   /** 카메라가 따라갈 점(캐릭터 가슴 높이, 월드 좌표) */
@@ -179,7 +297,7 @@ export class Explorer {
     const hits = this.ray.intersectObjects(this.meshes, false);
     this.ray.far = Infinity;
     for (const h of hits) {
-      if (h.object.parent === null) continue;
+      if (h.object.parent === null || (this.riding && rideOf(h.object) === this.riding)) continue;
       if (boundRadius(h.object) > HIDE_RADIUS) return h.distance;
       this.hiding.add(h.object);
     }
@@ -197,6 +315,24 @@ export class Explorer {
 
   update(dt: number, t: number, camera: THREE.Camera): void {
     if (!this.active) return;
+    if (this.riding) {
+      // 움직이려 하면 내린다
+      if (this.keys.size || this.jumpQueued) {
+        this.jumpQueued = false;
+        this.keys.clear();
+        this.alight();
+      } else {
+        this.body.position.y = 0;
+        this.body.rotation.set(0, 0, 0);
+        return;
+      }
+    }
+    if (this.leap) {
+      this.keys.clear();
+      this.jumpQueued = false;
+      this.leapStep(dt);
+      return;
+    }
     const pos = this.avatar.position;
     const dir = this.dir.set(0, 0, 0);
     if (this.keys.size) {
@@ -242,11 +378,14 @@ export class Explorer {
       if (g && !g.water && g.y < pos.y + STEP_UP && g.y > pos.y - STEP_DOWN) pos.y = g.y;
     }
 
+    this.hitCooldown -= dt;
+    this.avoidCars(dt);
     if (this.airborne) this.fall(dt);
-    this.avoidCars();
 
-    // 걷는 동안 통통 튄다(시안 전 임시 동작). 공중에서는 멈춘다
+    // 걷는 동안 통통 튄다(시안 전 임시 동작). 공중에서는 멈추고, 치여서 날아가는 중이면 데굴데굴 돈다
     if (this.airborne) moving = false;
+    if (this.fly.lengthSq() > 0) this.body.rotation.x += dt * 14;
+    else this.body.rotation.x = 0;
     this.walkPhase = moving ? this.walkPhase + dt * 14 : 0;
     this.body.position.y = moving ? Math.abs(Math.sin(this.walkPhase)) * 0.035 : 0;
     this.body.rotation.z = moving ? Math.sin(this.walkPhase) * 0.08 : 0;
@@ -286,12 +425,16 @@ export class Explorer {
     return true;
   }
 
-  /** 지나가는 차와 겹치면 차 옆으로 밀어낸다(차 좌표에서 가장 덜 파고든 쪽으로) */
-  private avoidCars(): void {
+  /** 지나가는 차와 겹치면 차에 치여 날아간다(차 좌표에서 가장 덜 파고든 쪽으로 빼낸 뒤 튀어 오른다) */
+  private avoidCars(dt: number): void {
     if (!this.cars.length) return;
     const pos = this.avatar.position;
     const group = this.stage!.group;
-    for (const { obj, box } of this.cars) {
+    for (const car of this.cars) {
+      const { obj, box } = car;
+      const now = obj.getWorldPosition(this.v2);
+      car.vel.subVectors(now, car.last).divideScalar(Math.max(dt, 1e-3));
+      car.last.copy(now);
       const p = obj.worldToLocal(group.localToWorld(this.v1.copy(pos)));
       const r = BODY_RADIUS / obj.getWorldScale(this.v2).x;
       if (p.y > box.max.y || p.y + HEIGHT < box.min.y) continue;
@@ -302,15 +445,31 @@ export class Explorer {
       else p.z = p.z - box.min.z < box.max.z - p.z ? box.min.z - r : box.max.z + r;
       group.worldToLocal(obj.localToWorld(p));
       const g = this.groundAt(p.x, pos.y + HEIGHT, p.z);
-      if (!g || g.water || !this.inBounds(p.x, p.z)) continue;
-      pos.set(p.x, this.airborne ? Math.max(pos.y, g.y) : g.y, p.z);
+      if (g && !g.water && this.inBounds(p.x, p.z)) pos.set(p.x, this.airborne ? Math.max(pos.y, g.y) : g.y, p.z);
       this.hasGoal = false;
+      if (this.hitCooldown > 0) continue;
+      // 차가 가던 쪽 + 차에서 멀어지는 쪽으로 붕
+      this.hitCooldown = HIT_COOLDOWN;
+      const away = this.v2.set(pos.x, 0, pos.z).sub(group.worldToLocal(obj.getWorldPosition(this.dir)).setY(0)).normalize();
+      const v = this.dir.copy(car.vel).setY(0);
+      group.getWorldQuaternion(this.q).invert();
+      v.applyQuaternion(this.q);
+      this.fly.copy(away).multiplyScalar(0.6).add(v.normalize()).setY(0).normalize().multiplyScalar(HIT_SIDE);
+      this.airborne = true;
+      this.vy = HIT_UP;
     }
   }
 
   /** 공중에서 한 프레임: 발밑 땅에 닿으면 내려선다 */
   private fall(dt: number): void {
     const pos = this.avatar.position;
+    if (this.fly.lengthSq() > 0) {
+      // 날아가다 벽·물·끝에 닿으면 그 자리로 떨어진다
+      const speed = this.fly.length();
+      const d = this.slide.copy(this.fly).divideScalar(speed);
+      if (this.tryStep(pos, d, speed * dt) === null) this.fly.set(0, 0, 0);
+      else pos.addScaledVector(d, speed * dt);
+    }
     this.vy -= GRAVITY * dt;
     const next = pos.y + this.vy * dt;
     if (this.vy > 0) {
@@ -323,6 +482,7 @@ export class Explorer {
       if (g) pos.y = g.y;
       this.airborne = false;
       this.vy = 0;
+      this.fly.set(0, 0, 0);
     } else pos.y = next;
   }
 
@@ -406,6 +566,20 @@ export class Explorer {
     }
     return null;
   }
+}
+
+/** 곤돌라의 부품이면 그 곤돌라 묶음 */
+function rideOf(o: THREE.Object3D): THREE.Object3D | undefined {
+  for (let c: THREE.Object3D | null = o; c; c = c.parent) {
+    if (c.name.startsWith('mover_gondola') && !c.parent?.name.startsWith('mover_')) return c;
+  }
+  return undefined;
+}
+
+/** 대관람차 바퀴나 받침대 */
+function isWheel(o: THREE.Object3D): boolean {
+  for (let c: THREE.Object3D | null = o; c; c = c.parent) if (/^(mover_wheel|far_wheel)/.test(c.name)) return true;
+  return false;
 }
 
 /** 덤불·꽃 재질의 면(굽기 전에 땅과 한 덩어리로 합쳐져서 물체 이름으로는 못 거른다) */

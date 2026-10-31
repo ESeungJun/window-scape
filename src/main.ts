@@ -398,6 +398,11 @@ world.onExplore = (on) => {
   document.body.classList.toggle('exploring', on);
   exploreBar.hidden = !on;
 };
+const exploreHint = exploreBar.querySelector('.explore__hint')!;
+const walkHint = exploreHint.textContent;
+world.onRide = (on) => {
+  exploreHint.textContent = on ? '대관람차를 타고 있어요 · 움직이면 내려요' : walkHint;
+};
 
 renderInfo();
 loadPlace(state.place);
