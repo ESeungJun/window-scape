@@ -15,7 +15,7 @@ const WALK_SPEED = 0.9;
 /** 캐릭터 키(문 높이가 0.4~0.5 라 그보다 조금 작게) */
 const HEIGHT = 0.36;
 /** 한 걸음에 오를 수 있는 턱·내려갈 수 있는 높이 */
-const STEP_UP = 0.14;
+const STEP_UP = 0.22;
 const STEP_DOWN = 0.5;
 /** 앞쪽 막힘을 볼 거리(몸 반지름 + 여유) */
 const REACH = 0.12;
@@ -23,15 +23,30 @@ const REACH = 0.12;
 const LAND_RADIUS = 22;
 /** 카메라를 가리면 잠깐 숨길 물체의 최대 크기(바운딩 구 반지름). 그보다 큰 땅·언덕은 숨기지 않고 카메라를 당긴다 */
 const HIDE_RADIUS = 2.5;
-/** 점프: 처음 솟는 속도와 중력(최고 높이 = v²/2g ≈ 0.22, 턱 0.14 보다 높은 바위·계단에 올라설 수 있다) */
-const JUMP_SPEED = 1.7;
+/** 점프: 처음 솟는 속도와 중력(최고 높이 = v²/2g ≈ 0.3, 걸어서 못 오르는 바위·계단에 올라설 수 있다) */
+const JUMP_SPEED = 2;
 const GRAVITY = 6.5;
+/** 막혔을 때 비스듬히 돌아갈 각도(라디안). 앞에서부터 차례로 해 본다 */
+const SLIDE_ANGLES = [0.45, 0.9, 1.35];
+/** 클릭한 곳으로 가다가 이만큼(초) 못 나아가면 포기한다 */
+const STUCK_S = 0.6;
+/** 몸 반지름(지나가는 차에 밀려날 때) */
+const BODY_RADIUS = 0.07;
+/** 밟지도 막히지도 않고 헤치고 지나가는 풀숲 */
+const SOFT = /^(bush|grass|flower|reed)/;
+const SOFT_MAT = /^(bush|flower)/;
 
 export class Explorer {
   readonly avatar = new THREE.Group();
   active = false;
-  /** 걸을 땅을 찾을 메시(들어갈 때 보이는 것만 모은다) */
+  /** 보이는 메시 전부(카메라 가림용)와 그중 밟거나 막히는 것(들어갈 때 모은다) */
   private meshes: THREE.Object3D[] = [];
+  private solid: THREE.Object3D[] = [];
+  /** 지나가는 차와 차 자기 좌표의 크기 상자. 캐릭터와 겹치면 밀어낸다 */
+  private cars: { obj: THREE.Object3D; box: THREE.Box3 }[] = [];
+  /** 막혔을 때 지난번에 돌아간 쪽(1/-1). 같은 쪽을 먼저 해 봐서 좌우로 떨지 않게 */
+  private slideSide = 1;
+  private stuck = 0;
   private stage?: Stage;
   private readonly ray = new THREE.Raycaster();
   private readonly goal = new THREE.Vector3();
@@ -49,6 +64,7 @@ export class Explorer {
   private readonly v1 = new THREE.Vector3();
   private readonly v2 = new THREE.Vector3();
   private readonly dir = new THREE.Vector3();
+  private readonly slide = new THREE.Vector3();
   /** 카메라를 가려서 숨겨 둔 물체(이번 프레임에 다시 가리는지 보고 되돌린다) */
   private hidden = new Set<THREE.Object3D>();
   private hiding = new Set<THREE.Object3D>();
@@ -68,7 +84,7 @@ export class Explorer {
         e.preventDefault();
         return;
       }
-      const k = moveKey(e.key);
+      const k = moveKey(e.code);
       if (k) {
         this.keys.add(k);
         this.hasGoal = false;
@@ -76,7 +92,7 @@ export class Explorer {
       }
     });
     window.addEventListener('keyup', (e) => {
-      const k = moveKey(e.key);
+      const k = moveKey(e.code);
       if (k) this.keys.delete(k);
     });
     window.addEventListener('blur', () => this.keys.clear());
@@ -86,6 +102,8 @@ export class Explorer {
   start(stage: Stage): boolean {
     this.stage = stage;
     this.meshes = [];
+    this.solid = [];
+    this.cars = [];
     stage.group.traverseVisible((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
@@ -98,6 +116,12 @@ export class Explorer {
         m.raycast = acceleratedRaycast;
       }
       this.meshes.push(o);
+      // 굽기 전에 하나로 합친 덩어리(static)는 첫 물체 이름을 따라가서(덤불 이름에 땅이 들어 있다) 이름으로 거르지 않는다
+      const soft = o.parent?.name !== 'static' && (SOFT.test(o.name) || SOFT.test(o.parent?.name ?? ''));
+      if (!soft) this.solid.push(o);
+    });
+    stage.group.traverse((o) => {
+      if (o.name.startsWith('mover_car') && !o.parent?.name.startsWith('mover_')) this.cars.push({ obj: o, box: localBox(o) });
     });
     const spot = this.findSpawn(stage);
     if (!spot) return false;
@@ -119,6 +143,8 @@ export class Explorer {
     this.avatar.removeFromParent();
     this.marker.removeFromParent();
     this.meshes = [];
+    this.solid = [];
+    this.cars = [];
   }
 
   /** 화면 좌표(-1~1)를 클릭했을 때: 그 땅으로 걸어간다. 걸을 수 없는 곳이면 false */
@@ -201,13 +227,10 @@ export class Explorer {
     if (dir.lengthSq() > 1e-6) {
       dir.normalize();
       const step = Math.min(WALK_SPEED * dt, this.hasGoal && !this.keys.size ? this.goal.distanceTo(pos) : Infinity);
-      const y = this.tryStep(pos, dir, step);
-      if (y === null) this.hasGoal = false;
-      else {
-        pos.addScaledVector(dir, step);
-        if (!this.airborne) pos.y = y;
+      if (this.walk(pos, dir, step)) {
         moving = true;
-      }
+        this.stuck = 0;
+      } else if (this.hasGoal && (this.stuck += dt) > STUCK_S) this.hasGoal = false;
       // 가려는 쪽으로 몸을 돌린다(막혀도 돌아본다)
       const want = Math.atan2(dir.x, dir.z);
       const diff = Math.atan2(Math.sin(want - this.avatar.rotation.y), Math.cos(want - this.avatar.rotation.y));
@@ -220,6 +243,7 @@ export class Explorer {
     }
 
     if (this.airborne) this.fall(dt);
+    this.avoidCars();
 
     // 걷는 동안 통통 튄다(시안 전 임시 동작). 공중에서는 멈춘다
     if (this.airborne) moving = false;
@@ -233,6 +257,54 @@ export class Explorer {
       (this.marker.material as THREE.MeshBasicMaterial).opacity = (1 - k) * 0.9;
       this.marker.scale.setScalar(1 + k * 0.6 + Math.sin(t * 8) * 0.03);
       if (k >= 1 && !this.hasGoal) this.marker.visible = false;
+    }
+  }
+
+  /** 앞이 막히면 비스듬히(벽을 따라) 돌아간다. 조금이라도 움직였으면 true */
+  private walk(pos: THREE.Vector3, dir: THREE.Vector3, step: number): boolean {
+    let y = this.tryStep(pos, dir, step);
+    if (y === null) {
+      const d = this.slide;
+      outer: for (const a of SLIDE_ANGLES) {
+        for (const side of [this.slideSide, -this.slideSide]) {
+          const c = Math.cos(a * side), s = Math.sin(a * side);
+          d.set(dir.x * c + dir.z * s, 0, -dir.x * s + dir.z * c);
+          // 비스듬할수록 덜 나아간다(벽을 긁듯이)
+          y = this.tryStep(pos, d, step * Math.cos(a));
+          if (y !== null) {
+            this.slideSide = side;
+            step *= Math.cos(a);
+            dir.copy(d);
+            break outer;
+          }
+        }
+      }
+      if (y === null) return false;
+    }
+    pos.addScaledVector(dir, step);
+    if (!this.airborne) pos.y = y;
+    return true;
+  }
+
+  /** 지나가는 차와 겹치면 차 옆으로 밀어낸다(차 좌표에서 가장 덜 파고든 쪽으로) */
+  private avoidCars(): void {
+    if (!this.cars.length) return;
+    const pos = this.avatar.position;
+    const group = this.stage!.group;
+    for (const { obj, box } of this.cars) {
+      const p = obj.worldToLocal(group.localToWorld(this.v1.copy(pos)));
+      const r = BODY_RADIUS / obj.getWorldScale(this.v2).x;
+      if (p.y > box.max.y || p.y + HEIGHT < box.min.y) continue;
+      const px = Math.min(p.x - box.min.x + r, box.max.x + r - p.x);
+      const pz = Math.min(p.z - box.min.z + r, box.max.z + r - p.z);
+      if (px <= 0 || pz <= 0) continue;
+      if (px < pz) p.x = p.x - box.min.x < box.max.x - p.x ? box.min.x - r : box.max.x + r;
+      else p.z = p.z - box.min.z < box.max.z - p.z ? box.min.z - r : box.max.z + r;
+      group.worldToLocal(obj.localToWorld(p));
+      const g = this.groundAt(p.x, pos.y + HEIGHT, p.z);
+      if (!g || g.water || !this.inBounds(p.x, p.z)) continue;
+      pos.set(p.x, this.airborne ? Math.max(pos.y, g.y) : g.y, p.z);
+      this.hasGoal = false;
     }
   }
 
@@ -257,7 +329,17 @@ export class Explorer {
   /** 가장 가까운 것 하나만(BVH 가 메시마다 첫 교차에서 멈춘다) */
   private firstHit(): THREE.Intersection | undefined {
     this.ray.firstHitOnly = true;
-    const hit = this.ray.intersectObjects(this.meshes, false)[0];
+    const far = this.ray.far;
+    let hit = this.ray.intersectObjects(this.solid, false)[0];
+    // 합친 덩어리 안의 덤불 면은 지나쳐서 그 뒤를 다시 본다
+    for (let i = 0; hit && i < 4 && isSoftFace(hit); i++) {
+      this.ray.ray.origin.copy(hit.point).addScaledVector(this.ray.ray.direction, 1e-3);
+      this.ray.far = far - hit.distance;
+      const next = this.ray.intersectObjects(this.solid, false)[0];
+      if (next) next.distance += far - this.ray.far;
+      hit = next;
+    }
+    this.ray.far = far;
     this.ray.firstHitOnly = false;
     return hit;
   }
@@ -326,14 +408,37 @@ export class Explorer {
   }
 }
 
-function moveKey(key: string): 'f' | 'b' | 'l' | 'r' | null {
-  switch (key) {
-    case 'w': case 'W': case 'ArrowUp': return 'f';
-    case 's': case 'S': case 'ArrowDown': return 'b';
-    case 'a': case 'A': case 'ArrowLeft': return 'l';
-    case 'd': case 'D': case 'ArrowRight': return 'r';
+/** 덤불·꽃 재질의 면(굽기 전에 땅과 한 덩어리로 합쳐져서 물체 이름으로는 못 거른다) */
+function isSoftFace(hit: THREE.Intersection): boolean {
+  const mat = (hit.object as THREE.Mesh).material;
+  const m = Array.isArray(mat) ? mat[hit.face?.materialIndex ?? 0] : mat;
+  return SOFT_MAT.test(m?.name ?? '');
+}
+
+/** 글자 대신 자판 위치(e.code)로 본다. 한글 입력 상태면 e.key 가 'ㅈ'·'Process' 로 들어온다 */
+function moveKey(code: string): 'f' | 'b' | 'l' | 'r' | null {
+  switch (code) {
+    case 'KeyW': case 'ArrowUp': return 'f';
+    case 'KeyS': case 'ArrowDown': return 'b';
+    case 'KeyA': case 'ArrowLeft': return 'l';
+    case 'KeyD': case 'ArrowRight': return 'r';
   }
   return null;
+}
+
+/** 물체 자기 좌표에서 본 메시 전체의 크기 상자 */
+function localBox(o: THREE.Object3D): THREE.Box3 {
+  o.updateWorldMatrix(true, true);
+  const inv = o.matrixWorld.clone().invert();
+  const box = new THREE.Box3();
+  const m = new THREE.Matrix4();
+  o.traverse((c) => {
+    const geo = (c as THREE.Mesh).geometry;
+    if (!(c as THREE.Mesh).isMesh || !geo) return;
+    geo.boundingBox ?? geo.computeBoundingBox();
+    box.union(geo.boundingBox!.clone().applyMatrix4(m.multiplyMatrices(inv, c.matrixWorld)));
+  });
+  return box;
 }
 
 function boundRadius(o: THREE.Object3D): number {
