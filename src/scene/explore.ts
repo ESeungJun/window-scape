@@ -23,6 +23,9 @@ const REACH = 0.12;
 const LAND_RADIUS = 22;
 /** 카메라를 가리면 잠깐 숨길 물체의 최대 크기(바운딩 구 반지름). 그보다 큰 땅·언덕은 숨기지 않고 카메라를 당긴다 */
 const HIDE_RADIUS = 2.5;
+/** 점프: 처음 솟는 속도와 중력(최고 높이 = v²/2g ≈ 0.22, 턱 0.14 보다 높은 바위·계단에 올라설 수 있다) */
+const JUMP_SPEED = 1.7;
+const GRAVITY = 6.5;
 
 export class Explorer {
   readonly avatar = new THREE.Group();
@@ -39,6 +42,10 @@ export class Explorer {
   private readonly body: THREE.Object3D;
   private walkPhase = 0;
   private idleCheck = 0;
+  /** 위아래 속도. 공중에 있는 동안만 쓴다 */
+  private vy = 0;
+  private airborne = false;
+  private jumpQueued = false;
   private readonly v1 = new THREE.Vector3();
   private readonly v2 = new THREE.Vector3();
   private readonly dir = new THREE.Vector3();
@@ -56,6 +63,11 @@ export class Explorer {
 
     window.addEventListener('keydown', (e) => {
       if (!this.active || e.metaKey || e.ctrlKey || e.target instanceof HTMLInputElement) return;
+      if (e.code === 'Space') {
+        if (!e.repeat) this.jumpQueued = true;
+        e.preventDefault();
+        return;
+      }
       const k = moveKey(e.key);
       if (k) {
         this.keys.add(k);
@@ -95,6 +107,7 @@ export class Explorer {
     this.marker.visible = false;
     this.hasGoal = false;
     this.keys.clear();
+    this.airborne = this.jumpQueued = false;
     this.active = true;
     return true;
   }
@@ -176,6 +189,14 @@ export class Explorer {
       }
     }
 
+    if (this.jumpQueued) {
+      this.jumpQueued = false;
+      if (!this.airborne) {
+        this.airborne = true;
+        this.vy = JUMP_SPEED;
+      }
+    }
+
     let moving = false;
     if (dir.lengthSq() > 1e-6) {
       dir.normalize();
@@ -184,21 +205,24 @@ export class Explorer {
       if (y === null) this.hasGoal = false;
       else {
         pos.addScaledVector(dir, step);
-        pos.y = y;
+        if (!this.airborne) pos.y = y;
         moving = true;
       }
       // 가려는 쪽으로 몸을 돌린다(막혀도 돌아본다)
       const want = Math.atan2(dir.x, dir.z);
       const diff = Math.atan2(Math.sin(want - this.avatar.rotation.y), Math.cos(want - this.avatar.rotation.y));
       this.avatar.rotation.y += diff * Math.min(1, dt * 12);
-    } else if ((this.idleCheck += dt) > 0.25) {
+    } else if (!this.airborne && (this.idleCheck += dt) > 0.25) {
       // 서 있는 동안 발밑이 움직이면(지나가는 성·차) 따라 내려간다. 위로 높게 덮치면 그대로 둔다
       this.idleCheck = 0;
       const g = this.groundAt(pos.x, pos.y + STEP_UP + 0.05, pos.z);
       if (g && !g.water && g.y < pos.y + STEP_UP && g.y > pos.y - STEP_DOWN) pos.y = g.y;
     }
 
-    // 걷는 동안 통통 튄다(시안 전 임시 동작)
+    if (this.airborne) this.fall(dt);
+
+    // 걷는 동안 통통 튄다(시안 전 임시 동작). 공중에서는 멈춘다
+    if (this.airborne) moving = false;
     this.walkPhase = moving ? this.walkPhase + dt * 14 : 0;
     this.body.position.y = moving ? Math.abs(Math.sin(this.walkPhase)) * 0.035 : 0;
     this.body.rotation.z = moving ? Math.sin(this.walkPhase) * 0.08 : 0;
@@ -210,6 +234,24 @@ export class Explorer {
       this.marker.scale.setScalar(1 + k * 0.6 + Math.sin(t * 8) * 0.03);
       if (k >= 1 && !this.hasGoal) this.marker.visible = false;
     }
+  }
+
+  /** 공중에서 한 프레임: 발밑 땅에 닿으면 내려선다 */
+  private fall(dt: number): void {
+    const pos = this.avatar.position;
+    this.vy -= GRAVITY * dt;
+    const next = pos.y + this.vy * dt;
+    if (this.vy > 0) {
+      pos.y = next;
+      return;
+    }
+    // 이번 프레임에 내려갈 만큼 위에서부터 아래로 본다
+    const g = this.groundAt(pos.x, pos.y + 0.05, pos.z);
+    if (!g || next <= g.y) {
+      if (g) pos.y = g.y;
+      this.airborne = false;
+      this.vy = 0;
+    } else pos.y = next;
   }
 
   /** 가장 가까운 것 하나만(BVH 가 메시마다 첫 교차에서 멈춘다) */
@@ -227,7 +269,8 @@ export class Explorer {
     if (!this.inBounds(nx, nz)) return null;
     // 무릎 높이에서 앞으로: 벽·줄기·바위
     const group = this.stage!.group;
-    const from = group.localToWorld(this.v1.set(pos.x, pos.y + STEP_UP + 0.04, pos.z));
+    // 공중이면 발끝만 걸리지 않게 낮게 본다(뛰어오르는 중에 턱 위로 넘어간다)
+    const from = group.localToWorld(this.v1.set(pos.x, pos.y + (this.airborne ? 0.04 : STEP_UP + 0.04), pos.z));
     this.ray.set(from, dir);
     this.ray.far = step + REACH;
     const wall = this.firstHit();
@@ -235,7 +278,9 @@ export class Explorer {
     if (wall) return null;
     // 머리 위(나뭇가지·처마)는 무시하고 발밑만 본다
     const g = this.groundAt(nx, pos.y + HEIGHT, nz);
-    if (!g || g.water || g.y > pos.y + STEP_UP || g.y < pos.y - STEP_DOWN) return null;
+    if (!g || g.water) return null;
+    if (this.airborne) return g.y > pos.y + 0.02 || g.y < pos.y - STEP_DOWN - 0.3 ? null : g.y;
+    if (g.y > pos.y + STEP_UP || g.y < pos.y - STEP_DOWN) return null;
     return g.y;
   }
 
