@@ -44,6 +44,7 @@ const LEAP_S = 0.5;
 const LEAP_PER = 0.05;
 /** 곤돌라(0.33 폭) 안에 들어가게 줄이는 비율 */
 const RIDE_SCALE = 0.6;
+const GLASS = { transparent: true, opacity: 0.35, depthWrite: false };
 
 export class Explorer {
   readonly avatar = new THREE.Group();
@@ -186,9 +187,9 @@ export class Explorer {
   /** 화면 좌표(-1~1)를 클릭했을 때: 그 땅으로 걸어간다. 걸을 수 없는 곳이면 false */
   pick(ndc: THREE.Vector2, camera: THREE.Camera): boolean {
     if (!this.active || !this.stage) return false;
+    if (this.riding || this.leap) return false;
     this.ray.setFromCamera(ndc, camera);
-    const hit = this.firstHit();
-    if (this.riding) return false;
+    const hit = this.visibleHit();
     const gondola = hit && (rideOf(hit.object) ?? (isWheel(hit.object) ? this.lowestGondola() : undefined));
     if (gondola) return this.leapInto(gondola), true;
     if (!hit || isWater(hit.object)) return false;
@@ -222,6 +223,11 @@ export class Explorer {
     const to = this.stage!.group.worldToLocal(gondola.localToWorld(this.v1.copy(seat)));
     const dist = to.distanceTo(this.avatar.position);
     this.boardedAt.copy(this.avatar.position);
+    // 공중(점프·치여서 나는 중)이면 발밑 땅을 내릴 자리로
+    if (this.airborne) {
+      const g = this.groundAt(this.boardedAt.x, this.boardedAt.y + 0.05, this.boardedAt.z);
+      if (g && !g.water) this.boardedAt.y = g.y;
+    }
     this.leap = { gondola, seat, t: 0, dur: LEAP_S + dist * LEAP_PER, height: 0.4 + dist * 0.12 };
     this.hasGoal = this.airborne = false;
     this.fly.set(0, 0, 0);
@@ -255,10 +261,12 @@ export class Explorer {
       const m = o as THREE.Mesh;
       if (!m.isMesh || o === this.avatar || this.avatar.getObjectById(o.id)) return;
       this.glassed.set(m, m.material);
-      const glass = (mat: THREE.Material) => Object.assign(mat.clone(), { transparent: true, opacity: 0.35, depthWrite: false });
+      const glass = (mat: THREE.Material) => Object.assign(mat.clone(), GLASS);
       m.material = Array.isArray(m.material) ? m.material.map(glass) : glass(m.material);
     });
     this.riding = gondola;
+    this.hasGoal = false;
+    this.marker.visible = false;
     this.body.rotation.set(0, 0, 0);
     this.onRide?.(true);
   }
@@ -271,6 +279,14 @@ export class Explorer {
     this.avatar.scale.setScalar(1);
     this.riding = undefined;
     this.onRide?.(false);
+  }
+
+  /** 원래 재질은 시간대·날씨에 따라 계속 바뀌므로 반투명 복사본에 그대로 옮긴다 */
+  private syncGlass(): void {
+    for (const [m, orig] of this.glassed) {
+      const src = [orig].flat();
+      [m.material].flat().forEach((g, i) => Object.assign(g.copy(src[i]), GLASS));
+    }
   }
 
   private unglass(): void {
@@ -324,6 +340,7 @@ export class Explorer {
       } else {
         this.body.position.y = 0;
         this.body.rotation.set(0, 0, 0);
+        this.syncGlass();
         return;
       }
     }
@@ -435,6 +452,8 @@ export class Explorer {
       const now = obj.getWorldPosition(this.v2);
       car.vel.subVectors(now, car.last).divideScalar(Math.max(dt, 1e-3));
       car.last.copy(now);
+      // 디오라마 모양에서 쉬는 차는 숨긴 채 제자리에 남는다
+      if (!obj.visible) continue;
       const p = obj.worldToLocal(group.localToWorld(this.v1.copy(pos)));
       const r = BODY_RADIUS / obj.getWorldScale(this.v2).x;
       if (p.y > box.max.y || p.y + HEIGHT < box.min.y) continue;
@@ -484,6 +503,11 @@ export class Explorer {
       this.vy = 0;
       this.fly.set(0, 0, 0);
     } else pos.y = next;
+  }
+
+  /** 클릭용: 카메라를 가려 잠깐 숨긴 물체는 지나쳐서 화면에 보이는 것을 고른다 */
+  private visibleHit(): THREE.Intersection | undefined {
+    return this.ray.intersectObjects(this.solid, false).find((h) => h.object.visible && !isSoftFace(h));
   }
 
   /** 가장 가까운 것 하나만(BVH 가 메시마다 첫 교차에서 멈춘다) */
@@ -615,10 +639,12 @@ function localBox(o: THREE.Object3D): THREE.Box3 {
   return box;
 }
 
+const scratch = new THREE.Vector3();
+
 function boundRadius(o: THREE.Object3D): number {
   const geo = (o as THREE.Mesh).geometry;
   if (!geo.boundingSphere) geo.computeBoundingSphere();
-  return geo.boundingSphere!.radius * o.getWorldScale(new THREE.Vector3()).x;
+  return geo.boundingSphere!.radius * o.getWorldScale(scratch).x;
 }
 
 function isWater(o: THREE.Object3D): boolean {

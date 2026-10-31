@@ -252,7 +252,11 @@ export class World {
   /** 들어가기 모드: 풍경 안에 캐릭터를 내려놓고 카메라가 뒤에서 따라간다. 설 곳을 못 찾으면 false */
   enter(): boolean {
     if (this.explorer.active) return true;
-    if (this.fly) return false;
+    // 나오는 중에 다시 누르면 나오기를 끝내고 바로 들어간다
+    if (this.fly?.leaving) {
+      this.fly = null;
+      this.restoreView();
+    }
     if (!this.explorer.start(this.stage)) return false;
     const c = this.controls;
     const s = this.saved;
@@ -271,7 +275,14 @@ export class World {
 
   /** 들어가기 모드에서 나와 원래 시점으로 돌아간다. now 면 날아가지 않고 바로 */
   leave(now = false): void {
-    if (!this.explorer.active) return;
+    if (!this.explorer.active) {
+      // 나오는 중에 테마·모양을 바꾸면 날아가기를 끝내 둔다(끝에 옛 테마 시점을 덮어쓰지 않게)
+      if (now && this.fly?.leaving) {
+        this.fly = null;
+        this.restoreView();
+      }
+      return;
+    }
     this.explorer.stop();
     const c = this.controls;
     if (now) {
