@@ -333,6 +333,37 @@ body.is-dark .card { background: rgba(14, 24, 52, 0.45); border-color: rgba(255,
   font-size: 13px;
 }
 
+/* ── 들어가기 모드 ── */
+.explore {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.explore[hidden] { display: none; }
+.explore__exit {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(31, 77, 99, 0.14);
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+}
+.explore__exit:hover { background: rgba(31, 77, 99, 0.24); }
+.explore__exit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 들어가 있는 동안은 날씨 글자·예보·도구를 숨겨 풍경만 보이게 */
+body.exploring .brand, body.exploring .now, body.exploring .week, body.exploring .toolbar,
+body.exploring .panel, body.exploring .sound { display: none; }
+
 /* ── 좁은 화면 ── */
 @media (max-width: 760px) {
   .brand { top: 16px; left: 16px; }
@@ -418,3 +449,7 @@ body.widget .sound { display: none; }
 .about__status { margin: 6px 0 0; font-size: 11px; line-height: 1.5; color: var(--ink-soft); }
 .about__status:empty { display: none; }
 .chip:disabled { opacity: 0.5; cursor: default; }
+
+/* 작은 위젯: 안내 문구는 빼고 나가기만 */
+body.widget .explore { bottom: 10px; padding: 4px; }
+body.widget .explore__hint { display: none; }
