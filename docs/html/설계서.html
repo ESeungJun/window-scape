@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>창밖날씨(WINDOW SCAPE) 설계서 · window-scape</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
+:root{--bg:#fbfaf8;--panel:#fff;--text:#1f2328;--muted:#656d76;--line:#e6e3de;--accent:#3b5bdb;--accent-soft:#edf2ff;--code:#f4f2ee;--th:#f4f2ee}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171a;--panel:#1c1f23;--text:#e6e6e3;--muted:#9aa1a9;--line:#2e3238;--accent:#91a7ff;--accent-soft:#232a45;--code:#23262b;--th:#23262b}}
+:root[data-theme="dark"]{--bg:#15171a;--panel:#1c1f23;--text:#e6e6e3;--muted:#9aa1a9;--line:#2e3238;--accent:#91a7ff;--accent-soft:#232a45;--code:#23262b;--th:#23262b}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.75 Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;word-break:keep-all;overflow-wrap:anywhere}
+.layout{display:grid;grid-template-columns:240px minmax(0,1fr) 220px;gap:40px;max-width:1280px;margin:0 auto;padding:32px 24px}
+nav.docs,aside.toc{position:sticky;top:24px;align-self:start;max-height:calc(100vh - 48px);overflow:auto;font-size:14px}
+nav.docs .project{font-weight:700;font-size:15px;margin-bottom:12px}
+nav.docs a,aside.toc a{display:block;color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:8px}
+nav.docs a:hover,aside.toc a:hover{color:var(--text);background:var(--accent-soft)}
+nav.docs a.on{color:var(--accent);background:var(--accent-soft);font-weight:600}
+aside.toc .label{color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.04em;margin:0 10px 6px}
+aside.toc a.d3{padding-left:22px;font-size:13px}
+main{min-width:0}
+.meta{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:13px;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:8px}
+.meta button{font:inherit;color:var(--muted);background:none;border:1px solid var(--line);border-radius:999px;padding:3px 12px;cursor:pointer}
+h1{font-size:32px;line-height:1.3;margin:24px 0 16px}
+h2{font-size:23px;margin:48px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:18px;margin:32px 0 8px}
+h1,h2,h3,h4{position:relative;scroll-margin-top:16px}
+.anchor{position:absolute;left:-1em;color:var(--muted);text-decoration:none;opacity:0}
+h1:hover .anchor,h2:hover .anchor,h3:hover .anchor,h4:hover .anchor{opacity:.6}
+a{color:var(--accent)}
+code{font:13.5px/1.6 "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code);padding:2px 6px;border-radius:5px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto}
+pre code{background:none;padding:0}
+pre.mermaid{background:var(--panel);text-align:center}
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14.5px;display:block;overflow-x:auto}
+th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+th{background:var(--th);font-weight:600;white-space:nowrap}
+blockquote{margin:16px 0;padding:8px 16px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;color:var(--text)}
+img{max-width:100%;border-radius:8px}
+hr{border:0;border-top:1px solid var(--line);margin:32px 0}
+li{margin:3px 0}
+@media (max-width:1100px){.layout{grid-template-columns:200px minmax(0,1fr)}aside.toc{display:none}}
+@media (max-width:760px){.layout{display:block;padding:16px}nav.docs{position:static;max-height:none;display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}nav.docs .project{width:100%;margin:0}h1{font-size:26px}}
+@media print{nav.docs,aside.toc,.meta button{display:none}.layout{display:block}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="docs"><div class="project">window-scape</div><a href="%EA%B8%B0%ED%9A%8D%EC%84%9C.html">기획서</a><a href="%EC%84%A4%EA%B3%84%EC%84%9C.html" class="on">설계서</a><a href="%EA%B5%AC%ED%98%84%EB%8F%84.html">구현도</a><a href="%EA%B2%B0%EC%A0%95%EA%B8%B0%EB%A1%9D.html">결정기록</a><a href="explore-character.html">explore-character</a></nav>
+<main>
+<div class="meta"><span>마지막 수정 2026-11-04 · 원본 docs/설계서.md</span><button id="theme" type="button">테마</button></div>
+<h1 id="창밖날씨window-scape-설계서"><a class="anchor" href="#창밖날씨window-scape-설계서">#</a>창밖날씨(WINDOW SCAPE) 설계서</h1>
+<blockquote>
+<p>2026-11-05에 v0.5.0 코드를 보고 정리했다.
+함께 보기: <a href="기획서.html">기획서</a> · <a href="구현도.html">구현도</a> · <a href="결정기록.html">결정기록</a></p>
+</blockquote>
+<h2 id="기술-스택"><a class="anchor" href="#기술-스택">#</a>기술 스택</h2>
+<table>
+<thead>
+<tr>
+<th>영역</th>
+<th>고른 것</th>
+<th>이유</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>3D</td>
+<td>Three.js 0.186, three-mesh-bvh</td>
+<td>원작이 Three.js였고, 웹으로 먼저 만들었다. 들어가기 모드의 광선 검사가 느려(광선 하나 약 19ms) BVH를 쓴다</td>
+</tr>
+<tr>
+<td>모델</td>
+<td>Blender 파이썬 스크립트(<code>tools/blender/*.py</code>) → glb(Draco 압축) + 라이트맵 webp</td>
+<td>코드로 쌓은 도형은 장난감 블록 같았다. 손으로 다루지 않고 스크립트로 만들어 다시 만들기 쉽게 했다</td>
+</tr>
+<tr>
+<td>화면</td>
+<td>TypeScript 7, Vite 8, 프레임워크 없음</td>
+<td>화면이 3D 캔버스와 패널 몇 개라 빌드만 있으면 된다</td>
+</tr>
+<tr>
+<td>데스크톱</td>
+<td>Tauri 2(Rust)</td>
+<td>늘 띄워 둘 위젯이라 가벼워야 한다. 설치 파일이 20MB 안쪽</td>
+</tr>
+<tr>
+<td>Tauri 플러그인</td>
+<td>window-state, autostart, updater, process</td>
+<td>위치·크기 기억, 로그인 시 실행, 자동 업데이트·재시작</td>
+</tr>
+<tr>
+<td>현재 위치(macOS)</td>
+<td><code>objc2-core-location</code>(CoreLocation)</td>
+<td>앱 창 WebKit이 위치 권한을 처리하지 못했다(<code>f2d772e</code>)</td>
+</tr>
+<tr>
+<td>날씨</td>
+<td>Open-Meteo(CC BY 4.0)</td>
+<td>API 키 없이 쓸 수 있다</td>
+</tr>
+<tr>
+<td>CI</td>
+<td>GitHub Actions</td>
+<td><code>v*</code> 태그에 맥 arm64·x64, Windows x64를 각각 빌드·서명·공증</td>
+</tr>
+</tbody></table>
+<h3 id="후보-비교"><a class="anchor" href="#후보-비교">#</a>후보 비교</h3>
+<p>개발 글과 커밋에 남은 근거만 적는다. 웹 검색으로 비교한 기록은 없다.</p>
+<table>
+<thead>
+<tr>
+<th>결정</th>
+<th>후보</th>
+<th>고른 것과 이유</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>배포 형태</td>
+<td>웹사이트(원작 방식) / 데스크톱 위젯</td>
+<td>위젯. 바탕화면 구석에 늘 띄워 두고 싶었다</td>
+</tr>
+<tr>
+<td>위젯 틀</td>
+<td>기록 없음</td>
+<td>Tauri 2. 웹으로 먼저 만든 화면을 감싸고, 늘 띄워 둘 만큼 가볍다</td>
+</tr>
+<tr>
+<td>모델</td>
+<td>코드로 만든 도형 / Blender 모델</td>
+<td>Blender. 미니어처 느낌</td>
+</tr>
+<tr>
+<td>빛</td>
+<td>실시간 조명 전부 / 구운 빛 + 해만 실시간</td>
+<td>구운 빛. 그늘은 부드러워지고 프레임은 도시 테마 255 → 1764</td>
+</tr>
+<tr>
+<td>땅 테마 모양</td>
+<td>공중 섬 / 지평선 풍경 / 받침 디오라마</td>
+<td>지평선 풍경을 기본으로, 디오라마는 설정에서 고름</td>
+</tr>
+</tbody></table>
+<h2 id="전체-아키텍처"><a class="anchor" href="#전체-아키텍처">#</a>전체 아키텍처</h2>
+<pre class="mermaid">flowchart TB
+  subgraph Build[&quot;만들 때&quot;]
+    BL[&quot;tools/blender/*.py&lt;br/&gt;모델링 · 라이트맵 굽기&quot;] --&gt; M[(&quot;public/models&lt;br/&gt;*.glb · *_light.webp&quot;)]
+  end
+  subgraph Front[&quot;화면 (TypeScript · Three.js)&quot;]
+    MAIN[&quot;main.ts&lt;br/&gt;상태 · 장소 · 테마&quot;] --&gt; WORLD[&quot;scene/world.ts&lt;br/&gt;렌더러 · 카메라 · 프레임 루프&quot;]
+    WORLD --&gt; STAGE[&quot;테마 Stage&lt;br/&gt;island · drive · city · castle · forest&quot;]
+    STAGE --&gt; KIT[&quot;kit.ts · diorama.ts · baked.ts · props.ts&quot;]
+    WORLD --&gt; ENV[&quot;env.ts · sky.ts · clouds.ts · precipitation.ts&lt;br/&gt;시간대 · 날씨 · 계절&quot;]
+    WORLD --&gt; EXP[&quot;explore.ts&lt;br/&gt;들어가기 모드&quot;]
+    MAIN --&gt; UI[&quot;ui/*&lt;br/&gt;예보 · 검색 · 설정 · 소리&quot;]
+    MAIN --&gt; WX[&quot;data/weather.ts&quot;]
+    MAIN --&gt; WG[&quot;widget.ts&lt;br/&gt;위젯 모드&quot;]
+  end
+  subgraph Native[&quot;Tauri (Rust)&quot;]
+    LIB[&quot;lib.rs&lt;br/&gt;트레이 · 창 배치 · 명령&quot;]
+    LOC[&quot;location.rs&lt;br/&gt;CoreLocation&quot;]
+    PL[&quot;플러그인&lt;br/&gt;window-state · autostart · updater · process&quot;]
+  end
+  M --&gt; KIT
+  WX --&gt; OM[&quot;api.open-meteo.com&lt;br/&gt;geocoding-api.open-meteo.com&quot;]
+  WG -- &quot;invoke: get_layer · set_layer · current_location&quot; --&gt; LIB
+  LIB --&gt; LOC
+  PL --&gt; GH[&quot;GitHub Releases&lt;br/&gt;latest.json&quot;]</pre>
+<ul>
+<li>화면 코드는 웹과 데스크톱이 같다. Tauri 안에서 돌 때만 위젯 모드(<code>widget.ts</code>)와 Rust 명령을 쓴다.</li>
+<li>테마는 <code>Stage</code> 인터페이스(<a href="../../src/scene/kit.ts">kit.ts</a>)로 나눈다: <code>group</code>, <code>kind</code>(<code>floating</code>·<code>ground</code>), <code>view</code>, <code>groundHeight</code>, <code>baked</code>, <code>setCase</code>, <code>update</code>. 테마마다 난수 시드를 고정해 새로고침해도 같은 배치가 나온다(<a href="../../src/scene/themes.ts">themes.ts</a>).</li>
+</ul>
+<h2 id="데이터-구조"><a class="anchor" href="#데이터-구조">#</a>데이터 구조</h2>
+<h3 id="날씨-open-meteo"><a class="anchor" href="#날씨-open-meteo">#</a>날씨 (Open-Meteo)</h3>
+<ul>
+<li>예보 요청: <code>current</code>(기온, 습도, 강수, 날씨 코드, 풍속, 풍향), <code>hourly</code>(기온, 날씨 코드, 강수 확률), <code>daily</code>(날씨 코드, 최고·최저, 일출·일몰, 강수 합, 최대 풍속, 주된 풍향), <code>timezone=auto</code>, 7일(<a href="../../src/data/weather.ts">weather.ts</a>).</li>
+<li>좌표는 소수 2자리로 줄여서 보낸다.</li>
+<li>날씨 코드는 앱의 <code>Condition</code> 10가지로 바꾼다: <code>clear</code>, <code>partly</code>, <code>cloudy</code>, <code>wind</code>, <code>fog</code>, <code>rain</code>, <code>heavyRain</code>, <code>storm</code>, <code>snow</code>, <code>rainbow</code>.</li>
+<li>시간대 <code>TimeOfDay</code>: <code>morning</code>·<code>day</code>·<code>evening</code>·<code>night</code>. 일출·일몰은 날짜를 포함한 절대 시각으로 비교한다(백야·극야·자정 넘는 일몰).</li>
+<li>계절 <code>Season</code>: 현지 날짜 기준, 열대는 여름 고정. 눈 덮임은 실제 최저기온으로 정한다.</li>
+</ul>
+<h3 id="저장"><a class="anchor" href="#저장">#</a>저장</h3>
+<table>
+<thead>
+<tr>
+<th>무엇</th>
+<th>어디</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>장소(이름, 좌표), 테마, 모양, 보기 설정</td>
+<td>웹뷰 <code>localStorage</code>(<a href="../../src/main.ts">main.ts</a>, <a href="../../src/ui/desktop-settings.ts">desktop-settings.ts</a>)</td>
+</tr>
+<tr>
+<td>창 배치(바탕화면 고정·일반·항상 위)</td>
+<td>Tauri 앱 설정 폴더(<code>app_config_dir</code>)의 파일(<a href="../../src-tauri/src/lib.rs">lib.rs</a> <code>layer_path</code>)</td>
+</tr>
+<tr>
+<td>창 위치·크기</td>
+<td><code>tauri-plugin-window-state</code></td>
+</tr>
+<tr>
+<td>현재 위치 좌표</td>
+<td>저장하지 않는다</td>
+</tr>
+</tbody></table>
+<h3 id="모델-파일"><a class="anchor" href="#모델-파일">#</a>모델 파일</h3>
+<ul>
+<li><code>public/models/&lt;테마&gt;.glb</code>: Draco 압축 장면. 물·불빛·움직이는 물체 자리 같은 배치 정보는 glb의 <code>extras</code>(layout)에서 읽는다(<code>79e102b</code>).</li>
+<li><code>public/models/&lt;테마&gt;_light.webp</code>: 하늘빛·틈 그늘을 구운 라이트맵. 앱에서 시간대·날씨 하늘빛(<code>skyTint</code>)을 곱한다(<a href="../../src/scene/baked.ts">baked.ts</a>).</li>
+<li><code>public/draco/</code>: Draco 해독기.</li>
+</ul>
+<h2 id="플랫폼별-차이"><a class="anchor" href="#플랫폼별-차이">#</a>플랫폼별 차이</h2>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>macOS</th>
+<th>Windows</th>
+<th>웹</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>창</td>
+<td>테두리 없는 투명 창, <code>macOSPrivateApi</code></td>
+<td>테두리 없는 투명 창</td>
+<td>브라우저 창</td>
+</tr>
+<tr>
+<td>트레이</td>
+<td>메뉴 막대 창문 아이콘</td>
+<td>작업 표시줄 트레이</td>
+<td>없음</td>
+</tr>
+<tr>
+<td>Dock·작업 표시줄</td>
+<td>Dock 아이콘 없음</td>
+<td><code>skipTaskbar</code></td>
+<td>-</td>
+</tr>
+<tr>
+<td>현재 위치</td>
+<td>CoreLocation(위치 권한 창)</td>
+<td>지원 안 함(<code>unavailable</code>)</td>
+<td>브라우저 <code>navigator.geolocation</code></td>
+</tr>
+<tr>
+<td>설치 파일</td>
+<td>dmg(arm64·x64 따로)</td>
+<td>NSIS setup.exe</td>
+<td>-</td>
+</tr>
+<tr>
+<td>서명</td>
+<td>Developer ID + 공증, CI에서 확인</td>
+<td>코드 서명 없음</td>
+<td>-</td>
+</tr>
+<tr>
+<td>자동 업데이트 파일</td>
+<td><code>.app.tar.gz</code></td>
+<td>setup.exe 자체</td>
+<td>-</td>
+</tr>
+<tr>
+<td>창 높이</td>
+<td>하나뿐이라 &quot;항상 아래&quot; 끄기가 &quot;항상 위&quot;를 덮어씀 → 끄는 쪽을 먼저 호출(<code>cdafeb9</code>)</td>
+<td>-</td>
+<td>-</td>
+</tr>
+</tbody></table>
+<h2 id="보안권한"><a class="anchor" href="#보안권한">#</a>보안·권한</h2>
+<ul>
+<li>CSP(<a href="../../src-tauri/tauri.conf.json">tauri.conf.json</a>): <code>default-src &#39;self&#39;</code>, 연결은 IPC와 Open-Meteo 두 주소만. Draco 해독기 때문에 <code>&#39;wasm-unsafe-eval&#39;</code>, <code>worker-src blob:</code>을 허용(<code>79e102b</code>).</li>
+<li>Tauri 권한(<a href="../../src-tauri/capabilities/default.json">capabilities/default.json</a>): 기본 + 창 끌기·크기 조절 + 업데이터 + 재시작만.</li>
+<li>macOS 위치: hardened runtime에 <code>com.apple.security.personal-information.location</code> entitlement, 위치 권한 설명. 좌표는 Rust에서 소수 2자리로 줄이고 저장하지 않는다.</li>
+<li>로컬 빌드도 번들 전체를 ad-hoc 서명(<code>signingIdentity: &quot;-&quot;</code>)해야 위치 권한 창이 뜬다. 링커 서명만 된 실행 파일은 TCC가 앱을 식별하지 못해 바로 거부한다(<code>5dd5e68</code>).</li>
+<li>자동 업데이트: 업데이트 파일은 Tauri 업데이트 키로 서명하고 앱에는 공개 키만 넣는다. 받을 주소는 <code>releases/latest/download/latest.json</code> 하나.</li>
+<li>CI 서명 비밀값은 빌드 단계에만 넘기고, 인증서는 임시 키체인에 넣었다가 끝나면 지운다. 저장소에 비밀값은 없다.</li>
+</ul>
+<h2 id="알려진-한계"><a class="anchor" href="#알려진-한계">#</a>알려진 한계</h2>
+<ul>
+<li>Windows는 현재 위치를 못 쓴다. 코드 서명이 없어 SmartScreen 경고가 뜬다.</li>
+<li>들어가기 모드는 시험 중이고 캐릭터는 임시 모양이다.</li>
+<li>자동 시험 코드가 없다. 검증은 타입 검사, 화면 확인, 개발 서버 전용 <code>__view()</code>·<code>__info()</code>(그리기 호출·삼각형·메모리 수)로 한다.</li>
+<li>모델을 끝내 못 불러오면 화면에 안내 문구만 띄운다(<code>e50f59a</code>).</li>
+<li>카메라가 언덕·나무·집 속으로 들어가지 않게 높이 격자로 막지만, 격자 해상도만큼만 정확하다.</li>
+</ul>
+
+</main>
+<aside class="toc"><div class="label">이 문서</div><a class="d2" href="#기술-스택">기술 스택</a><a class="d3" href="#후보-비교">후보 비교</a><a class="d2" href="#전체-아키텍처">전체 아키텍처</a><a class="d2" href="#데이터-구조">데이터 구조</a><a class="d3" href="#날씨-open-meteo">날씨 (Open-Meteo)</a><a class="d3" href="#저장">저장</a><a class="d3" href="#모델-파일">모델 파일</a><a class="d2" href="#플랫폼별-차이">플랫폼별 차이</a><a class="d2" href="#보안권한">보안·권한</a><a class="d2" href="#알려진-한계">알려진 한계</a></aside>
+</div>
+<script>
+(function(){var r=document.documentElement,k='docs-theme';try{var s=localStorage.getItem(k);if(s)r.dataset.theme=s}catch(e){}
+document.getElementById('theme').onclick=function(){var d=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');r.dataset.theme=d==='dark'?'light':'dark';try{localStorage.setItem(k,r.dataset.theme)}catch(e){}location.reload()};})();
+</script>
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs';
+const r=document.documentElement;const dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
+mermaid.initialize({startOnLoad:true,theme:dark?'dark':'default',fontFamily:'Pretendard, sans-serif'});
+</script>
+</body>
+</html>
