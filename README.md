@@ -18,7 +18,7 @@ a tiny Blender + Three.js island that changes with the real weather — and fell
 So I built my own.
 
 The original is a website. I wanted something that lives quietly in the corner of my desktop,
-so WINDOW SCAPE is a native macOS widget. It started as a single sky island and grew into five hand-made worlds.
+so WINDOW SCAPE is a native desktop widget for macOS and Windows. It started as a single sky island and grew into five hand-made worlds.
 (Everything — models and code — was built from scratch; only the idea of a weather-driven 3D miniature was borrowed.)
 
 ## Five worlds
@@ -68,7 +68,7 @@ Apart from the sky island, each world can also be shown as a diorama on a wooden
 - **Responsive** — resize freely; small shows just the scene, larger adds the 7-day bar and hourly chart.
 - **Step inside** — tap the walker icon to drop a tiny character into the scene and wander around in third person (click to walk, WASD, Space to jump; click the Ferris wheel in Florence to ride it). Still experimental.
 - **Auto-update** — new versions download and install themselves.
-- **And more** — current-location weather, city search, launch at login, and optional waterfall and rain ambience.
+- **And more** — current-location weather (Mac only; on Windows pick a city), city search, launch at login, and optional waterfall and rain ambience.
 
 ## Install
 
@@ -116,13 +116,14 @@ In the web version, press `F` or open `?showcase` to frame the scene in a rounde
 | `src/scene/kit.ts` | Shared materials, props, terrain, instanced trees, waterfalls |
 | `src/scene/{island,drive,city,castle,forest}.ts` | The five worlds |
 | `src/scene/world.ts` | Renderer, camera, lights, theme switching, frame loop |
+| `src/scene/explore.ts` | Step-inside mode: the walking character and third-person camera |
 | `src/scene/{env,sky,clouds,precipitation}.ts` | Time/weather/season blending, sky, clouds, rain/snow/lightning/rainbow |
 | `src/data/weather.ts` | Open-Meteo forecast and geocoding, weather codes, local time and season |
 | `src/ui/*` | Current weather, forecast, view settings, widget settings (layer, opacity, updates) |
 | `src-tauri/` | Tauri app: menu bar, window layering, current location (CoreLocation), updater |
 
-Pushing a `v*` tag makes GitHub Actions build a universal app, sign it with a Developer ID, notarize it with Apple,
-and publish the DMG plus the auto-update files (`latest.json`).
+Pushing a `v*` tag makes GitHub Actions build the Mac app separately for Apple Silicon and Intel (signed with a Developer ID and notarized by Apple)
+and a Windows x64 installer (not code-signed), then publish the DMGs, the installer and the auto-update files (`latest.json`).
 Required secrets: `MAC_CERT_P12`, `MAC_CERT_PASSWORD`, `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`,
 `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
 

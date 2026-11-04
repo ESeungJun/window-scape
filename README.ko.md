@@ -2,7 +2,7 @@
 
 <h1 align="center">창밖날씨 · WINDOW SCAPE</h1>
 
-<p align="center">바탕화면에 작은 창을 하나 내고, 그 너머 풍경으로 오늘 날씨를 보여주는 macOS 위젯이에요.<br>
+<p align="center">바탕화면에 작은 창을 하나 내고, 그 너머 풍경으로 오늘 날씨를 보여주는 macOS·Windows 위젯이에요.<br>
 비가 오면 창밖에도 비가 오고, 해가 지면 창밖 마을에도 불이 켜집니다.</p>
 
 <p align="center"><a href="https://github.com/ESeungJun/window-scape/releases/latest"><b>⬇ 최신 버전 내려받기 (macOS · Windows)</b></a></p>
@@ -69,7 +69,7 @@ Blender랑 Three.js로 만든 작은 섬이 실제 날씨에 맞춰 바뀌는 �
 - 크기 - 창 크기에 맞춰 알아서 정보량이 바뀌어요. 작으면 섬과 기온만, 크면 7일 예보와 시간별 그래프까지 나옵니다.
 - 들어가기 - 사람 아이콘을 누르면 작은 캐릭터가 풍경 안에 내려가요. 3인칭으로 클릭한 곳이나 WASD로 걸어 다니고 스페이스로 점프해요. 피렌체에서는 대관람차를 눌러 탈 수 있어요. (아직 시험 중)
 - 자동 업데이트 - 새 버전이 나오면 알아서 받아서 설치해줘요.
-- 그 밖에 - 현재 위치 날씨, 도시 검색, 로그인 시 자동 실행, 폭포·빗소리 배경음
+- 그 밖에 - 현재 위치 날씨(Mac만, Windows는 도시를 골라요), 도시 검색, 로그인 시 자동 실행, 폭포·빗소리 배경음
 
 ## 설치
 
@@ -119,13 +119,14 @@ npm run build                        # 타입 검사 + 웹 빌드
 | `src/scene/kit.ts` | 테마 공용 재료·소품·지형·나무 인스턴싱·폭포 |
 | `src/scene/{island,drive,city,castle,forest}.ts` | 테마 다섯 개 |
 | `src/scene/world.ts` | 렌더러·카메라·조명, 테마 전환, 프레임 루프 |
+| `src/scene/explore.ts` | 들어가기 모드: 걷는 캐릭터와 3인칭 카메라 |
 | `src/scene/{env,sky,clouds,precipitation}.ts` | 시간대·날씨·계절 연출, 하늘, 구름, 비·눈·번개·무지개 |
 | `src/data/weather.ts` | Open-Meteo 예보·지명 검색, 날씨 코드 변환, 현지 시간대·계절 |
 | `src/ui/*` | 현재 날씨, 예보, 보기 설정, 위젯 설정(배치·투명도·업데이트) |
 | `src-tauri/` | Tauri 앱: 메뉴 막대, 창 배치, 현재 위치(CoreLocation), 업데이터 |
 
-`v*` 태그를 푸시하면 GitHub Actions가 유니버설 앱을 Developer ID로 서명하고 Apple 공증을 받아서
-DMG와 자동 업데이트 파일(`latest.json`)을 릴리스에 올려요.
+`v*` 태그를 푸시하면 GitHub Actions가 Mac 앱을 Apple Silicon·Intel용으로 따로 빌드해 Developer ID로 서명하고 Apple 공증을 받고,
+Windows x64 설치 파일(코드 서명 없음)도 만들어서 DMG·설치 파일·자동 업데이트 파일(`latest.json`)을 릴리스에 올려요.
 필요한 Secrets는 `MAC_CERT_P12`, `MAC_CERT_PASSWORD`, `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`,
 `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 입니다.
 
