@@ -8,6 +8,7 @@ When it rains outside, it rains in the window. When the sun sets, the village li
 <p align="center"><a href="https://github.com/ESeungJun/window-scape/releases/latest"><b>⬇ Download the latest release (macOS · Windows)</b></a></p>
 
 <p align="center"><b>English</b> · <a href="README.ko.md">한국어</a></p>
+<p align="center">📝 Story behind it: <a href="https://velog.io/@haul/window-scape-weather-diorama-widget">velog (Korean)</a></p>
 
 <p align="center"><img src="docs/images/hero.jpg" width="100%" alt="WINDOW SCAPE: a floating sky island above a sea of clouds, with a 7-day forecast"></p>
 

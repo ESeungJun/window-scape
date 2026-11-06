@@ -8,6 +8,7 @@
 <p align="center"><a href="https://github.com/ESeungJun/window-scape/releases/latest"><b>⬇ 최신 버전 내려받기 (macOS · Windows)</b></a></p>
 
 <p align="center"><a href="README.md">English</a> · <b>한국어</b></p>
+<p align="center">📝 만든 이야기: <a href="https://velog.io/@haul/window-scape-weather-diorama-widget">velog</a></p>
 
 <p align="center"><img src="docs/images/hero.jpg" width="100%" alt="창밖날씨: 구름바다 위에 떠 있는 하늘섬과 7일 예보"></p>
 
