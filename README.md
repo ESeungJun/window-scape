@@ -101,6 +101,8 @@ npm install
 npm run dev                          # web version at http://localhost:5173
 npm run tauri dev                    # desktop widget (needs Rust once: https://rustup.rs)
 npm run build                        # type-check + web build
+npm test                             # pure-logic tests (node --test)
+npm run models:optimize -- <in> <out> # glb post-processing: single-sided closed meshes, weld, Draco re-compress
 ```
 
 In the web version, press `F` or open `?showcase` to frame the scene in a rounded window.

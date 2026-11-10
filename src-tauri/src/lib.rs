@@ -139,6 +139,71 @@ fn set_layer(app: AppHandle, layer: String) -> Result<(), String> {
   Ok(())
 }
 
+/// 창이 다른 창에 완전히 가려졌는지. 알 수 없으면 None.
+#[cfg(target_os = "macos")]
+fn is_occluded(app: &AppHandle) -> Option<bool> {
+  /// NSWindowOcclusionStateVisible
+  const VISIBLE: usize = 1 << 1;
+  let window = app.get_webview_window(WINDOW)?;
+  let ns_window = window.ns_window().ok()? as *mut objc2::runtime::AnyObject;
+  if ns_window.is_null() {
+    return None;
+  }
+  // 주 스레드에서만 부른다(watch_occlusion 이 run_on_main_thread 로 부른다)
+  let state: usize = unsafe { objc2::msg_send![ns_window, occlusionState] };
+  Some(state & VISIBLE == 0)
+}
+
+/// 창이 가려졌는지 지켜보다가 바뀌면 화면에 알린다. 화면은 가려진 동안 그리기를 멈춘다.
+/// "바탕화면 고정"은 다른 창 뒤에 깔려 있는 시간이 대부분이라, 안 보이는 동안 GPU 를 쓰지 않게 한다.
+#[cfg(target_os = "macos")]
+fn watch_occlusion(app: &AppHandle) {
+  use std::{sync::mpsc, thread, time::Duration};
+
+  let app = app.clone();
+  thread::spawn(move || {
+    let mut last = None;
+    loop {
+      thread::sleep(Duration::from_millis(1500));
+      let (tx, rx) = mpsc::channel();
+      let handle = app.clone();
+      let ask = move || {
+        let _ = tx.send(is_occluded(&handle));
+      };
+      if app.run_on_main_thread(ask).is_err() {
+        break;
+      }
+      let Ok(Some(occluded)) = rx.recv_timeout(Duration::from_secs(2)) else { continue };
+      if last != Some(occluded) {
+        last = Some(occluded);
+        let _ = app.emit("occlusion-changed", occluded);
+      }
+    }
+  });
+}
+
+/// 지금 창이 가려져 있는지. 화면이 켜질 때(또는 다시 불러올 때) 한 번 묻는다. 알 수 없으면 false.
+#[tauri::command]
+fn is_window_occluded(app: AppHandle) -> bool {
+  #[cfg(target_os = "macos")]
+  {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let handle = app.clone();
+    let ask = move || {
+      let _ = tx.send(is_occluded(&handle));
+    };
+    if app.run_on_main_thread(ask).is_err() {
+      return false;
+    }
+    rx.recv_timeout(std::time::Duration::from_secs(2)).ok().flatten().unwrap_or(false)
+  }
+  #[cfg(not(target_os = "macos"))]
+  {
+    let _ = app;
+    false
+  }
+}
+
 fn quit(app: &AppHandle) {
   let _ = app.save_window_state(StateFlags::SIZE | StateFlags::POSITION);
   app.exit(0);
@@ -171,7 +236,7 @@ pub fn run() {
     .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
-    .invoke_handler(tauri::generate_handler![current_location, get_layer, set_layer])
+    .invoke_handler(tauri::generate_handler![current_location, get_layer, set_layer, is_window_occluded])
     .setup(|app| {
       // Dock 아이콘 없이 메뉴 막대에만 사는 앱
       #[cfg(target_os = "macos")]
@@ -187,6 +252,8 @@ pub fn run() {
       let _ = window.set_visible_on_all_workspaces(true);
       layer.apply(&window);
       window.show()?;
+      #[cfg(target_os = "macos")]
+      watch_occlusion(app.handle());
 
       let desktop = CheckMenuItem::with_id(app, "desktop", "바탕화면에 고정", true, layer == Layer::Desktop, None::<&str>)?;
       let on_top = CheckMenuItem::with_id(app, "top", "항상 위에 표시", true, layer == Layer::Top, None::<&str>)?;

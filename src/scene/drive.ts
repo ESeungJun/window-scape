@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Env } from './env';
 import type { Rng } from '../util';
 import { Diorama, TILE_HALF, pathCurve, type Layout } from './diorama';
+import { ancestorNamed } from './kit';
 
 /**
  * 드라이브 테마: 바닷가 해안도로 디오라마(모델: tools/blender/drive.py).
@@ -22,6 +23,10 @@ interface Car {
 export class Drive extends Diorama {
   private readonly cars: Car[] = [];
   private readonly rotors: THREE.Object3D[] = [];
+  /** 자동차가 빨라 그림자를 자주 다시 그린다 */
+  readonly moverHz = 15;
+  /** 풍력 발전기를 눌렀을 때 잠깐 더 빨리 도는 정도 */
+  private rotorBoost = 0;
   private road?: THREE.CatmullRomCurve3;
   private sea?: THREE.CatmullRomCurve3;
   private sail?: THREE.Object3D;
@@ -75,7 +80,16 @@ export class Drive extends Diorama {
       this.sail.rotation.set(0, Math.atan2(-tan.z, tan.x), 0);
       this.sail.rotateX(0.04 + env.wind * 0.1);
     }
-    for (const r of this.rotors) r.rotateZ(-dt * (0.4 + env.wind * 3));
+    this.rotorBoost *= Math.exp(-dt * 0.9);
+    for (const r of this.rotors) r.rotateZ(-dt * (0.4 + env.wind * 3 + this.rotorBoost * 7));
+  }
+
+  poke(hit: THREE.Object3D): boolean {
+    if (ancestorNamed(hit, 'mover_rotor')) {
+      this.rotorBoost = 1;
+      return true;
+    }
+    return super.poke(hit);
   }
 
   /** 지평선 모양: 차로마다 길 끝(안개 속)까지 달리고 처음(반대편 안개 속)으로 돌아간다 */

@@ -41,6 +41,7 @@ jobs:
           workspaces: src-tauri
           key: ${{ matrix.target }}
       - run: npm ci
+      - run: npm test
       # 서명 인증서·공증 키는 이 단계에만 넘긴다
       - name: Build macOS (서명 + 공증)
         if: runner.os == 'macOS'

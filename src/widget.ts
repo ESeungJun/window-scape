@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { listen } from '@tauri-apps/api/event';
+import { currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
 
 /** Tauri 데스크톱 앱 안에서 실행 중인지. 웹 브라우저에서는 false. */
 export const isDesktopApp = '__TAURI_INTERNALS__' in window;
@@ -42,4 +43,37 @@ export function setupWidget(app: HTMLElement): void {
   });
 
   app.append(strip, grip);
+}
+
+/**
+ * 창 상태를 지켜본다.
+ *  - 가려짐: 다른 창에 완전히 가려지면 그리기를 멈추도록 알린다(Rust 가 운영체제에서 받아 'occlusion-changed' 로 보낸다).
+ *    WebView 가 스스로 문서를 숨김 처리하는 경우(visibilitychange)는 World 가 따로 듣는다.
+ *  - 자리: 창을 옮기면 화면 안에서의 자리(-1~1)를 알려 시차에 쓴다.
+ */
+export function watchWindow(onOccluded: (occluded: boolean) => void, onPlace: (x: number, y: number) => void): void {
+  listen<boolean>('occlusion-changed', (e) => onOccluded(e.payload === true))
+    // 듣기 시작하기 전에 지나간 알림이 있을 수 있으니 지금 상태를 한 번 묻는다
+    .then(() => invoke<boolean>('is_window_occluded'))
+    .then((occluded) => onOccluded(occluded === true))
+    .catch(() => {});
+  const win = getCurrentWindow();
+  const place = async () => {
+    try {
+      const [pos, size, monitor] = await Promise.all([win.outerPosition(), win.outerSize(), currentMonitor()]);
+      if (!monitor) return;
+      const cx = pos.x + size.width / 2 - monitor.position.x;
+      const cy = pos.y + size.height / 2 - monitor.position.y;
+      // 화면 가운데가 0, 오른쪽·위가 +1
+      onPlace((cx / monitor.size.width) * 2 - 1, 1 - (cy / monitor.size.height) * 2);
+    } catch {
+      // 창 정보를 못 읽으면 시차 없이 둔다
+    }
+  };
+  let timer = 0;
+  win.onMoved(() => {
+    clearTimeout(timer);
+    timer = window.setTimeout(place, 120);
+  }).catch(() => {});
+  place();
 }

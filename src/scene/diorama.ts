@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import type { Env } from './env';
 import { softSprite, type Rng } from '../util';
-import { applyLightmap, applyOpenSky } from './baked';
-import { loadModel, trackMaterials } from './props';
+import { applyLightmap, applyOpenSky, setLamps } from './baked';
+import { loadModel, swayTrees, trackMaterials } from './props';
 import { riverMaterial } from './water';
-import { Sway, Waterfall, waterBrightness, type Stage } from './kit';
+import { Hops, Sway, Waterfall, ancestorNamed, disposeTree, waterBrightness, type Stage } from './kit';
 
 /**
  * 땅에 놓인 디오라마 테마(드라이브·도시·성·숲)의 공통 틀. 모양은 Blender 에서 직접 모델링한 public/models/<이름>.glb
@@ -25,6 +25,8 @@ export interface Layout {
   smoke?: [number, number, number];
   /** 땅 높이 격자(카메라가 땅속으로 들어가지 않게). h[i * n + j] = 높이(x_i, z_j), x·z 는 -half ~ half */
   ground?: { half: number; n: number; h: number[] };
+  /** 밤 불빛을 라이트맵 알파에 구워 둔 모델인지(tools/blender 의 WS_NEXT=lamps) */
+  lampsBaked?: boolean;
 }
 
 /** 굴뚝 연기: 부드러운 점들이 바람 따라 기울며 피어오른다 */
@@ -85,7 +87,14 @@ export abstract class Diorama implements Stage {
   private readonly water = riverMaterial();
   private readonly still = riverMaterial(true);
   private readonly falls: Waterfall[] = [];
-  private readonly lights: THREE.PointLight[] = [];
+  /** 밤 불빛 자리(이 테마 기준 좌표)와, 디오라마 모양에서도 켜 두는 받침 안쪽 것 */
+  private readonly lamps: THREE.Vector3[] = [];
+  private lampsInside: THREE.Vector3[] = [];
+  private lampsBaked = false;
+  private lightmap?: THREE.Texture;
+  private disposed = false;
+  /** 누르면 폴짝 뛰는 것(토끼·자동차) */
+  protected readonly hops = new Hops();
   private readonly seasonal: [THREE.MeshStandardMaterial, (env: Env, out: THREE.Color) => void][] = [];
   private readonly glass: THREE.MeshStandardMaterial[] = [];
   private flowers: THREE.Object3D[] = [];
@@ -100,6 +109,8 @@ export abstract class Diorama implements Stage {
     this.view = { target: new THREE.Vector3(0, 0.6, 0), distance };
     this.landDistance = distance;
     loadModel(`models/${name}.glb`, (root) => {
+      // 다 받기 전에 다른 테마로 넘어가 해제됐으면 받은 것을 바로 버린다
+      if (this.disposed) return disposeTree(root);
       // 먼 풍경·받침은 라이트맵 자리가 없으므로 재질을 따로 둔다(가운데 땅과 같은 재질을 쓰면 라이트맵 엉뚱한 곳을 읽는다).
       // 받침은 가장자리에서 잘리지 않게 먼 풍경과도 따로
       const far = new Map<THREE.Material, THREE.MeshStandardMaterial>();
@@ -113,6 +124,7 @@ export abstract class Diorama implements Stage {
         mesh.material = own.get(m)!;
       });
       for (const m of [...far.values(), ...stand.values()]) applyOpenSky(m);
+      swayTrees(root);
       trackMaterials(root, this.seasonal, this.glass);
       // 그림자 범위 밖 먼 풍경과 먼 땅은 그림자를 드리우지 않는다(그림자 그리기 비용을 아낀다)
       root.traverse((o) => {
@@ -130,7 +142,10 @@ export abstract class Diorama implements Stage {
           mesh.castShadow = false;
         }
       });
-      applyLightmap(root, `models/${name}_light.webp`);
+      applyLightmap(root, `models/${name}_light.webp`, (tex) => {
+        if (this.disposed) tex.dispose();
+        else this.lightmap = tex;
+      });
       const raw = root.getObjectByName('layout')?.userData.layout;
       const layout = (raw ? JSON.parse(raw) : {}) as Layout;
       for (const f of layout.falls ?? []) {
@@ -138,14 +153,10 @@ export abstract class Diorama implements Stage {
         this.falls.push(wf);
         this.group.add(wf.group);
       }
-      // 밤에 고이는 따뜻한 불빛
-      for (const [x, y, z] of layout.lights ?? []) {
-        const light = new THREE.PointLight('#ffc46b', 0, 7, 1.6);
-        light.position.set(x, y, z);
-        this.group.add(light);
-        this.lights.push(light);
-        if (Math.max(Math.abs(x), Math.abs(z)) > TILE_HALF) this.outside.push(light);
-      }
+      // 밤에 고이는 따뜻한 불빛(조명 물체 없이 재질 셰이더가 그린다)
+      for (const [x, y, z] of layout.lights ?? []) this.lamps.push(new THREE.Vector3(x, y, z));
+      this.lampsInside = this.lamps.filter((p) => Math.max(Math.abs(p.x), Math.abs(p.z)) <= TILE_HALF);
+      this.lampsBaked = layout.lampsBaked === true;
       // 맨 위 물체마다: 받침, 또는 디오라마 모양에서 숨길 것(먼 풍경, 가운데가 타일 밖인 것)
       const box = new THREE.Box3();
       const c = new THREE.Vector3();
@@ -197,20 +208,40 @@ export abstract class Diorama implements Stage {
   /** 프레임마다(움직이는 것) */
   protected tick(_dt: number, _t: number, _env: Env): void {}
 
+  /** 누른 것이 한 번 반응한다: 나무는 흔들리고, 움직이는 것은 폴짝 뛴다(테마별 반응은 하위 클래스가 먼저 본다) */
+  poke(hit: THREE.Object3D): boolean {
+    const tree = ancestorNamed(hit, 'tree_');
+    if (tree) return this.sway.kick(tree);
+    const mover = ancestorNamed(hit, 'mover_');
+    if (!mover) return false;
+    // 묶음(mover_x)의 부품(mover_x_1)을 눌렀으면 묶음을 움직인다
+    this.hops.add(mover.parent?.name.startsWith('mover_') ? mover.parent : mover);
+    return true;
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.lightmap?.dispose();
+    disposeTree(this.group);
+  }
+
   update(dt: number, t: number, env: Env): void {
-    for (const l of this.lights) l.intensity = env.nightLights * 7;
+    setLamps(this.cased ? this.lampsInside : this.lamps, this.lampsBaked);
     for (const [m, fn] of this.seasonal) fn(env, m.color);
     for (const m of this.glass) m.emissiveIntensity = 0.15 + env.nightLights * 3.4;
     const bright = waterBrightness(env);
     for (const m of [this.water, this.still]) {
       m.uniforms.time.value = t;
       m.uniforms.bright.value = bright;
+      m.uniforms.rain.value = env.rain;
+      m.uniforms.ice.value = env.frost;
     }
     for (const f of this.falls) f.update(dt, t, bright);
     this.sway.update(dt, env);
     for (const f of this.flowers) f.visible = env.snowCover < 0.6;
     this.smoke?.fx.update(dt, env, this.smoke.at);
     this.tick(dt, t, env);
+    this.hops.update(dt);
   }
 
   groundHeight(x: number, z: number): number {

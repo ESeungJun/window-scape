@@ -3,6 +3,7 @@ import type { Env } from './env';
 import { jitter, softSprite, type Rng } from '../util';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { fallMaterial, riverMaterial } from './water';
+import { applyWeather, openSky } from './baked';
 
 /**
  * 테마들이 함께 쓰는 것: 하늘섬 윤곽, 강 띠·폭포, 바람 흔들림, 둘레를 떠다니는 작은 섬, 계절 공용 재질.
@@ -28,6 +29,40 @@ export const MATS = {
   foliageA: std('#e8902f'),
   vine: std('#5f7f4a'),
 };
+
+// 구운 재질과 같은 눈·젖음·밤 불빛을 받게 한다
+for (const m of Object.values(MATS)) applyWeather(m);
+
+/** 여러 테마가 같이 쓰는 것. 테마를 해제할 때 지우지 않는다 */
+const SHARED = new Set<object>(Object.values(MATS));
+
+/**
+ * 테마가 쓰던 GPU 자원(도형·재질·라이트맵)을 놓는다. 공용 재질·공용 텍스처는 남긴다.
+ * 들어가기 모드가 도형에 달아 둔 충돌 검사 트리도 같이 버린다.
+ */
+export function disposeTree(root: THREE.Object3D): void {
+  const shared = new Set<object>([...SHARED, softSprite(), openSky()]);
+  const done = new Set<object>();
+  const drop = (x: { dispose(): void } | null | undefined) => {
+    if (!x || shared.has(x) || done.has(x)) return;
+    done.add(x);
+    x.dispose();
+  };
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.geometry) {
+      (m.geometry as THREE.BufferGeometry & { boundsTree?: unknown }).boundsTree = undefined;
+      drop(m.geometry);
+    }
+    if (!m.material) return;
+    for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+      const std = mat as THREE.MeshStandardMaterial & THREE.PointsMaterial;
+      drop(std.lightMap);
+      drop(std.map);
+      drop(mat);
+    }
+  });
+}
 
 export function mesh(geo: THREE.BufferGeometry, mat: THREE.Material, cast = true): THREE.Mesh {
   const m = new THREE.Mesh(geo, mat);
@@ -168,7 +203,48 @@ export interface Stage {
   readonly baked?: boolean;
   /** 디오라마 모양으로(땅 테마만): 둘레 땅 대신 받침에 올려 구름바다 위에 띄운다 */
   setCase?(on: boolean): void;
+  /** 움직이는 것(자동차·걷는 성)의 그림자가 끊겨 보이지 않을 그림자 갱신 횟수(초당). 없으면 나무 흔들림 기준 */
+  readonly moverHz?: number;
+  /** 누른 물체가 한 번 반응한다(풍차가 빨리 돌고 나무가 흔들린다). 반응한 것이 있으면 true */
+  poke?(hit: THREE.Object3D): boolean;
+  /** 테마를 떠난 뒤 GPU 자원을 놓는다. 그 뒤로는 쓰지 않는다 */
+  dispose(): void;
   update(dt: number, t: number, env: Env): void;
+}
+
+/** 움직임 줄이기(시스템 설정)를 켰는지. 켜져 있으면 흔들림·시차·자동 회전을 멈춘다 */
+export const reducedMotion = (): boolean =>
+  typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** 이름이 prefix 로 시작하는 가장 가까운 조상(자신 포함) */
+export function ancestorNamed(o: THREE.Object3D | null, prefix: string): THREE.Object3D | null {
+  for (let p = o; p; p = p.parent) if (p.name.startsWith(prefix)) return p;
+  return null;
+}
+
+/**
+ * 누르면 한 번 폴짝 뛰는 것들(토끼·자동차·배). 길을 따라 움직이는 것은 매 프레임 자리를 새로 받으므로
+ * 그 뒤에 불러 높이만 더한다. 제자리에 있는 것은 처음 높이를 기억해 두고 그 위로 뛴다.
+ */
+export class Hops {
+  private readonly items = new Map<THREE.Object3D, { t: number; base: number; wrote: number }>();
+
+  add(o: THREE.Object3D): void {
+    const cur = this.items.get(o);
+    if (cur) cur.t = 0;
+    else this.items.set(o, { t: 0, base: o.position.y, wrote: o.position.y });
+  }
+
+  update(dt: number): void {
+    for (const [o, h] of this.items) {
+      // 지난번에 써 둔 높이 그대로면 아무도 옮기지 않은 것이다. 달라졌으면 그 값이 새 바닥이다
+      if (Math.abs(o.position.y - h.wrote) > 1e-9) h.base = o.position.y;
+      h.t += dt / 0.45;
+      const lift = h.t >= 1 ? 0 : Math.sin(h.t * Math.PI) * 0.35;
+      o.position.y = h.wrote = h.base + lift;
+      if (h.t >= 1) this.items.delete(o);
+    }
+  }
 }
 
 /** 떠 있는 섬 테마의 기본 카메라 */
@@ -193,26 +269,36 @@ export const islandBob = (t: number) => Math.sin(t * 0.35) * 0.18;
  * (시간 t 에 바람 세기를 곱하면 바람이 바뀌는 순간 위상이 크게 튄다)
  */
 export class Sway {
-  private readonly items: { obj: THREE.Object3D; phase: number }[] = [];
+  private readonly items: { obj: THREE.Object3D; phase: number; kick: number }[] = [];
   private fast = 0;
   private slow = 0;
 
   add(obj: THREE.Object3D, rng: Rng): void {
     // 기울기(x·z)는 월드 축 기준, y 돌림은 물체 자체 기준이 되도록 Rz·Rx·Ry 순서
     obj.rotation.order = 'ZXY';
-    this.items.push({ obj, phase: rng() * 10 });
+    this.items.push({ obj, phase: rng() * 10, kick: 0 });
+  }
+
+  /** 누른 나무를 한 번 크게 흔든다. 등록된 물체가 아니면 false */
+  kick(obj: THREE.Object3D): boolean {
+    const it = this.items.find((s) => s.obj === obj);
+    if (it) it.kick = 1;
+    return it !== undefined;
   }
 
   update(dt: number, env: Env): void {
     this.fast += dt * (1.2 + env.wind * 1.5);
     this.slow += dt * 0.9;
-    const amount = 0.015 + env.wind * 0.06;
+    // 줄기째 흔들리는 폭. 잎이 따로 흔들리는 것은 셰이더가 맡는다(baked.ts). 움직임 줄이기에서는 기울기만 남긴다
+    const amount = reducedMotion() ? 0 : 0.01 + env.wind * 0.04;
     // 바람 부는 쪽으로 기운 채 흔들린다
     const leanZ = -env.windX * env.wind * 0.07;
     const leanX = env.windZ * env.wind * 0.07;
     for (const s of this.items) {
-      s.obj.rotation.z = Math.sin(this.fast + s.phase) * amount + leanZ;
-      s.obj.rotation.x = Math.cos(this.slow + s.phase) * amount * 0.5 + leanX;
+      const k = s.kick > 0.001 ? Math.sin(this.fast * 9 + s.phase) * 0.16 * s.kick : 0;
+      s.kick *= Math.exp(-dt * 3.2);
+      s.obj.rotation.z = Math.sin(this.fast + s.phase) * amount + leanZ + k;
+      s.obj.rotation.x = Math.cos(this.slow + s.phase) * amount * 0.5 + leanX + k * 0.6;
     }
   }
 }
