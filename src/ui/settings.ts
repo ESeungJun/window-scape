@@ -1,5 +1,5 @@
 import type { Condition, Season, TimeOfDay } from '../data/weather';
-import type { Quality } from '../scene/world';
+import type { Effects, Quality } from '../scene/world';
 import { THEMES, type Theme } from '../scene/themes';
 
 export type Frame = 'full' | 'showcase';
@@ -79,5 +79,50 @@ export function renderSettings(root: HTMLElement, initial: ViewOptions, onChange
     root.append(section);
   }
   sync(opts);
+  return sync;
+}
+
+const EFFECTS: [keyof Effects, string, string][] = [
+  ['glass', '창 유리', '비가 오면 유리에 방울이 맺히고, 춥고 습하면 김과 성에가 껴요. 끌어서 닦을 수 있어요.'],
+  ['wind', '바람', '나무 잎이 바람 세기만큼 흔들려요.'],
+  ['shade', '구름 그늘', '구름 그림자가 땅 위를 흘러가요.'],
+  ['parallax', '시차', '마우스나 창 위치에 따라 풍경이 조금 미끄러져요.'],
+  ['still', '시선 고정', '풍경이 계속 돌지 않고 창밖을 보듯 멈춰 있어요.'],
+  ['lowPower', '절전', '가만히 있을 때 덜 자주, 덜 선명하게 그려 배터리를 아껴요.'],
+];
+
+/** 연출 켜고 끄기. 칩마다 따로 켜고 끈다(여러 개를 같이 켤 수 있다). 반환한 함수로 바깥에서 바뀐 값을 반영한다 */
+export function renderEffects(root: HTMLElement, initial: Effects, onChange: (next: Effects) => void): (e: Effects) => void {
+  let cur = initial;
+  const section = document.createElement('section');
+  section.className = 'chips';
+  const h = document.createElement('h3');
+  h.textContent = '연출';
+  const list = document.createElement('div');
+  list.className = 'chips__list';
+  list.setAttribute('role', 'group');
+  list.setAttribute('aria-label', '연출');
+  const chips: [keyof Effects, HTMLButtonElement][] = [];
+  const sync = (next: Effects) => {
+    cur = next;
+    for (const [key, b] of chips) b.setAttribute('aria-pressed', String(cur[key]));
+  };
+  for (const [key, label, hint] of EFFECTS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.textContent = label;
+    b.title = hint;
+    b.addEventListener('click', () => {
+      const next = { ...cur, [key]: !cur[key] };
+      sync(next);
+      onChange(next);
+    });
+    chips.push([key, b]);
+    list.append(b);
+  }
+  section.append(h, list);
+  root.replaceChildren(section);
+  sync(cur);
   return sync;
 }

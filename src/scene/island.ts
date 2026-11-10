@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import type { Env } from './env';
 import type { Rng } from '../util';
-import { applyLightmap } from './baked';
-import { loadModel, trackMaterials } from './props';
+import { applyLightmap, setLamps } from './baked';
+import { loadModel, swayTrees, trackMaterials } from './props';
 import {
-  FLOATING_VIEW, R, Sway, TOP, Waterfall, addVines, fallAt, islandBob, riverMesh, rimPoint, waterBrightness, type Stage,
+  FLOATING_VIEW, R, Sway, TOP, Waterfall, addVines, ancestorNamed, disposeTree, fallAt, islandBob, riverMesh, rimPoint, waterBrightness,
+  type Stage,
 } from './kit';
 
 /**
@@ -22,6 +23,8 @@ interface Layout {
   river: [number, number, number][];
   lake: { center: [number, number, number]; rx: number; ry: number; rot: number };
   lights: [number, number, number][];
+  /** 밤 불빛을 라이트맵 알파에 구워 둔 모델인지(tools/blender 의 WS_NEXT=lamps) */
+  lampsBaked?: boolean;
 }
 
 export class Island implements Stage {
@@ -32,7 +35,14 @@ export class Island implements Stage {
   private readonly sway = new Sway();
   private river?: THREE.ShaderMaterial;
   private readonly falls: Waterfall[] = [];
-  private readonly lights: THREE.PointLight[] = [];
+  /** 밤 불빛 자리(섬 기준 좌표)와, 섬이 오르내리는 것을 반영한 월드 좌표 */
+  private readonly lamps: THREE.Vector3[] = [];
+  private readonly lampsWorld: THREE.Vector3[] = [];
+  private lampsBaked = false;
+  private lightmap?: THREE.Texture;
+  private disposed = false;
+  /** 풍차를 눌렀을 때 잠깐 더 빨리 도는 정도 */
+  private millBoost = 0;
   private readonly seasonal: [THREE.MeshStandardMaterial, (env: Env, out: THREE.Color) => void][] = [];
   private readonly glass: THREE.MeshStandardMaterial[] = [];
   private flowers: THREE.Object3D[] = [];
@@ -45,8 +55,14 @@ export class Island implements Stage {
     const g = this.group;
 
     loadModel('models/island.glb', (root) => {
+      // 다 받기 전에 다른 테마로 넘어가 해제됐으면 받은 것을 바로 버린다
+      if (this.disposed) return disposeTree(root);
+      swayTrees(root);
       trackMaterials(root, this.seasonal, this.glass);
-      applyLightmap(root, 'models/island_light.webp');
+      applyLightmap(root, 'models/island_light.webp', (tex) => {
+        if (this.disposed) tex.dispose();
+        else this.lightmap = tex;
+      });
       root.traverse((o) => {
         if (o.name.startsWith('tree_')) this.sway.add(o, rng);
       });
@@ -99,17 +115,31 @@ export class Island implements Stage {
     lake.receiveShadow = true;
     g.add(lake);
 
-    // 밤에 고이는 따뜻한 불빛
+    // 밤에 고이는 따뜻한 불빛(조명 물체 없이 재질 셰이더가 그린다)
     for (const [x, y, z] of layout.lights) {
-      const light = new THREE.PointLight('#ffc46b', 0, 7, 1.6);
-      light.position.set(x, y, z);
-      g.add(light);
-      this.lights.push(light);
+      this.lamps.push(new THREE.Vector3(x, y, z));
+      this.lampsWorld.push(new THREE.Vector3());
     }
+    this.lampsBaked = layout.lampsBaked === true;
+  }
+
+  /** 누른 것이 한 번 반응한다: 풍차는 잠깐 빨리 돌고 나무는 흔들린다 */
+  poke(hit: THREE.Object3D): boolean {
+    if (ancestorNamed(hit, 'mill_')) {
+      this.millBoost = 1;
+      return true;
+    }
+    const tree = ancestorNamed(hit, 'tree_');
+    return tree ? this.sway.kick(tree) : false;
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.lightmap?.dispose();
+    disposeTree(this.group);
   }
 
   update(dt: number, t: number, env: Env): void {
-    for (const l of this.lights) l.intensity = env.nightLights * 7;
     for (const [m, fn] of this.seasonal) fn(env, m.color);
     for (const m of this.glass) m.emissiveIntensity = 0.15 + env.nightLights * 3.4;
     const bright = waterBrightness(env);
@@ -119,7 +149,8 @@ export class Island implements Stage {
     }
     for (const f of this.falls) f.update(dt, t, bright);
 
-    if (this.hub) this.hub.rotateOnAxis(this.hubAxis, -dt * (0.35 + env.wind * 2.8));
+    this.millBoost *= Math.exp(-dt * 0.9);
+    if (this.hub) this.hub.rotateOnAxis(this.hubAxis, -dt * (0.35 + env.wind * 2.8 + this.millBoost * 7));
     // 날개(+z 쪽)가 바람이 불어오는 쪽을 보도록 천천히 돌아선다
     if (this.mill && Math.hypot(env.windX, env.windZ) > 0.1) {
       const want = Math.atan2(-env.windX, -env.windZ);
@@ -129,5 +160,7 @@ export class Island implements Stage {
     this.sway.update(dt, env);
     for (const f of this.flowers) f.visible = env.snowCover < 0.6;
     this.group.position.y = islandBob(t);
+    for (let i = 0; i < this.lamps.length; i++) this.lampsWorld[i].copy(this.lamps[i]).setY(this.lamps[i].y + this.group.position.y);
+    setLamps(this.lampsWorld, this.lampsBaked);
   }
 }

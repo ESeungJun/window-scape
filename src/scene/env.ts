@@ -1,6 +1,6 @@
 import { Color } from 'three';
-import type { Condition, Season, TimeOfDay } from '../data/weather';
-import { smoothstep } from '../util';
+import type { Condition, Season, TimeOfDay } from '../data/weather.ts';
+import { smoothstep } from '../math.ts';
 
 /**
  * 장면 전체가 읽는 연출 값. 시간대·날씨·계절 프리셋을 합쳐 목표값을 만들고,
@@ -12,6 +12,10 @@ const NUM_KEYS = [
   'cloudCover', 'cloudDark', 'overcast', 'rain', 'snow', 'fog', 'wind', 'storm', 'rainbow', 'snowCover',
   // 바람이 불어 가는 방향(단위 벡터, 북쪽 = -z, 동쪽 = +x)
   'windX', 'windZ',
+  // 해 방위(기본 방위에서 벗어난 각도, 라디안). 해가 뜬 쪽에서 지는 쪽으로 움직인다
+  'sunAzimuth',
+  // 창 유리에 끼는 김·성에, 비에 젖은 정도(0~1)
+  'mist', 'frost', 'wet',
 ] as const;
 
 type ColorKey = (typeof COLOR_KEYS)[number];
@@ -83,6 +87,28 @@ export interface LiveWeather {
   windKmh?: number;
   /** 바람이 불어오는 방위(도, 북쪽 0 · 시계 방향) */
   windFromDeg?: number;
+  /** 지금 기온(°C)과 습도(%). 창 유리의 김·성에를 정한다 */
+  temp?: number;
+  humidity?: number;
+  /** 최근 강수량(mm). 비가 그친 뒤에도 땅이 젖어 있게 */
+  precipMm?: number;
+  /** 다음 시간대로 섞는 정도(실시간일 때만). 시간대가 바뀌는 앞뒤로 하늘·빛을 천천히 섞는다 */
+  blend?: { to: TimeOfDay; t: number };
+  /** 해가 떠 있는 동안의 진행(0 해 뜸 ~ 1 해 짐). 주면 해의 높이·방위가 시각을 따라 움직인다 */
+  dayFraction?: number;
+}
+
+const NIGHT_ELEVATION = TIME.night.elev;
+const col2 = new Color();
+
+/** 해가 뜬 뒤 진행에 따른 해 높이(라디안). 뜨고 질 때 0.12, 한낮 0.95 */
+export function sunElevationAt(dayFraction: number): number {
+  return 0.12 + 0.83 * Math.sin(Math.PI * Math.min(1, Math.max(0, dayFraction)));
+}
+
+/** 해 방위가 기본 방위에서 벗어난 각도. 아침에는 한쪽, 저녁에는 반대쪽 */
+export function sunAzimuthAt(dayFraction: number): number {
+  return (Math.min(1, Math.max(0, dayFraction)) - 0.5) * 1.6;
 }
 
 export function composeEnv(time: TimeOfDay, cond: Condition, season: Season, out: Env, live: LiveWeather = {}): Env {
@@ -90,13 +116,36 @@ export function composeEnv(time: TimeOfDay, cond: Condition, season: Season, out
   const T = TIME[time];
   const W = WEATHER[cond];
   const S = SEASON[season];
+  const B = live.blend && live.blend.to !== time && live.blend.t > 0 ? TIME[live.blend.to] : undefined;
+  const k = B ? Math.min(1, live.blend!.t) : 0;
+  const mix = (a: number, b: number) => a + (b - a) * k;
 
   out.skyTop.set(T.skyTop);
   out.skyBottom.set(T.skyBottom);
-  out.sunColor.set(T.sun);
   out.hemiSky.set(T.hemiSky);
-  out.sunElevation = T.elev;
-  out.nightLights = T.lights;
+  if (B) {
+    out.skyTop.lerp(col2.set(B.skyTop), k);
+    out.skyBottom.lerp(col2.set(B.skyBottom), k);
+    out.hemiSky.lerp(col2.set(B.hemiSky), k);
+  }
+  out.nightLights = B ? mix(T.lights, B.lights) : T.lights;
+
+  // 해(밤에는 달). 낮↔밤 경계에서는 해와 달이 한 조명을 나눠 쓰므로 섞지 않고,
+  // 가운데에서 세기를 0 으로 떨어뜨린 틈에 높이·색을 바꾼다(달이 해처럼 떠오르는 것처럼 보이지 않게)
+  const crossing = B !== undefined && (time === 'night') !== (live.blend!.to === 'night');
+  const side = crossing && k >= 0.5 ? B! : T;
+  let sunI = B && !crossing ? mix(T.sunI, B.sunI) : side.sunI;
+  if (crossing) sunI *= Math.abs(1 - 2 * k);
+  out.sunColor.set(side.sun);
+  if (B && !crossing) out.sunColor.lerp(col2.set(B.sun), k);
+  const isNight = side === TIME.night;
+  if (live.dayFraction !== undefined && !isNight) {
+    out.sunElevation = sunElevationAt(live.dayFraction);
+    out.sunAzimuth = sunAzimuthAt(live.dayFraction);
+  } else {
+    out.sunElevation = B && !crossing ? mix(T.elev, B.elev) : isNight ? NIGHT_ELEVATION : side.elev;
+    out.sunAzimuth = 0;
+  }
 
   // 흐릴수록 하늘을 같은 밝기의 회색 쪽으로 당긴다
   const lb = luminance(out.skyBottom);
@@ -104,9 +153,9 @@ export function composeEnv(time: TimeOfDay, cond: Condition, season: Season, out
   const lt = luminance(out.skyTop);
   out.skyTop.lerp(tmp.setRGB(lt * 0.95, lt, lt * 1.08), W.overcast * 0.8);
 
-  out.sunIntensity = T.sunI * (1 - 0.7 * W.overcast);
-  out.hemiIntensity = T.hemi * (1 - 0.25 * W.overcast);
-  out.stars = T.stars * (1 - W.overcast);
+  out.sunIntensity = sunI * (1 - 0.7 * W.overcast);
+  out.hemiIntensity = (B ? mix(T.hemi, B.hemi) : T.hemi) * (1 - 0.25 * W.overcast);
+  out.stars = (B ? mix(T.stars, B.stars) : T.stars) * (1 - W.overcast);
 
   out.cloudCover = W.cover;
   out.cloudDark = W.dark;
@@ -121,15 +170,31 @@ export function composeEnv(time: TimeOfDay, cond: Condition, season: Season, out
   out.windX = -Math.sin(from);
   out.windZ = Math.cos(from);
   out.storm = W.storm;
-  out.rainbow = time === 'night' ? 0 : W.rainbow;
+  const nightness = time === 'night' ? 1 - k : live.blend?.to === 'night' ? k : 0;
+  out.rainbow = nightness >= 0.5 ? 0 : W.rainbow;
 
   // 계절 + 눈이 내리면 계절과 상관없이 섬이 하얗게 덮인다
   const seasonSnow = minTemp === undefined ? S.snow : S.snow * smoothstep(6, 0, minTemp);
   const snow = Math.max(seasonSnow, cond === 'snow' ? 0.8 : 0);
   out.snowCover = snow;
-  out.grass.set(S.grass).lerp(SNOW, snow);
-  out.foliageA.set(S.a).lerp(SNOW, snow * 0.85);
-  out.foliageB.set(S.b).lerp(SNOW, snow * 0.85);
-  out.pine.set(S.pine).lerp(SNOW, snow * 0.5);
+  // 눈은 위를 보는 면에 쌓이는 것으로 그린다(baked.ts). 색은 조금만 바래게 해 나무가 통째로 하얘지지 않게 한다
+  out.grass.set(S.grass).lerp(SNOW, snow * 0.3);
+  out.foliageA.set(S.a).lerp(SNOW, snow * 0.25);
+  out.foliageB.set(S.b).lerp(SNOW, snow * 0.25);
+  out.pine.set(S.pine).lerp(SNOW, snow * 0.15);
+
+  // 창 유리: 춥고 습하면 김, 영하면 성에. 실제 값이 없으면 날씨 종류로 어림한다
+  const { temp, humidity } = live;
+  if (temp !== undefined && humidity !== undefined) {
+    out.mist = Math.min(1, smoothstep(70, 96, humidity) * smoothstep(16, 3, temp) + W.rain * 0.25 + W.fog * 0.3);
+    out.frost = smoothstep(0.5, -7, temp) * (0.55 + 0.45 * smoothstep(40, 90, humidity));
+  } else {
+    out.mist = Math.min(1, W.fog * 0.5 + W.rain * 0.3 + W.snow * 0.25);
+    out.frost = Math.max(W.snow * 0.6, snow * 0.35);
+  }
+  // 젖은 땅: 비가 오는 동안, 그리고 그친 뒤에도 최근 강수량만큼. 눈이 쌓였으면 젖은 티를 내지 않는다
+  const raining = W.rain > 0 ? 0.55 + 0.45 * W.rain : 0;
+  const lingering = live.precipMm === undefined ? 0 : 0.7 * smoothstep(0, 2.5, live.precipMm);
+  out.wet = Math.max(raining, lingering) * (1 - snow);
   return out;
 }

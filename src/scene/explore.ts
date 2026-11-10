@@ -182,6 +182,8 @@ export class Explorer {
     this.meshes = [];
     this.solid = [];
     this.cars = [];
+    // 떠난 테마가 해제된 뒤에도 붙잡고 있지 않게
+    this.stage = undefined;
   }
 
   /** 화면 좌표(-1~1)를 클릭했을 때: 그 땅으로 걸어간다. 걸을 수 없는 곳이면 false */

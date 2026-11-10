@@ -21,13 +21,58 @@ const RAINBOW_FRAGMENT = /* glsl */ `
   }
 `;
 
+// 비 줄기: 방울마다 납작한 띠 하나. 자리는 셰이더가 "처음 자리 + 지금까지 흘러간 거리"를 영역 안으로 접어 구한다(CPU 가 방울을 하나씩 옮기지 않는다).
+// 띠의 폭은 화면 픽셀로 고정해 고해상도 화면에서도 머리카락처럼 가늘어지지 않는다
+const RAIN_VERTEX = /* glsl */ `
+  uniform vec3 offset;
+  uniform vec3 streak;
+  uniform vec2 res;
+  uniform float width;
+  attribute vec3 seed;
+  attribute vec2 corner;
+  varying float vAlong;
+  void main() {
+    vec3 box = vec3(${(AREA * 2).toFixed(1)}, ${(Y_MAX - Y_MIN).toFixed(1)}, ${(AREA * 2).toFixed(1)});
+    vec3 p = mod(seed + offset, box) + vec3(${(-AREA).toFixed(1)}, ${Y_MIN.toFixed(1)}, ${(-AREA).toFixed(1)});
+    vec4 head = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    vec4 tail = projectionMatrix * modelViewMatrix * vec4(p + streak, 1.0);
+    vAlong = corner.y;
+    if (head.w <= 0.05 || tail.w <= 0.05) {
+      gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+      return;
+    }
+    vec2 d = (tail.xy / tail.w - head.xy / head.w) * res;
+    vec2 n = normalize(vec2(-d.y, d.x) + 1e-5);
+    vec4 c = mix(head, tail, corner.y);
+    c.xy += n * corner.x * width / res * c.w;
+    gl_Position = c;
+  }
+`;
+
+const RAIN_FRAGMENT = /* glsl */ `
+  uniform float opacity;
+  varying float vAlong;
+  void main() {
+    // 꼬리(위쪽)로 갈수록 옅다
+    gl_FragColor = vec4(0.545, 0.672, 0.807, opacity * (1.0 - vAlong * 0.85));
+    #include <colorspace_fragment>
+  }
+`;
+
 /** 비·눈·번개·무지개 */
 export class Precipitation {
   readonly group = new THREE.Group();
   flash = 0;
 
-  private readonly rain: THREE.LineSegments;
-  private readonly rainDrops: Float32Array; // x, y, z
+  private readonly rain: THREE.Mesh;
+  private readonly rainCount = 3200;
+  private readonly rainUniforms = {
+    offset: { value: new THREE.Vector3() },
+    streak: { value: new THREE.Vector3() },
+    res: { value: new THREE.Vector2(1, 1) },
+    width: { value: 1.5 },
+    opacity: { value: 0.55 },
+  };
   private readonly snow: THREE.Points;
   private readonly snowFlakes: Float32Array;
   private readonly bolt: THREE.Line;
@@ -44,14 +89,35 @@ export class Precipitation {
       arr[i * 3 + 2] = (rng() - 0.5) * AREA * 2;
     };
 
-    const rainCount = 3200;
-    this.rainDrops = new Float32Array(rainCount * 3);
-    for (let i = 0; i < rainCount; i++) spawn(this.rainDrops, i);
+    const rainCount = this.rainCount;
+    const seed = new Float32Array(rainCount * 12);
+    const corner = new Float32Array(rainCount * 8);
+    const index = new Uint16Array(rainCount * 6);
+    for (let i = 0; i < rainCount; i++) {
+      const x = rng() * AREA * 2;
+      const y = rng() * (Y_MAX - Y_MIN);
+      const z = rng() * AREA * 2;
+      for (let v = 0; v < 4; v++) {
+        seed.set([x, y, z], (i * 4 + v) * 3);
+        corner.set([v % 2 ? 1 : -1, v < 2 ? 0 : 1], (i * 4 + v) * 2);
+      }
+      const a = i * 4;
+      index.set([a, a + 1, a + 2, a + 1, a + 3, a + 2], i * 6);
+    }
     const rainGeo = new THREE.BufferGeometry();
-    rainGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(rainCount * 6), 3));
-    this.rain = new THREE.LineSegments(
+    rainGeo.setAttribute('seed', new THREE.BufferAttribute(seed, 3));
+    rainGeo.setAttribute('corner', new THREE.BufferAttribute(corner, 2));
+    rainGeo.setIndex(new THREE.BufferAttribute(index, 1));
+    this.rain = new THREE.Mesh(
       rainGeo,
-      new THREE.LineBasicMaterial({ color: '#c3d6e8', transparent: true, opacity: 0.5, depthWrite: false }),
+      new THREE.ShaderMaterial({
+        uniforms: this.rainUniforms,
+        vertexShader: RAIN_VERTEX,
+        fragmentShader: RAIN_FRAGMENT,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
     );
     this.rain.frustumCulled = false;
 
@@ -92,35 +158,31 @@ export class Precipitation {
 
   /**
    * @param center 비·눈을 내릴 영역의 가운데(땅 테마는 카메라가 보는 곳). 떠 있는 섬은 원점.
+   * @param viewport 그리는 화면의 픽셀 크기와 픽셀 배율(비 줄기 폭을 화면 픽셀로 맞춘다)
    */
-  update(dt: number, t: number, env: Env, camera: THREE.Camera, center: THREE.Vector3): void {
+  update(dt: number, t: number, env: Env, camera: THREE.Camera, center: THREE.Vector3, viewport: { width: number; height: number; ratio: number }): void {
     const rng = this.rng;
     this.group.position.set(center.x, 0, center.z);
 
     // 비: 바람이 셀수록 비스듬히 떨어진다
-    const rainCount = Math.floor((this.rainDrops.length / 3) * Math.min(1, env.rain));
+    const rainCount = Math.floor(this.rainCount * Math.min(1, env.rain));
     this.rain.visible = rainCount > 0;
     if (rainCount > 0) {
       const vy = -26;
       const vx = env.windX * env.wind * 9;
       const vz = env.windZ * env.wind * 9;
-      const pos = this.rain.geometry.getAttribute('position') as THREE.BufferAttribute;
-      const out = pos.array as Float32Array;
-      const d = this.rainDrops;
-      for (let i = 0; i < rainCount; i++) {
-        const k = i * 3;
-        d[k] += vx * dt;
-        d[k + 1] += vy * dt;
-        d[k + 2] += vz * dt;
-        if (d[k + 1] < Y_MIN) d[k + 1] += Y_MAX - Y_MIN;
-        d[k] = wrap(d[k]);
-        d[k + 2] = wrap(d[k + 2]);
-        const o = i * 6;
-        out[o] = d[k]; out[o + 1] = d[k + 1]; out[o + 2] = d[k + 2];
-        out[o + 3] = d[k] - vx * 0.028; out[o + 4] = d[k + 1] - vy * 0.028; out[o + 5] = d[k + 2] - vz * 0.028;
-      }
-      pos.needsUpdate = true;
-      this.rain.geometry.setDrawRange(0, rainCount * 2);
+      const u = this.rainUniforms;
+      const o = u.offset.value;
+      // 흘러간 거리를 영역 크기 안으로 접어 둔다(오래 켜 둬도 정밀도가 떨어지지 않게)
+      o.x = (o.x + vx * dt) % (AREA * 2);
+      o.y = (o.y + vy * dt) % (Y_MAX - Y_MIN);
+      o.z = (o.z + vz * dt) % (AREA * 2);
+      u.streak.value.set(-vx * 0.028, -vy * 0.028, -vz * 0.028);
+      u.res.value.set(viewport.width, viewport.height);
+      u.width.value = 1.5 * viewport.ratio;
+      // 밤에는 빗줄기가 하얗게 뜨지 않게 옅게
+      u.opacity.value = 0.55 * (1 - 0.5 * env.nightLights);
+      (this.rain.geometry as THREE.BufferGeometry).setDrawRange(0, rainCount * 6);
     }
 
     // 눈: 천천히 흔들리며 내린다

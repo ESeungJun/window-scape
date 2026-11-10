@@ -50,6 +50,7 @@ export interface Forecast {
 }
 
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
+const FETCH_TIMEOUT_MS = 15_000;
 const GEOCODING_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 
 export async function fetchForecast(place: Place, signal?: AbortSignal): Promise<Forecast> {
@@ -62,9 +63,22 @@ export async function fetchForecast(place: Place, signal?: AbortSignal): Promise
     timezone: 'auto',
     forecast_days: '7',
   });
-  const res = await fetch(`${FORECAST_URL}?${params}`, { signal });
-  if (!res.ok) throw new Error(`forecast ${res.status}`);
-  const j = await res.json();
+  // 응답이 멈춘 채 붙잡혀 있으면 실패로 보고 다시 시도하게 한다.
+  // AbortSignal.timeout·any 는 옛 WebKit(macOS 14.4 미만)에 없어서 직접 묶는다
+  const ctrl = new AbortController();
+  const cancel = () => ctrl.abort();
+  if (signal?.aborted) cancel();
+  signal?.addEventListener('abort', cancel, { once: true });
+  const timer = setTimeout(cancel, FETCH_TIMEOUT_MS);
+  let j;
+  try {
+    const res = await fetch(`${FORECAST_URL}?${params}`, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`forecast ${res.status}`);
+    j = await res.json();
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', cancel);
+  }
   const d = j.daily;
   const h = j.hourly;
   return {
@@ -84,16 +98,19 @@ export async function fetchForecast(place: Place, signal?: AbortSignal): Promise
       min: d.temperature_2m_min[i],
       sunrise: d.sunrise[i],
       sunset: d.sunset[i],
-      precipitation: d.precipitation_sum[i],
-      wind: d.wind_speed_10m_max[i],
-      windDir: d.wind_direction_10m_dominant[i],
+      precipitation: d.precipitation_sum[i] ?? 0,
+      wind: d.wind_speed_10m_max[i] ?? 0,
+      windDir: d.wind_direction_10m_dominant[i] ?? 0,
     })),
-    hourly: h.time.map((time: string, i: number) => ({
-      time,
-      temp: h.temperature_2m[i],
-      code: h.weather_code[i],
-      pop: h.precipitation_probability[i] ?? 0,
-    })),
+    hourly: h.time
+      .map((time: string, i: number) => ({
+        time,
+        temp: h.temperature_2m[i],
+        code: h.weather_code[i],
+        pop: h.precipitation_probability[i] ?? 0,
+      }))
+      // 값이 빈 시각(예보 범위 끝)은 뺀다
+      .filter((x: HourlyForecast) => x.temp != null && x.code != null),
   };
 }
 
@@ -150,7 +167,31 @@ export function localMonth(utcOffsetSeconds: number, now = Date.now()): number {
 
 const epochMinutesOf = (iso?: string) => (iso ? Date.parse(`${iso}:00Z`) / 60000 : NaN);
 
-export function timeOfDayAt(now: number, sunrise?: string, sunset?: string): TimeOfDay {
+/** 현지 시각 글자("YYYY-MM-DDTHH:MM")를 localEpochMinutes 와 같은 축의 분으로 */
+export const localMinutesOf = (iso: string) => epochMinutesOf(iso);
+
+/** 시간대가 바뀌는 네 지점(해 뜨기 30분 전, 뜬 뒤 2시간, 지기 90분 전, 진 뒤 45분)과 그 앞뒤로 섞는 폭(분) */
+const PHASE_EDGES: { at: (rise: number, set: number) => number; half: number; from: TimeOfDay; to: TimeOfDay }[] = [
+  { at: (rise) => rise - 30, half: 20, from: 'night', to: 'morning' },
+  { at: (rise) => rise + 120, half: 40, from: 'morning', to: 'day' },
+  { at: (_rise, set) => set - 90, half: 40, from: 'day', to: 'evening' },
+  { at: (_rise, set) => set + 45, half: 20, from: 'evening', to: 'night' },
+];
+
+export interface SkyPhase {
+  /** 섞기 전 시간대와 섞어 갈 시간대, 섞인 정도(0~1). 경계에서 멀면 from === to, t = 0 */
+  from: TimeOfDay;
+  to: TimeOfDay;
+  t: number;
+  /** 해가 떠 있는 동안의 진행(0 해 뜸 ~ 1 해 짐). 밤에는 가까운 끝값 */
+  dayFraction: number;
+}
+
+/**
+ * 지금 시각의 하늘 단계. 시간대 프리셋 사이를 경계 앞뒤로 천천히 섞어 화면이 갑자기 바뀌지 않게 하고,
+ * 해가 뜬 뒤 얼마나 지났는지(dayFraction)로 해의 높이·방위를 움직인다.
+ */
+export function skyPhaseAt(now: number, sunrise?: string, sunset?: string): SkyPhase {
   const dayStart = Math.floor(now / 1440) * 1440;
   let rise = epochMinutesOf(sunrise);
   let set = epochMinutesOf(sunset);
@@ -158,12 +199,52 @@ export function timeOfDayAt(now: number, sunrise?: string, sunset?: string): Tim
     rise = dayStart + 6 * 60;
     set = dayStart + 18 * 60;
   }
-  if (set - rise >= 1439) return 'day'; // 백야: 하루 종일 해가 지지 않는다
-  if (set <= rise) return 'night'; // 극야: 해가 뜨지 않는다
-  if (now < rise - 30 || now > set + 45) return 'night';
-  if (now < rise + 120) return 'morning';
-  if (now > set - 90) return 'evening';
-  return 'day';
+  if (set - rise >= 1439) return { from: 'day', to: 'day', t: 0, dayFraction: 0.5 }; // 백야: 하루 종일 해가 지지 않는다
+  if (set <= rise) return { from: 'night', to: 'night', t: 0, dayFraction: 0.5 }; // 극야: 해가 뜨지 않는다
+  const dayFraction = Math.min(1, Math.max(0, (now - rise) / (set - rise)));
+  // 낮이 아주 짧으면 경계가 겹친다. 아침·저녁 경계가 낮의 가운데를 넘지 않게 당긴다
+  const mid = (rise + set) / 2;
+  const edges = PHASE_EDGES.map((e, i) => {
+    let at = e.at(rise, set);
+    if (i === 1) at = Math.min(at, mid - e.half);
+    if (i === 2) at = Math.max(at, mid + e.half);
+    return { ...e, at };
+  });
+  let from: TimeOfDay = 'night';
+  for (const e of edges) {
+    if (now < e.at - e.half) return { from, to: from, t: 0, dayFraction };
+    if (now <= e.at + e.half) return { from: e.from, to: e.to, t: (now - (e.at - e.half)) / (2 * e.half), dayFraction };
+    from = e.to;
+  }
+  return { from: 'night', to: 'night', t: 0, dayFraction };
+}
+
+export function timeOfDayAt(now: number, sunrise?: string, sunset?: string): TimeOfDay {
+  const p = skyPhaseAt(now, sunrise, sunset);
+  return p.t < 0.5 ? p.from : p.to;
+}
+
+/** 비·눈으로 보는 날씨 코드인지(이슬비 51 이상) */
+const isWet = (code: number) => code >= 51;
+
+/**
+ * 앞으로 hours 시간 안에 비·눈이 시작되면 몇 시간 뒤인지와 종류를 돌려준다. 지금 이미 오고 있거나 예보가 없으면 null.
+ * nowLocal 은 현지 벽시계 기준 "YYYY-MM-DDTHH:MM".
+ */
+export function nextPrecip(hourly: HourlyForecast[], nowLocal: string, hours = 3): { inHours: number; kind: 'rain' | 'snow' } | null {
+  const hour = nowLocal.slice(0, 13);
+  const i = hourly.findIndex((h) => h.time.slice(0, 13) === hour);
+  if (i < 0 || isWet(hourly[i].code)) return null;
+  for (let k = 1; k <= hours && i + k < hourly.length; k++) {
+    const h = hourly[i + k];
+    if (isWet(h.code) && h.pop >= 40) return { inHours: k, kind: conditionFromCode(h.code) === 'snow' ? 'snow' : 'rain' };
+  }
+  return null;
+}
+
+/** 현지 벽시계 "YYYY-MM-DDTHH:MM" */
+export function localIso(utcOffsetSeconds: number, now = Date.now()): string {
+  return new Date(now + utcOffsetSeconds * 1000).toISOString().slice(0, 16);
 }
 
 /** 열대(위도 23.5° 이내)는 계절 변화가 거의 없어 여름으로 본다. */

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Rng } from '../util';
 import { Diorama, pathCurve, type Layout } from './diorama';
+import { ancestorNamed } from './kit';
 
 /**
  * 도시 테마: 피렌체를 모티브로 한 강변 옛 도시 디오라마(모델: tools/blender/city.py).
@@ -30,6 +31,9 @@ export class City extends Diorama {
   private readonly axis = new THREE.Vector3(1, 0, 0);
   private readonly gondolas: { obj: THREE.Object3D; from: THREE.Vector3 }[] = [];
   private spin = 0;
+  readonly moverHz = 15;
+  /** 대관람차를 눌렀을 때 잠깐 더 빨리 도는 정도 */
+  private wheelBoost = 0;
   private readonly p = new THREE.Vector3();
   private readonly tan = new THREE.Vector3();
 
@@ -59,10 +63,19 @@ export class City extends Diorama {
     }
   }
 
+  poke(hit: THREE.Object3D): boolean {
+    if (ancestorNamed(hit, 'mover_wheel') || ancestorNamed(hit, 'mover_gondola')) {
+      this.wheelBoost = 1;
+      return true;
+    }
+    return super.poke(hit);
+  }
+
   protected tick(dt: number): void {
     const { p, tan } = this;
     if (this.wheel) {
-      const step = dt * 0.12;
+      this.wheelBoost *= Math.exp(-dt * 0.7);
+      const step = dt * (0.12 + this.wheelBoost * 0.9);
       // 한 바퀴마다 되돌려 오래 켜 둬도 각도가 한없이 커지지 않게
       this.spin = (this.spin + step) % (Math.PI * 2);
       this.wheel.rotateOnWorldAxis(this.axis, step);

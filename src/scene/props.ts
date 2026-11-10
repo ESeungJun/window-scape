@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Env } from './env';
+import { enableSway } from './baked';
 
 /**
  * Blender 에서 직접 모델링한 테마 모델(public/models/*.glb, 만드는 법: tools/blender)을 불러오는 도구.
@@ -54,4 +55,27 @@ export function trackMaterials(
     if (SEASONAL[m.name]) list.push([m, SEASONAL[m.name]]);
     if (m.name === 'glass' || m.name === 'fire') lights.push(m);
   });
+}
+
+/**
+ * 나무(tree_*)의 재질을 복제해 바람에 흔들리게 한다. 원래 재질은 통나무·덤불처럼 흔들리면 안 되는 물체와 같이 쓰므로 그대로 둔다.
+ * 계절 색·라이트맵을 붙이기 전에 불러야 복제본도 같이 등록된다.
+ */
+export function swayTrees(root: THREE.Object3D): void {
+  const copies = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+  for (const tree of root.children) {
+    if (!tree.name.startsWith('tree_')) continue;
+    tree.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      const m = mesh.material as THREE.MeshStandardMaterial | undefined;
+      if (!mesh.isMesh || !m?.isMeshStandardMaterial) return;
+      let copy = copies.get(m);
+      if (!copy) {
+        copy = m.clone();
+        enableSway(copy);
+        copies.set(m, copy);
+      }
+      mesh.material = copy;
+    });
+  }
 }

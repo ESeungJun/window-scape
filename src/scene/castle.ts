@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Env } from './env';
 import type { Rng } from '../util';
 import { Diorama, Smoke, pathCurve, type Layout } from './diorama';
+import { ancestorNamed } from './kit';
 
 /**
  * 움직이는 성 테마: 초원 디오라마(모델: tools/blender/castle.py). 구리 선체 위에 돌 탑과 반목조 오두막을 얹은 성이
@@ -27,6 +28,9 @@ export class MovingCastle extends Diorama {
   private castle?: THREE.Object3D;
   private body?: THREE.Object3D;
   private prop?: THREE.Object3D;
+  readonly moverHz = 15;
+  /** 프로펠러를 눌렀을 때 잠깐 더 빨리 도는 정도 */
+  private propBoost = 0;
   private chimney?: THREE.Object3D;
   private readonly legs: Leg[] = [];
   private readonly smokeFx: Smoke;
@@ -67,6 +71,15 @@ export class MovingCastle extends Diorama {
     if (this.castle) this.castle.visible = true;
   }
 
+  /** 성을 누르면 프로펠러가 잠깐 빨리 돈다(걷는 성은 뛰지 않는다) */
+  poke(hit: THREE.Object3D): boolean {
+    if (ancestorNamed(hit, 'mover_castle')) {
+      this.propBoost = 1;
+      return true;
+    }
+    return super.poke(hit);
+  }
+
   focus(out: THREE.Vector3): THREE.Vector3 {
     out.copy(this.view.target);
     if (this.castle) out.lerp(this.castle.position, FOLLOW);
@@ -91,7 +104,8 @@ export class MovingCastle extends Diorama {
       this.body.position.y = this.bodyY + Math.abs(Math.sin(this.stride)) * 0.04;
       this.body.rotation.x = Math.sin(this.stride) * 0.025;
     }
-    this.prop?.rotateZ(-dt * (0.6 + env.wind * 4));
+    this.propBoost *= Math.exp(-dt * 0.9);
+    this.prop?.rotateZ(-dt * (0.6 + env.wind * 4 + this.propBoost * 9));
     if (this.chimney) {
       // getWorldPosition 이 굴뚝의 조상(성·무리)만 갱신한다. 장면 전체를 다시 계산하지 않는다
       this.group.worldToLocal(this.chimney.getWorldPosition(this.smokeAt));

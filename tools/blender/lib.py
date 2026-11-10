@@ -51,6 +51,22 @@ def surface(x, y):
     return max(TOP, 0.15 + 0.42 * HILL_R * math.sqrt(1 - d * d)) if d < 1 else TOP
 
 
+# ── 다음 내보내기에서 켤 것 ───────────────────────────
+# 환경 변수 WS_NEXT 에 쉼표로 적는다(예: WS_NEXT=cull,wnormal,lamps blender -b -P island.py -- out glb 512).
+#   cull    닫힌 도형 재질은 뒷면을 그리지 않게(한 겹 면인 ONE_LAYER 재질만 양면으로 남긴다)
+#   wnormal 모서리만 둥글게 빛나도록 가중 법선(베벨 뒤)
+#   lamps   밤 불빛(layout.lights)을 한 번 더 구워 라이트맵 알파에 넣는다. 앱은 layout.lampsBaked 를 보고 알파를 읽는다
+# 주의: 2026-11 에 코드만 써 두었고 Blender 로 한 번도 실행해 보지 못했다. 기본은 전부 꺼져 있어 지금 glb 와 같은 결과를 낸다.
+# 처음 켤 때는 테마 하나로 화면을 비교한 뒤 나머지를 내보낸다.
+NEXT = set(filter(None, os.environ.get('WS_NEXT', '').split(',')))
+# 한 겹으로 된 면(뒤에서도 보인다): 돛·천·수건·차양·꽃·갈대·연잎·천막·물
+ONE_LAYER = ('sail', 'cloth_', 'towel_', 'awn_', 'flower_', 'lane_flower_', 'reed', 'lily', 'tent', 'water', 'foam')
+
+
+def one_sided(m, name):
+    m.use_backface_culling = 'cull' in NEXT and not name.startswith(ONE_LAYER)
+
+
 # ── 재질 ─────────────────────────────────────────────
 
 def lin(h):
@@ -98,6 +114,7 @@ def mat(name, hexcol, rough=0.8, var=0.12, scale=5.0, bump=0.0, emit=None, alpha
         b.inputs['Emission Strength'].default_value = 1.5
     if alpha is not None:
         b.inputs['Alpha'].default_value = alpha
+    one_sided(m, name)
     _mats[name] = m
     return m
 
@@ -131,6 +148,7 @@ def banded(name, colors, axis_scale=3.0, distortion=2.0, bump=0.4, rough=0.9):
     bp.inputs['Strength'].default_value = bump
     l.new(wave.outputs['Fac'], bp.inputs['Height'])
     l.new(bp.outputs['Normal'], b.inputs['Normal'])
+    one_sided(m, name)
     _mats[name] = m
     return m
 
@@ -214,6 +232,11 @@ def finish(o, m, smooth=True, bevel=0.0, seg=3, sub=0, disp=0.0, disp_size=0.5):
         d.texture_coords = 'GLOBAL'
         d.strength = disp
         d.mid_level = 0.5
+    if 'wnormal' in NEXT and smooth and bevel > 0:
+        # 평평한 면은 평평하게, 베벨 모서리만 둥글게 빛난다(모디파이어 맨 끝에 둔다). 정점 수는 그대로
+        w = o.modifiers.new('wnormal', 'WEIGHTED_NORMAL')
+        w.keep_sharp = True
+        w.weight = 50
     return o
 
 
@@ -610,7 +633,53 @@ def dynamic(o):
     return False
 
 
-def bake_lightmap(path, size, samples):
+# 밤 불빛(앱의 PointLight('#ffc46b', 세기 7, 거리 7, 감쇠 1.6)을 대신한다). 구운 값 1 이 앱에서 불빛 최대 밝기
+LAMP_WATT = 60.0
+LAMP_RADIUS = 0.08
+
+
+def bake_lamps(img, lights, size, samples):
+    """불빛만 켜고(하늘은 끈다) 직접광을 한 번 더 구워 img 의 알파에 밝기로 넣는다.
+    bake_lightmap 안에서 재질에 굽기용 노드가 붙어 있는 동안 부른다. lights 는 앱 좌표 [x, y, z] 목록."""
+    import numpy as np
+    lamp_img = bpy.data.images.new('lamps', size, size, float_buffer=True)
+    for m in bpy.data.materials:
+        if m.node_tree and m.node_tree.nodes.active and m.node_tree.nodes.active.type == 'TEX_IMAGE':
+            m.node_tree.nodes.active.image = lamp_img
+    bg = scene.world.node_tree.nodes['Background']
+    strength = bg.inputs['Strength'].default_value
+    bg.inputs['Strength'].default_value = 0
+    made = []
+    for x, y, z in lights:
+        d = bpy.data.lights.new('lamp', 'POINT')
+        d.energy = LAMP_WATT
+        d.shadow_soft_size = LAMP_RADIUS
+        o = bpy.data.objects.new('lamp', d)
+        # 앱 (x, y, z) -> Blender (x, -z, y)
+        o.location = (x, -z, y)
+        COL.objects.link(o)
+        made.append(o)
+    scene.cycles.samples = max(64, samples // 2)
+    bpy.ops.object.bake(type='DIFFUSE', pass_filter={'DIRECT'}, margin=6, use_clear=True)
+    for o in made:
+        bpy.data.objects.remove(o, do_unlink=True)
+    bg.inputs['Strength'].default_value = strength
+    main = np.empty(size * size * 4, dtype=np.float32)
+    lamp = np.empty(size * size * 4, dtype=np.float32)
+    img.pixels.foreach_get(main)
+    lamp_img.pixels.foreach_get(lamp)
+    lamp = lamp.reshape(-1, 4)
+    main = main.reshape(-1, 4)
+    # 알파 0 인 픽셀은 webp 가 색을 뭉개므로 1/255 를 바닥으로 둔다(앱이 되돌린다: baked.ts)
+    main[:, 3] = (1 + 254 * np.clip(lamp[:, :3].max(axis=1), 0, 1)) / 255
+    img.pixels.foreach_set(main.ravel())
+    bpy.data.images.remove(lamp_img)
+    for m in bpy.data.materials:
+        if m.node_tree and m.node_tree.nodes.active and m.node_tree.nodes.active.type == 'TEX_IMAGE':
+            m.node_tree.nodes.active.image = img
+
+
+def bake_lightmap(path, size, samples, lamps=None):
     """하늘에서만 오는 흰 간접광 + 틈 그늘(AO)을 라이트맵 한 장에 굽는다(해·불빛은 굽지 않는다).
     앱이 이 값에 시간대·날씨의 하늘색을 곱하고 해는 실시간으로 얹는다. 꽃은 너무 잘아서 뺀다."""
     objs = [o for o in bpy.data.objects if o.type == 'MESH' and not o.name.startswith('flowers_') and not dynamic(o)]
@@ -668,6 +737,11 @@ def bake_lightmap(path, size, samples):
     scene.cycles.samples = samples
     scene.render.bake.margin = 6
     bpy.ops.object.bake(type='DIFFUSE', pass_filter={'DIRECT', 'INDIRECT'}, margin=6, use_clear=True)
+    if lamps:
+        # 알파까지 저장한다. webp 로 바꿀 때도 알파를 남겨야 한다. 테마 스크립트 머리말의 ffmpeg 명령에
+        # -pix_fmt yuva420p 를 붙인다. 알파가 빠지면 앱에서 밤 장면 전체가 불빛 최대로 보인다
+        img.alpha_mode = 'STRAIGHT'
+        bake_lamps(img, lamps, size, samples)
     img.filepath_raw = path
     img.file_format = 'PNG'
     img.save()
@@ -769,7 +843,10 @@ def export_glb(path, join=True, lightmap=None, size=2048, samples=512, layout=No
                 attr.data[li].color = (*c, 1)
         me.color_attributes.active_color = attr
     if lightmap:
-        bake_lightmap(lightmap, size, samples)
+        lamps = (layout or {}).get('lights') if 'lamps' in NEXT else None
+        bake_lightmap(lightmap, size, samples, lamps)
+        if lamps:
+            layout['lampsBaked'] = True
     if layout is not None:
         # 앱이 쓸 자리(강 경로·불빛 등)를 'layout' 빈 물체의 extras 로 함께 내보낸다(앱: userData.layout)
         import json
