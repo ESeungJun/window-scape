@@ -47,7 +47,7 @@ const FRAGMENT = /* glsl */ `
     vec2 id = floor(g);
     vec2 r = h2(id);
     float life = fract(time * (0.03 + r.x * 0.05) + r.y);
-    float on = step(r.x, amount) * smoothstep(0.0, 0.08, life) * smoothstep(1.0, 0.7, life);
+    float on = step(r.x, amount) * smoothstep(0.0, 0.08, life) * (1.0 - smoothstep(0.7, 1.0, life));
     vec2 c = (fract(g) - 0.5) - (r - 0.5) * 0.55;
     float rad = (0.1 + 0.16 * h1(id + 7.3)) * (0.6 + 0.4 * life);
     float d = length(c) / rad;
@@ -70,7 +70,7 @@ const FRAGMENT = /* glsl */ `
     float head = (1.0 - smoothstep(0.7, 1.0, length(c))) * on;
     // 방울 위쪽(지나온 쪽)으로 가늘어지는 물길
     float above = fract(g.y - y * 3.0 + 0.5) - 0.5;
-    float trail = (1.0 - smoothstep(0.012, 0.035, abs(x))) * smoothstep(0.5, 0.0, above) * step(0.0, above) * on;
+    float trail = (1.0 - smoothstep(0.012, 0.035, abs(x))) * (1.0 - smoothstep(0.0, 0.5, above)) * step(0.0, above) * on;
     return vec4(c, head, trail);
   }
 
@@ -146,7 +146,7 @@ const FRAGMENT = /* glsl */ `
     // 방울의 빛: 왼쪽 위에 밝은 점, 아래쪽 테는 어둡다
     if (drop > 0.01) {
       float spec = pow(max(dot(normalize(vec3(n * 0.9, 0.6)), normalize(vec3(-0.45, 0.6, 0.66))), 0.0), 9.0);
-      float rim = smoothstep(0.35, 1.0, length(n)) * smoothstep(0.2, -0.9, n.y);
+      float rim = smoothstep(0.35, 1.0, length(n)) * (1.0 - smoothstep(-0.9, 0.2, n.y));
       float da = drop * (0.1 + 0.34 * rim);
       vec3 dc = mix(vec3(0.03, 0.05, 0.08), tint * 0.55, 0.35);
       col = mix(col, dc, da / max(da + a * (1.0 - da), 0.001));
@@ -199,11 +199,6 @@ export class Glass {
     this.mesh.visible = false;
   }
 
-  /** 지금 유리에 보이는 것이 있는지(없으면 그리지 않는다) */
-  get active(): boolean {
-    return this.mesh.visible;
-  }
-
   /** 끌어서 김을 닦는다. x, y 는 화면 비율 좌표(0~1, y 는 위가 1) */
   wipe(x: number, y: number): void {
     if (!this.mesh.visible) return;
@@ -225,7 +220,8 @@ export class Glass {
     const show = this.enabled && (env.rain > 0.02 || env.mist > 0.03 || env.frost > 0.03);
     this.mesh.visible = show;
     if (!show) return;
-    if (!still) u.time.value += dt;
+    // 며칠 켜 둬도 정밀도가 떨어지지 않게 한 시간마다 접는다(닦은 자국은 그때 지워진다)
+    if (!still) u.time.value = (u.time.value + dt) % 3600;
     u.aspect.value = aspect;
     u.rain.value = Math.min(1, env.rain);
     u.mist.value = env.mist;

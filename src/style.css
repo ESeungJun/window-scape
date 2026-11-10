@@ -404,7 +404,8 @@ body.widget .brand { display: none; }
 /* 도구는 마우스가 창 위에 있거나 안에서 키보드를 쓸 때, 설정이 열려 있을 때만 보인다(풍경을 가리지 않게) */
 body.widget .toolbar { opacity: 0; transition: opacity 0.25s; }
 body.widget .app:hover .toolbar,
-body.widget .app:focus-within .toolbar,
+body.widget .app:focus-within .toolbar { opacity: 1; }
+/* :has 를 모르는 옛 WebKit 이 위 규칙까지 버리지 않게 따로 둔다 */
 body.widget .app:has(.panel:not([hidden])) .toolbar { opacity: 1; }
 body.widget .chips:has([aria-label='화면']) { display: none; }
 body.widget .sound { display: none; }

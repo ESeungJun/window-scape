@@ -3,7 +3,7 @@ import {
   coarse, conditionFromCode, fetchForecast, localEpochMinutes, localIso, localMinutesOf, localMonth, nextPrecip, seasonAt, skyPhaseAt,
   timeOfDayAt, type Condition, type Forecast, type HourlyForecast, type Place, type TimeOfDay,
 } from './data/weather';
-import { FORECAST_KEY, ageLabel, parseCachedForecast } from './data/cache';
+import { FORECAST_KEY, ageLabel, isForecast, parseCachedForecast } from './data/cache';
 import { retryDelay } from './data/retry';
 import { KEYS, migrateKeys } from './data/storage';
 import type { LiveWeather } from './scene/env';
@@ -114,6 +114,8 @@ let liveOverride: LiveWeather | undefined;
 /** 연달아 실패한 횟수와 다음 재시도 타이머 */
 let failures = 0;
 let retryTimer = 0;
+/** 다시 시도를 기다리는 장소 */
+let retryPlace: Place | undefined;
 /** 사용자가 장소를 고를 때마다 증가. 늦게 도착한 현재 위치 응답이 그 뒤의 선택을 덮어쓰지 않게 한다. */
 let choiceSeq = 0;
 
@@ -373,10 +375,14 @@ function selectDay(i: number) {
  * 예보를 불러온다. 실패하면 장소를 바꾸지 않고 이전 예보를 그대로 두어,
  * 새 도시 이름 밑에 이전 도시 날씨가 보이는 일이 없게 한다.
  */
-async function loadPlace(place: Place, isRefresh = false) {
+async function loadPlace(place: Place, isRefresh = false, isRetry = false) {
   if (isRefresh && loadController) return; // 사용자가 고른 장소를 불러오는 중이면 정기 갱신은 건너뛴다
+  // 사용자가 고른 장소가 아직 실패한 채 다시 시도를 기다리고 있으면, 정기 갱신이 그 재시도를 지우지 않게 그 장소로 한다
+  if (isRefresh && retryPlace && retryPlace !== place) return loadPlace(retryPlace, false, true);
   loadController?.abort();
   clearTimeout(retryTimer);
+  // 사용자가 새로 고른 장소는 처음부터 센다(실패 안내와 5초 뒤 재시도가 다시 나오게)
+  if (!isRefresh && !isRetry) failures = 0;
   const ctrl = new AbortController();
   loadController = ctrl;
   if (!isRefresh) now.badge.textContent = '불러오는 중…';
@@ -384,9 +390,12 @@ async function loadPlace(place: Place, isRefresh = false) {
   let forecast: Forecast;
   try {
     forecast = await fetchForecast(place, ctrl.signal);
+    // 모양이 다르거나 값이 범위를 벗어난 응답은 쓰지도 저장하지도 않는다
+    if (!isForecast(forecast)) throw new Error('forecast shape');
   } catch (e) {
     if (loadController === ctrl) loadController = undefined;
-    if ((e as Error).name === 'AbortError') return;
+    // 사용자가 다른 장소를 골라 취소한 것만 조용히 끝낸다(시간 초과는 실패로 보고 다시 시도한다)
+    if (ctrl.signal.aborted) return;
     state.offline = true;
     failures++;
     // 처음 한 번만 알린다(다시 시도할 때마다 토스트가 뜨지 않게)
@@ -398,12 +407,14 @@ async function loadPlace(place: Place, isRefresh = false) {
       );
     }
     // 5초·15초·60초, 그 뒤로는 5분마다 다시 해 본다. 네트워크가 돌아오면(online) 바로 한다
-    retryTimer = window.setTimeout(() => loadPlace(place, isRefresh), retryDelay(failures));
+    retryPlace = place;
+    retryTimer = window.setTimeout(() => loadPlace(place, isRefresh, true), retryDelay(failures));
     renderInfo();
     return;
   }
   loadController = undefined;
   failures = 0;
+  retryPlace = undefined;
 
   // 같은 장소를 새로 고칠 때는 보고 있던 날짜를 유지한다
   const keepDate = isRefresh ? state.forecast?.daily[state.dayIndex]?.date : undefined;
@@ -422,7 +433,8 @@ async function loadPlace(place: Place, isRefresh = false) {
 /** 다시 시도를 기다리는 중이면 지금 바로 한다(네트워크가 돌아왔을 때) */
 function retryNow() {
   if (failures === 0 || loadController) return;
-  loadPlace(state.place, state.forecast !== undefined);
+  const place = retryPlace ?? state.place;
+  loadPlace(place, place === state.place && state.forecast !== undefined, true);
 }
 
 function choosePlace(place: Place) {

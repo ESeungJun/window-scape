@@ -43,6 +43,7 @@ const VERTEX_PARS = /* glsl */ `
 // 나무: 물체 기준 높이(position.y)가 높을수록 크게, 자리(modelMatrix 의 이동)마다 다른 박자로 흔들린다
 const VERTEX_SWAY = /* glsl */ `
   #ifdef WS_SWAY
+    // 그림자 맵에는 흔들리지 않은 모양이 들어간다(깊이 재질은 따로 두지 않았다). 폭이 작아 어긋남이 눈에 띄지 않는다
     float swH = smoothstep(0.25, 2.6, position.y);
     vec3 swAt = modelMatrix[3].xyz;
     float swP = swAt.x * 1.3 + swAt.z * 1.7;
@@ -120,7 +121,8 @@ const FRAGMENT_LIGHTS = /* glsl */ `
   if (wsNight > 0.003) {
     float lampSum = 0.0;
     #ifdef USE_LIGHTMAP
-      if (wsLampBaked > 0.5) lampSum = lightMapTexel.a;
+      // 구운 불빛은 알파 1/255 가 0 이다(완전 투명 픽셀을 피해 저장한다. tools/blender/lib.py 의 bake_lamps)
+      if (wsLampBaked > 0.5) lampSum = max(lightMapTexel.a * 255.0 - 1.0, 0.0) / 254.0;
       else
     #endif
     {
@@ -246,10 +248,12 @@ export function updateSurface(dt: number, env: Env, flash: number, opts: Surface
   // 구름 그늘: 구름이 띄엄띄엄 있을 때 가장 뚜렷하고, 맑거나 온통 흐리면 없다
   const s = U.wsShade.value;
   const drift = (0.25 + env.wind * 1.4) * dt * 0.11;
-  s.x -= env.windX * drift;
-  s.y -= env.windZ * drift;
+  // 오래 켜 둬도 정밀도가 떨어지지 않게 접는다(얼룩 무늬는 접히는 순간 한 번 바뀐다)
+  s.x = (s.x - env.windX * drift) % 512;
+  s.y = (s.y - env.windZ * drift) % 512;
   s.z = opts.shade ? 0.5 * Math.min(1, env.cloudCover * 1.6) * (1 - env.overcast) : 0;
   // 나무 흔들림: 위상은 dt 로 누적한다(시간에 바람 세기를 곱하면 바람이 바뀌는 순간 위상이 튄다)
-  swayPhase = (swayPhase + dt * (1.1 + env.wind * 1.6)) % 1000;
+  // 셰이더의 박자(1, 2.3, 5.1, 4.3 배)가 모두 이어지는 주기로 접는다(20π)
+  swayPhase = (swayPhase + dt * (1.1 + env.wind * 1.6)) % (20 * Math.PI);
   U.wsSway.value.set(env.windX, opts.sway ? 0.012 + env.wind * 0.13 : 0, env.windZ, swayPhase);
 }

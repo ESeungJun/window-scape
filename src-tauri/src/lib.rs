@@ -182,6 +182,28 @@ fn watch_occlusion(app: &AppHandle) {
   });
 }
 
+/// 지금 창이 가려져 있는지. 화면이 켜질 때(또는 다시 불러올 때) 한 번 묻는다. 알 수 없으면 false.
+#[tauri::command]
+fn is_window_occluded(app: AppHandle) -> bool {
+  #[cfg(target_os = "macos")]
+  {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let handle = app.clone();
+    let ask = move || {
+      let _ = tx.send(is_occluded(&handle));
+    };
+    if app.run_on_main_thread(ask).is_err() {
+      return false;
+    }
+    rx.recv_timeout(std::time::Duration::from_secs(2)).ok().flatten().unwrap_or(false)
+  }
+  #[cfg(not(target_os = "macos"))]
+  {
+    let _ = app;
+    false
+  }
+}
+
 fn quit(app: &AppHandle) {
   let _ = app.save_window_state(StateFlags::SIZE | StateFlags::POSITION);
   app.exit(0);
@@ -214,7 +236,7 @@ pub fn run() {
     .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
-    .invoke_handler(tauri::generate_handler![current_location, get_layer, set_layer])
+    .invoke_handler(tauri::generate_handler![current_location, get_layer, set_layer, is_window_occluded])
     .setup(|app| {
       // Dock 아이콘 없이 메뉴 막대에만 사는 앱
       #[cfg(target_os = "macos")]

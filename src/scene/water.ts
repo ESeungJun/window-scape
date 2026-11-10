@@ -66,7 +66,7 @@ const STILL_FRAGMENT = /* glsl */ `
     vec2 id = floor(g);
     vec2 c = fract(g) - 0.5 - (vec2(hash(id), hash(id + 5.3)) - 0.5) * 0.5;
     float ph = fract(time * 0.85 + hash(id + 2.1));
-    return smoothstep(0.035, 0.0, abs(length(c) - ph * 0.42)) * (1.0 - ph);
+    return (1.0 - smoothstep(0.0, 0.035, abs(length(c) - ph * 0.42))) * (1.0 - ph);
   }
   void main() {
     float shore = (vUv.x - 0.5) * 2.0;

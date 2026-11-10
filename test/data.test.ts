@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CACHE_MAX_AGE_MS, ageLabel, parseCachedForecast } from '../src/data/cache.ts';
+import { CACHE_MAX_AGE_MS, ageLabel, isForecast, parseCachedForecast } from '../src/data/cache.ts';
 import { RETRY_STEADY_MS, retryDelay } from '../src/data/retry.ts';
 import { KEYS, migrateKeys } from '../src/data/storage.ts';
 import { frameCap, shadowInterval } from '../src/scene/pace.ts';
@@ -116,6 +116,26 @@ test('그림자 갱신 간격: 바람이 약하면 느리게, 움직이는 것�
   assert.ok(Math.abs(shadowInterval(base) - 1 / 6) < 1e-9);
   assert.ok(Math.abs(shadowInterval({ ...base, wind: 0.8 }) - 0.1) < 1e-9);
   assert.ok(Math.abs(shadowInterval({ ...base, moverHz: 15 }) - 1 / 15) < 1e-9);
-  assert.equal(shadowInterval({ ...base, lowPower: true, moverHz: 15 }), 0.4);
+  assert.equal(shadowInterval({ ...base, lowPower: true }), 0.4);
+  assert.ok(Math.abs(shadowInterval({ ...base, lowPower: true, moverHz: 15 }) - 2 / 15) < 1e-9);
   assert.equal(shadowInterval({ ...base, shadowStrength: 0.05, moverHz: 15 }), 1);
+});
+
+test('예보 검증: 범위를 벗어난 값·형식이 다른 날짜·지나치게 긴 목록은 받지 않는다', () => {
+  assert.equal(isForecast(forecast()), true);
+  const edit = (fn: (f: ReturnType<typeof forecast>) => void) => {
+    const f = forecast();
+    fn(f);
+    return isForecast(f);
+  };
+  assert.equal(edit((f) => (f.utcOffsetSeconds = 1e300)), false);
+  assert.equal(edit((f) => (f.current.windDir = -20)), false);
+  assert.equal(edit((f) => (f.current.code = 250)), false);
+  assert.equal(edit((f) => (f.daily[0].date = '<b>2026</b>')), false);
+  assert.equal(edit((f) => (f.daily[0].sunrise = '07:05')), false);
+  assert.equal(edit((f) => (f.hourly[0].time = '2026-11-10 12:00')), false);
+  assert.equal(edit((f) => (f.hourly = Array.from({ length: 5000 }, () => f.hourly[0]))), false);
+  assert.equal(edit((f) => (f.daily = Array.from({ length: 40 }, () => f.daily[0]))), false);
+  assert.equal(isForecast(null), false);
+  assert.equal(isForecast('x'), false);
 });

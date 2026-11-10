@@ -670,7 +670,8 @@ def bake_lamps(img, lights, size, samples):
     lamp_img.pixels.foreach_get(lamp)
     lamp = lamp.reshape(-1, 4)
     main = main.reshape(-1, 4)
-    main[:, 3] = np.clip(lamp[:, :3].max(axis=1), 0, 1)
+    # 알파 0 인 픽셀은 webp 가 색을 뭉개므로 1/255 를 바닥으로 둔다(앱이 되돌린다: baked.ts)
+    main[:, 3] = (1 + 254 * np.clip(lamp[:, :3].max(axis=1), 0, 1)) / 255
     img.pixels.foreach_set(main.ravel())
     bpy.data.images.remove(lamp_img)
     for m in bpy.data.materials:
@@ -737,7 +738,8 @@ def bake_lightmap(path, size, samples, lamps=None):
     scene.render.bake.margin = 6
     bpy.ops.object.bake(type='DIFFUSE', pass_filter={'DIRECT', 'INDIRECT'}, margin=6, use_clear=True)
     if lamps:
-        # 알파까지 저장한다. webp 로 바꿀 때도 알파를 남겨야 한다(ffmpeg: -pix_fmt yuva420p)
+        # 알파까지 저장한다. webp 로 바꿀 때도 알파를 남겨야 한다. 테마 스크립트 머리말의 ffmpeg 명령에
+        # -pix_fmt yuva420p 를 붙인다. 알파가 빠지면 앱에서 밤 장면 전체가 불빛 최대로 보인다
         img.alpha_mode = 'STRAIGHT'
         bake_lamps(img, lamps, size, samples)
     img.filepath_raw = path

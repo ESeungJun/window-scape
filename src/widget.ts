@@ -52,7 +52,11 @@ export function setupWidget(app: HTMLElement): void {
  *  - 자리: 창을 옮기면 화면 안에서의 자리(-1~1)를 알려 시차에 쓴다.
  */
 export function watchWindow(onOccluded: (occluded: boolean) => void, onPlace: (x: number, y: number) => void): void {
-  listen<boolean>('occlusion-changed', (e) => onOccluded(e.payload === true)).catch(() => {});
+  listen<boolean>('occlusion-changed', (e) => onOccluded(e.payload === true))
+    // 듣기 시작하기 전에 지나간 알림이 있을 수 있으니 지금 상태를 한 번 묻는다
+    .then(() => invoke<boolean>('is_window_occluded'))
+    .then((occluded) => onOccluded(occluded === true))
+    .catch(() => {});
   const win = getCurrentWindow();
   const place = async () => {
     try {

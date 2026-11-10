@@ -16,6 +16,35 @@ export interface CachedForecast {
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+const within = (v: unknown, lo: number, hi: number) => isNum(v) && v >= lo && v <= hi;
+
+/**
+ * 예보의 모양과 값의 범위를 확인한다. 저장해 둔 예보를 되살릴 때와 네트워크에서 받은 직후 둘 다 거친다
+ * (깨진 값이 화면 계산을 멈추거나 저장소에 남지 않게).
+ */
+export function isForecast(f: unknown): f is Forecast {
+  const v = f as Forecast;
+  if (!v || typeof v !== 'object' || !within(v.utcOffsetSeconds, -86400, 86400)) return false;
+  if (!v.current || !Array.isArray(v.daily) || !Array.isArray(v.hourly)) return false;
+  if (v.daily.length === 0 || v.daily.length > 16 || v.hourly.length > 16 * 24) return false;
+  const c = v.current;
+  if (!within(c.temp, -100, 70) || !within(c.humidity, 0, 100) || !within(c.precipitation, 0, 2000)) return false;
+  if (!within(c.code, 0, 99) || !within(c.wind, 0, 500) || !within(c.windDir, 0, 360)) return false;
+  for (const d of v.daily) {
+    if (!d || typeof d.date !== 'string' || !DATE.test(d.date)) return false;
+    if (typeof d.sunrise !== 'string' || !DATE_TIME.test(d.sunrise) || typeof d.sunset !== 'string' || !DATE_TIME.test(d.sunset)) return false;
+    if (!within(d.code, 0, 99) || !within(d.max, -100, 70) || !within(d.min, -100, 70)) return false;
+    if (!within(d.precipitation, 0, 5000) || !within(d.wind, 0, 500) || !within(d.windDir, 0, 360)) return false;
+  }
+  for (const h of v.hourly) {
+    if (!h || typeof h.time !== 'string' || !DATE_TIME.test(h.time)) return false;
+    if (!within(h.temp, -100, 70) || !within(h.code, 0, 99) || !within(h.pop, 0, 100)) return false;
+  }
+  return true;
+}
+
 /** 저장된 글자를 예보로 되돌린다. 모양이 다르거나 낡았거나 날짜가 넘어갔으면 null */
 export function parseCachedForecast(raw: string | null, now: number): CachedForecast | null {
   if (!raw) return null;
@@ -30,16 +59,7 @@ export function parseCachedForecast(raw: string | null, now: number): CachedFore
   if (!isNum(savedAt) || savedAt > now + 60_000 || now - savedAt > CACHE_MAX_AGE_MS) return null;
   if (!place || typeof place.name !== 'string' || !place.name || place.name.length > 100) return null;
   if (!isNum(place.lat) || Math.abs(place.lat) > 90 || !isNum(place.lon) || Math.abs(place.lon) > 180) return null;
-  if (!f || !isNum(f.utcOffsetSeconds) || !f.current || !Array.isArray(f.daily) || !Array.isArray(f.hourly) || f.daily.length === 0) return null;
-  const c = f.current;
-  if (![c.temp, c.humidity, c.precipitation, c.code, c.wind, c.windDir].every(isNum)) return null;
-  for (const d of f.daily) {
-    if (!d || typeof d.date !== 'string' || ![d.code, d.max, d.min, d.precipitation, d.wind, d.windDir].every(isNum)) return null;
-    if (typeof d.sunrise !== 'string' || typeof d.sunset !== 'string') return null;
-  }
-  for (const h of f.hourly) {
-    if (!h || typeof h.time !== 'string' || ![h.temp, h.code, h.pop].every(isNum)) return null;
-  }
+  if (!isForecast(f)) return null;
   // 저장한 뒤 날짜가 바뀌었으면 첫 칸이 어제다
   const today = new Date(now + f.utcOffsetSeconds * 1000).toISOString().slice(0, 10);
   if (f.daily[0].date !== today) return null;

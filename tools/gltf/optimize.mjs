@@ -10,9 +10,9 @@ import { dedup, draco, weld } from '@gltf-transform/functions'
 import draco3d from 'draco3dgltf'
 import { mkdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const [src, out, ...flags] = process.argv.slice(2)
-if (!src || !out) { console.error('사용: node optimize.mjs <입력 폴더> <출력 폴더> [--no-draco]'); process.exit(1) }
 const THEMES = ['island', 'drive', 'city', 'castle', 'forest']
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({
   'draco3d.decoder': await draco3d.createDecoderModule(),
@@ -20,7 +20,7 @@ const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies(
 })
 
 /** 프리미티브가 닫힌 바깥 방향 도형으로만 이뤄졌는지. 위치가 같은 정점은 하나로 보고 판단한다 */
-export function isClosed(positions, indices) {
+function isClosed(positions, indices) {
   const n = positions.length / 3
   const key = new Map(), id = new Uint32Array(n)
   for (let i = 0; i < n; i++) {
@@ -78,7 +78,8 @@ function count(doc) {
   return { verts, tris, mats: doc.getRoot().listMaterials().length, twoSided: two, meshes: doc.getRoot().listMeshes().length }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  if (!src || !out) { console.error('사용: node optimize.mjs <입력 폴더> <출력 폴더> [--no-draco]'); process.exit(1) }
   mkdirSync(out, { recursive: true })
   for (const name of THEMES) {
     const doc = await io.read(join(src, `${name}.glb`))

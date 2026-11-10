@@ -50,6 +50,7 @@ export interface Forecast {
 }
 
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
+const FETCH_TIMEOUT_MS = 15_000;
 const GEOCODING_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 
 export async function fetchForecast(place: Place, signal?: AbortSignal): Promise<Forecast> {
@@ -62,9 +63,22 @@ export async function fetchForecast(place: Place, signal?: AbortSignal): Promise
     timezone: 'auto',
     forecast_days: '7',
   });
-  const res = await fetch(`${FORECAST_URL}?${params}`, { signal });
-  if (!res.ok) throw new Error(`forecast ${res.status}`);
-  const j = await res.json();
+  // 응답이 멈춘 채 붙잡혀 있으면 실패로 보고 다시 시도하게 한다.
+  // AbortSignal.timeout·any 는 옛 WebKit(macOS 14.4 미만)에 없어서 직접 묶는다
+  const ctrl = new AbortController();
+  const cancel = () => ctrl.abort();
+  if (signal?.aborted) cancel();
+  signal?.addEventListener('abort', cancel, { once: true });
+  const timer = setTimeout(cancel, FETCH_TIMEOUT_MS);
+  let j;
+  try {
+    const res = await fetch(`${FORECAST_URL}?${params}`, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`forecast ${res.status}`);
+    j = await res.json();
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', cancel);
+  }
   const d = j.daily;
   const h = j.hourly;
   return {
@@ -84,16 +98,19 @@ export async function fetchForecast(place: Place, signal?: AbortSignal): Promise
       min: d.temperature_2m_min[i],
       sunrise: d.sunrise[i],
       sunset: d.sunset[i],
-      precipitation: d.precipitation_sum[i],
-      wind: d.wind_speed_10m_max[i],
-      windDir: d.wind_direction_10m_dominant[i],
+      precipitation: d.precipitation_sum[i] ?? 0,
+      wind: d.wind_speed_10m_max[i] ?? 0,
+      windDir: d.wind_direction_10m_dominant[i] ?? 0,
     })),
-    hourly: h.time.map((time: string, i: number) => ({
-      time,
-      temp: h.temperature_2m[i],
-      code: h.weather_code[i],
-      pop: h.precipitation_probability[i] ?? 0,
-    })),
+    hourly: h.time
+      .map((time: string, i: number) => ({
+        time,
+        temp: h.temperature_2m[i],
+        code: h.weather_code[i],
+        pop: h.precipitation_probability[i] ?? 0,
+      }))
+      // 값이 빈 시각(예보 범위 끝)은 뺀다
+      .filter((x: HourlyForecast) => x.temp != null && x.code != null),
   };
 }
 

@@ -32,7 +32,8 @@ export function frameCap(i: PaceInput): number {
 export function shadowInterval(i: { lowPower: boolean; wind: number; moverHz: number; shadowStrength: number }): number {
   // 흐려서 그림자가 거의 안 보이면 드물게만
   if (i.shadowStrength < 0.08) return 1;
-  if (i.lowPower) return 0.4;
+  // 절전: 드물게 그리되, 움직이는 것이 있으면 그 절반 빈도까지는 따라간다(자동차 그림자가 차에서 떨어지지 않게)
+  if (i.lowPower) return i.moverHz > 0 ? Math.min(0.4, 2 / i.moverHz) : 0.4;
   const swayHz = i.wind < 0.3 ? 6 : 10;
   return 1 / Math.max(swayHz, i.moverHz);
 }

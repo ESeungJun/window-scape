@@ -107,6 +107,8 @@ export class World {
   private readonly shadowSun = new THREE.Vector3();
   private readonly shadowAt = new THREE.Vector3(1e9, 0, 0);
   private shadowAge = 1e9;
+  /** 마지막으로 누름 반응이 있었던 때(장면 시간) */
+  private pokedAt = -100;
   /** 마우스 자리(-1~1)와 창 자리에 따른 치우침, 부드럽게 따라간 값, 지금 카메라에 더해 둔 이동 */
   private readonly pointer = new THREE.Vector2();
   private readonly windowBias = new THREE.Vector2();
@@ -458,8 +460,14 @@ export class World {
   private poke(ndc: THREE.Vector2): void {
     if (!this.stage.poke) return;
     this.raycaster.setFromCamera(ndc, this.camera);
-    const hit = this.raycaster.intersectObject(this.stage.group, true).find((i) => (i.object as THREE.Mesh).isMesh);
-    if (hit) this.stage.poke(hit.object);
+    // 광선 검사는 숨긴 물체(디오라마 모양의 받침 밖 나무, 눈 올 때의 꽃)도 맞히므로 보이는 것만 본다.
+    // 맨 앞 물체가 반응하지 않으면(땅·집) 거기서 멈춘다: 가려진 뒤쪽 물체가 반응하면 이상하다
+    const shown = (o: THREE.Object3D | null): boolean => {
+      for (let p = o; p; p = p.parent) if (!p.visible) return false;
+      return true;
+    };
+    const hit = this.raycaster.intersectObject(this.stage.group, true).find((i) => (i.object as THREE.Mesh).isMesh && shown(i.object));
+    if (hit && this.stage.poke(hit.object)) this.pokedAt = this.time;
   }
 
   /** 들어가기 모드의 카메라: 들어가고 나올 때는 날아가고, 그 사이에는 캐릭터를 부드럽게 따라간다 */
@@ -690,7 +698,8 @@ export class World {
     const every = shadowInterval({
       lowPower: this.effects.lowPower,
       wind: env.wind,
-      moverHz: this.stage.moverHz ?? 0,
+      // 들어가 있는 동안과 누른 직후(풍차 가속·폴짝)는 그림자가 끊겨 보이지 않게 매 프레임에 가깝게
+      moverHz: this.exploring || this.fly !== null || this.time - this.pokedAt < 2.5 ? 30 : (this.stage.moverHz ?? 0),
       shadowStrength: this.sun.shadow.intensity * Math.min(1, env.sunIntensity),
     });
     if (!moved && this.shadowAge < every - 0.004) return;
