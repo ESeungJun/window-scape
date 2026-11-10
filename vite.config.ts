@@ -23,7 +23,19 @@ const csp = (): Plugin => ({
   ],
 });
 
+// three 의 DRACOLoader 가 자기 해독기 사본(assets/draco_*, 약 1.3MB)을 번들에 끌고 온다.
+// 앱은 public/draco 의 해독기를 쓰므로(props.ts 의 setDecoderPath) 쓰이지 않는 사본은 내보내지 않는다
+const dropDracoCopies = (): Plugin => ({
+  name: 'drop-draco-copies',
+  apply: 'build',
+  generateBundle(_options, bundle) {
+    for (const name of Object.keys(bundle)) {
+      if (/(^|\/)draco_[^/]*\.(js|wasm)$/.test(name)) delete bundle[name];
+    }
+  },
+});
+
 export default defineConfig({
-  plugins: [csp()],
+  plugins: [csp(), dropDracoCopies()],
   build: { chunkSizeWarningLimit: 700 }, // three 가 대부분인 단일 번들이라 기본 경고선(500kB)을 조금 올린다
 });
