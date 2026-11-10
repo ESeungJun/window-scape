@@ -233,6 +233,8 @@ body.is-dark .card { background: rgba(14, 24, 52, 0.45); border-color: rgba(255,
 .chart__area { fill: rgba(255, 215, 154, 0.16); stroke: none; }
 .chart__line { stroke: var(--warm); stroke-width: 2; }
 .chart__dot { fill: var(--warm); stroke: none; }
+.chart { touch-action: none; cursor: ew-resize; }
+.chart__scrub { stroke: rgba(255, 255, 255, 0.85); stroke-width: 1.2; pointer-events: none; }
 .chart__temp, .chart__hour { font-size: 10px; text-anchor: middle; stroke: none; }
 .chart__temp { fill: #fff; font-weight: 700; }
 .chart__hour { fill: rgba(255, 255, 255, 0.6); }
@@ -383,11 +385,27 @@ body.exploring .panel, body.exploring .sound { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .panel { animation: none; }
   .app { transition: none; }
+  body.widget .toolbar { transition: none; }
 }
+
+/* 세로로 긴 창: 구름이 글자 뒤에 걸려도 읽히게 글자 그림자를 짙게 */
+@media (max-aspect-ratio: 1/1) {
+  .now { text-shadow: 0 1px 2px rgba(10, 20, 30, 0.6), 0 0 6px rgba(10, 20, 30, 0.45), 0 0 18px rgba(10, 20, 30, 0.4); }
+}
+
+/* 예보가 없을 때는 빈 막대를 보이지 않는다 */
+.week[hidden] { display: none; }
 
 /* ── 데스크톱 위젯(Tauri) ── */
 html.widget, body.widget { background: transparent; }
 body.widget .app { border-radius: 18px; }
+/* 내 창이므로 로고는 두지 않는다 */
+body.widget .brand { display: none; }
+/* 도구는 마우스가 창 위에 있거나 안에서 키보드를 쓸 때, 설정이 열려 있을 때만 보인다(풍경을 가리지 않게) */
+body.widget .toolbar { opacity: 0; transition: opacity 0.25s; }
+body.widget .app:hover .toolbar,
+body.widget .app:focus-within .toolbar,
+body.widget .app:has(.panel:not([hidden])) .toolbar { opacity: 1; }
 body.widget .chips:has([aria-label='화면']) { display: none; }
 body.widget .sound { display: none; }
 
@@ -415,9 +433,7 @@ body.widget .sound { display: none; }
 
 /* 작은 위젯: 섬과 기온 위주로 줄인다 */
 @media (max-width: 699px), (max-height: 459px) {
-  body.widget .brand { top: 10px; left: 14px; font-size: 10px; pointer-events: none; }
-  body.widget .brand span { display: none; }
-  body.widget .now { top: 30px; left: 14px; width: auto; }
+  body.widget .now { top: 14px; left: 14px; width: auto; }
   body.widget .now__badge { margin-bottom: 2px; font-size: 10px; }
   body.widget .now__place { font-size: 15px; }
   body.widget .now__temp { font-size: 46px; }

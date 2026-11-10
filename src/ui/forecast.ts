@@ -1,4 +1,4 @@
-import { CONDITION_LABEL, conditionFromCode, type Forecast } from '../data/weather';
+import { CONDITION_LABEL, conditionFromCode, type Forecast, type HourlyForecast } from '../data/weather';
 import { weatherIcon } from './icons';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -175,4 +175,49 @@ export function renderHourly(title: HTMLElement, chart: SVGSVGElement, list: HTM
         return li;
       }),
   );
+}
+
+/**
+ * 시간 그래프를 끌면 그 시각을 알려 준다(풍경이 그 시각의 하늘·날씨로 바뀐다). 손을 떼거나 벗어나면 undefined.
+ * 그래프는 다시 그려질 때마다 내용이 바뀌므로 듣는 것은 그래프 틀에 한 번만 건다.
+ */
+export function setupScrub(chart: SVGSVGElement, hours: () => HourlyForecast[], onScrub: (hour: HourlyForecast | undefined) => void): void {
+  let down = false;
+  let mark: SVGLineElement | undefined;
+  const at = (e: PointerEvent) => {
+    const list = hours();
+    const r = chart.getBoundingClientRect();
+    if (list.length < 2 || !r.width) return;
+    const w = chart.viewBox.baseVal.width || 300;
+    // 그래프의 가로 눈금(renderHourly 의 x)과 같은 식을 거꾸로
+    const f = Math.min(1, Math.max(0, (((e.clientX - r.left) / r.width) * w - 14) / (w - 28)));
+    const i = Math.round(f * (list.length - 1));
+    if (!mark || !mark.isConnected) {
+      mark = document.createElementNS(SVG_NS, 'line');
+      mark.setAttribute('class', 'chart__scrub');
+      mark.setAttribute('y1', '14');
+      mark.setAttribute('y2', '104');
+      chart.append(mark);
+    }
+    const x = String(14 + (i * (w - 28)) / (list.length - 1));
+    mark.setAttribute('x1', x);
+    mark.setAttribute('x2', x);
+    onScrub(list[i]);
+  };
+  const end = () => {
+    if (!down) return;
+    down = false;
+    mark?.remove();
+    onScrub(undefined);
+  };
+  chart.addEventListener('pointerdown', (e) => {
+    down = true;
+    chart.setPointerCapture(e.pointerId);
+    at(e);
+  });
+  chart.addEventListener('pointermove', (e) => {
+    if (down) at(e);
+  });
+  chart.addEventListener('pointerup', end);
+  chart.addEventListener('pointercancel', end);
 }

@@ -54,10 +54,20 @@ const STILL_FRAGMENT = /* glsl */ `
   uniform float bright;
   uniform vec3 deep;
   uniform vec3 light;
+  uniform float rain;
+  uniform float ice;
   varying vec2 vUv;
   varying vec2 vWorld;
   #include <fog_pars_fragment>
   ${NOISE}
+  // 빗방울이 떨어진 자리에서 퍼지는 동심원(칸마다 하나씩, 박자를 달리해 되풀이)
+  float rings(vec2 p) {
+    vec2 g = p * 1.7;
+    vec2 id = floor(g);
+    vec2 c = fract(g) - 0.5 - (vec2(hash(id), hash(id + 5.3)) - 0.5) * 0.5;
+    float ph = fract(time * 0.85 + hash(id + 2.1));
+    return smoothstep(0.035, 0.0, abs(length(c) - ph * 0.42)) * (1.0 - ph);
+  }
   void main() {
     float shore = (vUv.x - 0.5) * 2.0;
     float a = noise(vWorld * 0.22 + vec2(time * 0.03, time * 0.02));
@@ -66,6 +76,12 @@ const STILL_FRAGMENT = /* glsl */ `
     // 햇빛에 반짝이는 작은 잔물결
     col += smoothstep(0.86, 0.97, noise(vWorld * 2.4 + vec2(time * 0.1, -time * 0.08))) * 0.07;
     col = mix(col, vec3(0.95), smoothstep(0.88, 1.0, shore) * 0.3);
+    if (rain > 0.01) col += (rings(vWorld) + rings(vWorld * 1.9 + 7.0) * 0.6) * rain * 0.22;
+    // 영하면 물가부터 얼어 들어온다(얼음은 잔물결 없이 희푸르다)
+    if (ice > 0.01) {
+      float frozen = smoothstep(1.0 - ice * 1.15, 1.08 - ice * 0.9, shore * 0.5 + 0.5 + (a - 0.5) * 0.25);
+      col = mix(col, vec3(0.8, 0.88, 0.93) + (b - 0.5) * 0.06, frozen * 0.9);
+    }
     gl_FragColor = vec4(col * bright, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -101,6 +117,8 @@ export function riverMaterial(still = false): THREE.ShaderMaterial {
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
       time: { value: 0 },
       bright: { value: 1 },
+      rain: { value: 0 },
+      ice: { value: 0 },
       deep: { value: new THREE.Color('#2f8cc4') },
       light: { value: new THREE.Color('#8fd8f2') },
     },

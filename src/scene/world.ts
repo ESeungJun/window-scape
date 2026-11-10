@@ -1,21 +1,43 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import type { Condition, Season, TimeOfDay } from '../data/weather';
 import { mulberry32, lerp } from '../util';
 import { Clouds } from './clouds';
 import { composeEnv, copyEnv, createEnv, lerpEnv, type Env, type LiveWeather } from './env';
-import { FLOATING_VIEW, Floaters, updateSharedMaterials, type Stage } from './kit';
+import { FLOATING_VIEW, Floaters, reducedMotion, updateSharedMaterials, type Stage } from './kit';
 import { createStage, type Theme } from './themes';
 import { Precipitation } from './precipitation';
 import { SkyDome, SkyLight } from './sky';
-import { updateSkyTint } from './baked';
-import { Explorer } from './explore';
+import { updateSurface } from './baked';
+import { Glass } from './glass';
+import { frameCap, shadowInterval } from './pace';
+import type { Explorer } from './explore';
 
 export type Quality = 'auto' | 'low' | 'medium' | 'high';
+
+/** 켜고 끌 수 있는 연출. 저장은 main.ts 가 맡는다 */
+export interface Effects {
+  /** 창 유리(빗방울·김·성에) */
+  glass: boolean;
+  /** 나무 잎 흔들림 */
+  wind: boolean;
+  /** 마우스·창 위치에 따라 풍경이 조금 미끄러지는 시차 */
+  parallax: boolean;
+  /** 땅 위를 흐르는 구름 그늘 */
+  shade: boolean;
+  /** 시선 고정: 계속 돌지 않고 창밖을 보듯 조금만 흔들린다 */
+  still: boolean;
+  /** 절전: 가만히 있을 때 프레임·그림자 갱신·해상도를 낮춘다 */
+  lowPower: boolean;
+}
+
+export const DEFAULT_EFFECTS: Effects = { glass: false, wind: true, parallax: true, shade: true, still: false, lowPower: false };
+
+export interface WorldOptions {
+  theme?: Theme;
+  /** 하루 종일 떠 있는 위젯은 'low-power' 로 내장 GPU 를 쓴다(그래픽이 둘인 노트북의 배터리·발열) */
+  powerPreference?: WebGLPowerPreference;
+}
 
 const SUN_AZIMUTH = 0.9;
 const AUTO_ROTATE_DELAY_MS = 6000;
@@ -27,6 +49,8 @@ const EXPLORE_PITCH = 0.42;
 const EXPLORE_FLY_S = 1.1;
 /** 이만큼 안 움직이고 뗀 포인터는 클릭(걸어가기), 더 움직이면 시점 돌리기 */
 const CLICK_SLOP_PX = 6;
+/** 조작이 끝난 뒤 이만큼은 '조작 중'으로 본다(절전에서 프레임을 바로 낮추지 않게) */
+const ACTIVE_S = 4;
 /** 카메라 가림 검사 광선(카메라 자리에서 옆·위로 벌린 정도) */
 const CLEAR_RAYS: [number, number][] = [[0, 0], [0.45, 0.3], [-0.45, 0.3], [0.45, -0.3], [-0.45, -0.3]];
 
@@ -41,10 +65,6 @@ export class World {
   private readonly env: Env = createEnv();
   private readonly target: Env = createEnv();
   private readonly renderer: THREE.WebGLRenderer;
-  /** 맞닿은 곳·틈을 은은하게 어둡게(앰비언트 오클루전) 해 장난감 디오라마 같은 깊이를 준다. 화질 '낮음'에서는 끈다 */
-  private readonly composer: EffectComposer;
-  private readonly ao: GTAOPass;
-  private useComposer = false;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(38, 1, 0.1, 1000);
   private readonly controls: OrbitControls;
@@ -58,9 +78,11 @@ export class World {
   private readonly clouds: Clouds;
   private readonly floaters: Floaters;
   private viewScale = 1;
-  /** 한 번 만든 테마는 보관해 두고 다시 고를 때 재사용한다 */
+  /** 지금 테마와 바로 앞 테마만 보관한다(되돌아갈 때 다시 받지 않게). 그보다 오래된 것은 해제한다 */
   private readonly stages = new Map<Theme, Stage>();
   private stage: Stage;
+  private readonly glass = new Glass();
+  private effects: Effects = { ...DEFAULT_EFFECTS };
   /** 땅 테마를 디오라마 모양으로 볼지 */
   private cased = false;
   private readonly precip: Precipitation;
@@ -69,13 +91,33 @@ export class World {
   private time = 0;
   private idleTimer = 0;
   private quality: Quality = 'auto';
-  private minFrameTime = 0;
+  /** 평소 프레임 상한(위젯 30, 웹 60). 실제 상한은 프레임마다 pace.ts 가 정한다 */
+  private baseFps = 0;
   private qualityKey = '';
+  /** 프레임 루프가 돌고 있는지. 창이 안 보이면 멈춘다 */
+  private running = false;
+  /** 창이 다른 창에 완전히 가려졌는지(데스크톱 앱이 알려 준다) */
+  private occluded = false;
+  /** 마지막으로 조작한 때(초) */
+  private lastInput = -100;
+  /** 사용자가 시점을 돌리고 있지 않은지(자동 회전·주인공 따라가기를 해도 되는지) */
+  private idle = true;
   private readonly shadowCenter = new THREE.Vector3();
+  /** 그림자 맵을 마지막으로 그렸을 때의 해 방향·가운데와 그 뒤 지난 시간 */
+  private readonly shadowSun = new THREE.Vector3();
+  private readonly shadowAt = new THREE.Vector3(1e9, 0, 0);
+  private shadowAge = 1e9;
+  /** 마우스 자리(-1~1)와 창 자리에 따른 치우침, 부드럽게 따라간 값, 지금 카메라에 더해 둔 이동 */
+  private readonly pointer = new THREE.Vector2();
+  private readonly windowBias = new THREE.Vector2();
+  private readonly lean = new THREE.Vector2();
+  private readonly leanOffset = new THREE.Vector3();
+  private readonly raycaster = new THREE.Raycaster();
   private readonly focusPoint = new THREE.Vector3();
   private readonly focusDelta = new THREE.Vector3();
   private static readonly ORIGIN = new THREE.Vector3();
-  private readonly explorer = new Explorer();
+  /** 들어가기 모드. 처음 들어갈 때 불러온다(시작 번들에서 뺀다) */
+  private explorer: Explorer | null = null;
   /** 들어가기 전 카메라(나올 때 돌아갈 자리) */
   private readonly saved = { pos: new THREE.Vector3(), target: new THREE.Vector3(), min: 0, max: 0, polar: 0 };
   /** 들어가고 나오는 카메라 이동. 0~1 로 진행하고, 끝나면 null */
@@ -91,30 +133,16 @@ export class World {
   private readonly camUp = new THREE.Vector3();
   private readonly camRay = new THREE.Vector3();
 
-  constructor(private readonly container: HTMLElement, theme: Theme = 'island') {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  constructor(private readonly container: HTMLElement, { theme = 'island', powerPreference = 'high-performance' }: WorldOptions = {}) {
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // 그림자 맵은 해·장면이 움직였을 때만 다시 그린다(frame 에서 정한다)
+    this.renderer.shadowMap.autoUpdate = false;
     // 디오라마 모양: 받침 가장자리에서 장면을 자른다(재질별 clippingPlanes)
     this.renderer.localClippingEnabled = true;
     container.appendChild(this.renderer.domElement);
     this.skyLight = new SkyLight(this.renderer);
-    this.composer = new EffectComposer(this.renderer);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.ao = new GTAOPass(this.scene, this.camera);
-    this.ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.5, scale: 1.1 });
-    this.ao.blendIntensity = 0.85;
-    // 빛줄기·물·물보라 같은 반투명 물체는 오클루전 계산에서 뺀다(넣으면 둘레에 윤곽선이 생긴다)
-    const ao = this.ao as unknown as { scene: THREE.Scene; _visibilityCache: THREE.Object3D[]; _overrideVisibility(): void };
-    ao._overrideVisibility = () => ao.scene.traverse((o) => {
-      const m = (o as THREE.Mesh).material as THREE.Material | undefined;
-      if (o.visible && ((o as THREE.Points).isPoints || (o as THREE.Line).isLine || m?.transparent)) {
-        o.visible = false;
-        ao._visibilityCache.push(o);
-      }
-    });
-    this.composer.addPass(this.ao);
-    this.composer.addPass(new OutputPass());
 
     const narrow = container.clientWidth < container.clientHeight;
     this.camera.position.set(16, 11, 18).multiplyScalar(narrow ? 1.45 : 1);
@@ -125,24 +153,24 @@ export class World {
     this.controls.minDistance = 14;
     this.controls.maxDistance = 45;
     this.controls.maxPolarAngle = Math.PI * 0.64;
-    this.controls.autoRotate = true;
     this.controls.autoRotateSpeed = 0.35;
+    this.syncRotate();
     this.controls.addEventListener('start', () => {
-      this.controls.autoRotate = false;
+      this.idle = false;
+      this.syncRotate();
       clearTimeout(this.idleTimer);
     });
     this.controls.addEventListener('end', () => {
-      if (this.explorer.active) return;
-      this.idleTimer = window.setTimeout(() => (this.controls.autoRotate = true), AUTO_ROTATE_DELAY_MS);
+      if (this.exploring) return;
+      this.idleTimer = window.setTimeout(() => {
+        this.idle = true;
+        this.syncRotate();
+      }, AUTO_ROTATE_DELAY_MS);
     });
     this.listenClicks(this.renderer.domElement);
-    this.explorer.onRide = (on) => {
-      // 타면 조금 물러나서 바퀴와 풍경이 같이 보이게
-      if (on) this.exploreDist = Math.max(this.exploreDist, RIDE_DISTANCE);
-      this.onRide?.(on);
-    };
+    this.listenPointer();
     this.renderer.domElement.addEventListener('wheel', (e) => {
-      if (!this.explorer.active) return;
+      if (!this.exploring) return;
       this.exploreDist = THREE.MathUtils.clamp(this.exploreDist * Math.exp(e.deltaY * 0.0015), 1.2, 6);
     }, { passive: true });
 
@@ -164,7 +192,10 @@ export class World {
     this.clouds = new Clouds(rng);
     this.precip = new Precipitation(rng);
     this.scene.fog = this.fog;
-    this.scene.add(this.sun, this.sun.target, this.hemi, this.sky.group, this.stage.group, this.floaters.group, this.clouds.group, this.precip.group);
+    this.scene.add(
+      this.sun, this.sun.target, this.hemi, this.sky.group, this.stage.group, this.floaters.group, this.clouds.group, this.precip.group,
+      this.glass.mesh,
+    );
 
     this.applyStageView();
     composeEnv('day', 'partly', 'autumn', this.target);
@@ -177,7 +208,76 @@ export class World {
       this.resize();
     }).observe(container);
     this.resize();
-    this.renderer.setAnimationLoop(() => this.frame());
+    document.addEventListener('visibilitychange', () => this.syncLoop());
+    this.syncLoop();
+  }
+
+  /**
+   * 창이 보일 때만 프레임 루프를 돌린다. 문서가 숨겨졌거나(최소화·다른 공간·화면 잠금)
+   * 창이 다른 창에 완전히 가려지면 멈추고, 다시 보이면 이어서 돈다.
+   */
+  private syncLoop(): void {
+    const visible = !document.hidden && !this.occluded;
+    if (visible === this.running) return;
+    this.running = visible;
+    if (visible) {
+      // 멈춰 있던 시간만큼 한꺼번에 흐르지 않게 시계를 지금으로 맞춘다
+      this.last = performance.now() / 1000;
+      this.shadowAge = 1e9;
+      this.renderer.setAnimationLoop(() => this.frame());
+    } else this.renderer.setAnimationLoop(null);
+  }
+
+  /** 창이 다른 창에 완전히 가려졌는지(데스크톱 앱이 운영체제에서 받아 알려 준다) */
+  setOccluded(occluded: boolean): void {
+    this.occluded = occluded;
+    this.syncLoop();
+  }
+
+  setEffects(effects: Effects): void {
+    const quality = effects.lowPower !== this.effects.lowPower;
+    this.effects = { ...effects };
+    this.glass.enabled = effects.glass;
+    this.syncRotate();
+    if (quality) {
+      this.applyQuality();
+      this.resize();
+    }
+  }
+
+  /** 창이 화면 어디에 있는지(-1~1). 창을 옮기면 풍경이 창틀에 대해 조금 미끄러진다 */
+  setWindowBias(x: number, y: number): void {
+    this.windowBias.set(THREE.MathUtils.clamp(x, -1, 1), THREE.MathUtils.clamp(y, -1, 1));
+  }
+
+  /** 자동 회전: 사용자가 돌리는 중이 아니고, 시선 고정·움직임 줄이기가 아닐 때만 */
+  private syncRotate(): void {
+    this.controls.autoRotate = this.idle && !this.exploring && !this.effects.still && !reducedMotion();
+  }
+
+  /** 마우스 자리(시차)와 끌기(김 닦기)를 듣는다. 조작 시각도 여기서 남긴다 */
+  private listenPointer(): void {
+    const touch = () => (this.lastInput = performance.now() / 1000);
+    window.addEventListener('pointermove', (e) => {
+      touch();
+      const r = this.container.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const x = (e.clientX - r.left) / r.width;
+      const y = (e.clientY - r.top) / r.height;
+      this.pointer.set(THREE.MathUtils.clamp(x * 2 - 1, -1, 1), THREE.MathUtils.clamp(1 - y * 2, -1, 1));
+      if (e.buttons & 1 && e.target === this.renderer.domElement) this.glass.wipe(x, 1 - y);
+    });
+    // 창 밖으로 나가면 가운데로 돌아온다
+    document.documentElement.addEventListener('pointerleave', () => this.pointer.set(0, 0));
+    window.addEventListener('pointerdown', touch);
+    window.addEventListener('keydown', touch);
+    window.addEventListener('wheel', touch, { passive: true });
+  }
+
+  /** 카메라에 더해 둔 시차 이동을 걷어 낸다(카메라 자리를 저장하거나 새로 잡기 전에) */
+  private clearLean(): void {
+    this.camera.position.sub(this.leanOffset);
+    this.leanOffset.set(0, 0, 0);
   }
 
   /** 목표 연출을 바꾼다. 실제 값은 프레임마다 서서히 따라간다. */
@@ -190,10 +290,17 @@ export class World {
     const next = this.stageFor(theme);
     if (next === this.stage) return;
     this.leave(true);
-    this.scene.remove(this.stage.group);
+    const prev = this.stage;
+    this.scene.remove(prev.group);
     this.stage = next;
     next.setCase?.(this.cased);
     this.scene.add(next.group);
+    // 지금 것과 바로 앞 것만 남기고 해제한다(도형·재질·라이트맵이 테마마다 수십 MB 다)
+    for (const [key, stage] of this.stages) {
+      if (stage === next || stage === prev) continue;
+      stage.dispose();
+      this.stages.delete(key);
+    }
     this.applyStageView();
   }
 
@@ -209,6 +316,8 @@ export class World {
 
   /** 테마 종류에 맞춰 구름바다·떠다니는 섬·카메라 범위·그림자 범위를 바꾼다 */
   private applyStageView(): void {
+    this.clearLean();
+    this.shadowAge = 1e9;
     const floating = this.stage.kind === 'floating';
     // 떠다니는 작은 섬은 하늘섬에만(디오라마 받침 둘레에는 띄우지 않는다)
     this.floaters.group.visible = floating && !this.stage.setCase;
@@ -221,7 +330,6 @@ export class World {
     // 실시간 장면은 그늘이 탁해지지 않게 옅게(0.7)
     this.sun.shadow.radius = 6;
     this.sun.shadow.blurSamples = 16;
-    this.sun.shadow.intensity = this.stage.baked ? 1 : 0.7;
     // 기본보다 큰 섬(기본 거리보다 멀리서 보는 섬)은 그림자·안개·떠다니는 섬을 그만큼 넓힌다
     this.viewScale = floating ? this.stage.view.distance / FLOATING_VIEW.distance : 1;
     this.floaters.spread(this.viewScale);
@@ -246,18 +354,34 @@ export class World {
   }
 
   get exploring(): boolean {
-    return this.explorer.active;
+    return this.explorer?.active ?? false;
   }
 
   /** 들어가기 모드: 풍경 안에 캐릭터를 내려놓고 카메라가 뒤에서 따라간다. 설 곳을 못 찾으면 false */
-  enter(): boolean {
-    if (this.explorer.active) return true;
+  async enter(): Promise<boolean> {
+    if (this.exploring) return true;
+    if (!this.explorer) {
+      const { Explorer } = await import('./explore');
+      // 불러오는 사이에 한 번 더 눌렀으면 먼저 만든 것을 쓴다
+      if (!this.explorer) {
+        const explorer = new Explorer();
+        explorer.onRide = (on) => {
+          // 타면 조금 물러나서 바퀴와 풍경이 같이 보이게
+          if (on) this.exploreDist = Math.max(this.exploreDist, RIDE_DISTANCE);
+          this.onRide?.(on);
+        };
+        this.explorer = explorer;
+      }
+    }
+    const explorer = this.explorer;
+    if (explorer.active) return true;
     // 나오는 중에 다시 누르면 나오기를 끝내고 바로 들어간다
     if (this.fly?.leaving) {
       this.fly = null;
       this.restoreView();
     }
-    if (!this.explorer.start(this.stage)) return false;
+    if (!explorer.start(this.stage)) return false;
+    this.clearLean();
     const c = this.controls;
     const s = this.saved;
     s.pos.copy(this.camera.position);
@@ -266,7 +390,7 @@ export class World {
     s.max = c.maxDistance;
     s.polar = c.maxPolarAngle;
     clearTimeout(this.idleTimer);
-    c.autoRotate = false;
+    this.syncRotate();
     c.enabled = false;
     this.fly = { t: 0, leaving: false, pos: s.pos.clone(), target: s.target.clone() };
     this.onExplore?.(true);
@@ -275,7 +399,8 @@ export class World {
 
   /** 들어가기 모드에서 나와 원래 시점으로 돌아간다. now 면 날아가지 않고 바로 */
   leave(now = false): void {
-    if (!this.explorer.active) {
+    const explorer = this.explorer;
+    if (!explorer?.active) {
       // 나오는 중에 테마·모양을 바꾸면 날아가기를 끝내 둔다(끝에 옛 테마 시점을 덮어쓰지 않게)
       if (now && this.fly?.leaving) {
         this.fly = null;
@@ -283,7 +408,8 @@ export class World {
       }
       return;
     }
-    this.explorer.stop();
+    explorer.stop();
+    this.clearLean();
     const c = this.controls;
     if (now) {
       this.fly = null;
@@ -305,7 +431,8 @@ export class World {
     c.target.copy(s.target);
     this.camera.position.copy(s.pos);
     c.enabled = true;
-    c.autoRotate = true;
+    this.idle = true;
+    this.syncRotate();
     c.update();
   }
 
@@ -318,16 +445,25 @@ export class World {
     el.addEventListener('pointerup', (e) => {
       const d = down;
       down = null;
-      if (!d || d.id !== e.pointerId || !this.explorer.active || this.fly) return;
+      if (!d || d.id !== e.pointerId || this.fly) return;
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > CLICK_SLOP_PX) return;
       const r = el.getBoundingClientRect();
       const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-      this.explorer.pick(ndc, this.camera);
+      if (this.explorer?.active) this.explorer.pick(ndc, this.camera);
+      else this.poke(ndc);
     });
   }
 
+  /** 누른 자리의 물체가 한 번 반응한다(풍차·나무·토끼). 광선 검사는 누를 때만 한다 */
+  private poke(ndc: THREE.Vector2): void {
+    if (!this.stage.poke) return;
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const hit = this.raycaster.intersectObject(this.stage.group, true).find((i) => (i.object as THREE.Mesh).isMesh);
+    if (hit) this.stage.poke(hit.object);
+  }
+
   /** 들어가기 모드의 카메라: 들어가고 나올 때는 날아가고, 그 사이에는 캐릭터를 부드럽게 따라간다 */
-  private updateExploreCamera(dt: number): void {
+  private updateExploreCamera(dt: number, explorer: Explorer): void {
     const c = this.controls;
     const fly = this.fly;
     if (fly) {
@@ -338,7 +474,7 @@ export class World {
         this.flyPos.copy(this.saved.pos);
       } else {
         // 지금 보는 방향 그대로 캐릭터 뒤 위쪽으로
-        this.explorer.focus(this.flyTarget);
+        explorer.focus(this.flyTarget);
         const dir = this.flyPos.subVectors(fly.pos, fly.target).setY(0).normalize();
         dir.multiplyScalar(Math.cos(EXPLORE_PITCH)).setY(Math.sin(EXPLORE_PITCH)).multiplyScalar(EXPLORE_DISTANCE);
         this.flyPos.add(this.flyTarget);
@@ -358,14 +494,14 @@ export class World {
       this.exploreDist = this.camDist = EXPLORE_DISTANCE;
       return;
     }
-    this.explorer.focus(this.followPoint);
+    explorer.focus(this.followPoint);
     this.focusDelta.subVectors(this.followPoint, c.target).multiplyScalar(1 - Math.exp(-dt * 6));
     c.target.add(this.focusDelta);
     this.camera.position.add(this.focusDelta);
   }
 
   /** 캐릭터와 카메라 사이에 물체가 있으면 그 앞으로 당기고, 비면 원래 거리로 천천히 물러난다 */
-  private keepCameraClear(dt: number): void {
+  private keepCameraClear(dt: number, explorer: Explorer): void {
     const tg = this.controls.target;
     const dir = this.camDir.subVectors(this.camera.position, tg).normalize();
     // 가운데 하나와 화면 네 귀퉁이 쪽 광선: 화면 가장자리에 걸친 잎·지붕도 잡는다
@@ -375,11 +511,11 @@ export class World {
     for (const [a, b] of CLEAR_RAYS) {
       const ray = this.camRay.copy(dir).multiplyScalar(this.exploreDist).addScaledVector(right, a).addScaledVector(up, b);
       const len = ray.length();
-      const hit = this.explorer.occlusion(tg, ray.normalize(), len + 0.3);
+      const hit = explorer.occlusion(tg, ray.normalize(), len + 0.3);
       // 대관람차를 타는 동안엔 바퀴 너머 풍경을 보도록 당기지 않는다
-      if (hit !== null && !this.explorer.isRiding) want = Math.min(want, Math.max(0.6, (hit - 0.2) * (this.exploreDist / len)));
+      if (hit !== null && !explorer.isRiding) want = Math.min(want, Math.max(0.6, (hit - 0.2) * (this.exploreDist / len)));
     }
-    this.explorer.endOcclusion(false);
+    explorer.endOcclusion(false);
     // 가릴 때는 바로, 비었을 때는 천천히
     this.camDist = want < this.camDist ? want : this.camDist + (want - this.camDist) * (1 - Math.exp(-dt * 3));
     this.camera.position.copy(tg).addScaledVector(dir, this.camDist);
@@ -402,8 +538,12 @@ export class World {
 
   private applyQuality(): void {
     const q = this.quality;
-    const level = q === 'auto' ? (window.innerWidth < 800 || window.devicePixelRatio < 1.5 ? 'medium' : 'high') : q;
-    const ratio = level === 'low' ? 1 : level === 'medium' ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2);
+    const low = this.effects.lowPower;
+    let level = q === 'auto' ? (window.innerWidth < 800 || window.devicePixelRatio < 1.5 ? 'medium' : 'high') : q;
+    // 절전: 그림자는 남기되 한 단계 낮춘다
+    if (low && level === 'high') level = 'medium';
+    const cap = level === 'low' ? 1 : level === 'medium' ? 1.5 : 2;
+    const ratio = Math.min(window.devicePixelRatio, low ? Math.min(cap, 1.25) : cap);
     const shadows = level !== 'low';
     const size = level === 'high' ? 2048 : 1024;
     // 창 크기를 바꿀 때마다 불리므로 값이 그대로면 손대지 않는다(픽셀 비율을 다시 넣으면 화면이 지워져 깜빡인다)
@@ -411,8 +551,6 @@ export class World {
     if (key === this.qualityKey) return;
     this.qualityKey = key;
     this.renderer.setPixelRatio(ratio);
-    this.composer.setPixelRatio(ratio);
-    this.useComposer = level !== 'low';
     if (this.renderer.shadowMap.enabled !== shadows) {
       this.renderer.shadowMap.enabled = shadows;
       this.scene.traverse((o) => {
@@ -426,6 +564,7 @@ export class World {
       this.sun.shadow.map = null;
       this.sun.shadow.mapSize.set(size, size);
     }
+    this.shadowAge = 1e9;
   }
 
   private resize(): void {
@@ -433,22 +572,29 @@ export class World {
     const h = this.container.clientHeight;
     if (!w || !h) return;
     this.renderer.setSize(w, h, false);
-    this.composer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     // 크기를 바꾸면 캔버스가 비워진다. 다음 프레임(위젯은 30fps)까지 빈 화면이 보이지 않게 바로 다시 그린다
     this.render();
   }
 
-  /** 초당 최대 프레임. 하루 종일 떠 있는 위젯은 30 으로 낮춰 배터리를 아낀다. 0 이면 제한 없음. */
+  /** 평소 초당 최대 프레임. 하루 종일 떠 있는 위젯은 30, 웹은 60(120Hz 화면에서 두 배로 그리지 않게). 0 이면 제한 없음. */
   setFrameCap(fps: number): void {
-    this.minFrameTime = fps > 0 ? 1 / fps : 0;
+    this.baseFps = fps;
   }
 
   private frame(): void {
     const now = performance.now() / 1000;
+    const cur = this.env;
+    const cap = frameCap({
+      visible: true,
+      baseFps: this.baseFps,
+      lowPower: this.effects.lowPower,
+      active: now - this.lastInput < ACTIVE_S || !this.idle || this.fly !== null || this.exploring,
+      lively: cur.rain > 0.05 || cur.snow > 0.05 || cur.wind > 0.6 || cur.storm > 0.5,
+    });
     // 약간의 여유를 둬 60Hz 화면에서 30fps 가 정확히 두 프레임마다 그려지게 한다
-    if (now - this.last < this.minFrameTime - 0.004) return;
+    if (cap > 0 && now - this.last < 1 / cap - 0.004) return;
     const dt = Math.min(now - this.last, 0.1);
     this.last = now;
     this.time += dt;
@@ -456,11 +602,16 @@ export class World {
     const env = this.env;
     lerpEnv(env, this.target, 1 - Math.exp(-dt * 1.6));
     const floating = this.stage.kind === 'floating';
-    this.precip.update(dt, this.time, env, this.camera, floating ? World.ORIGIN : this.controls.target);
+    const canvas = this.renderer.domElement;
+    this.precip.update(dt, this.time, env, this.camera, floating ? World.ORIGIN : this.controls.target, {
+      width: canvas.width, height: canvas.height, ratio: this.renderer.getPixelRatio(),
+    });
     const flash = this.precip.flash;
+    const still = reducedMotion();
 
     const el = env.sunElevation;
-    this.sunDir.set(Math.cos(el) * Math.cos(SUN_AZIMUTH), Math.sin(el), Math.cos(el) * Math.sin(SUN_AZIMUTH));
+    const az = SUN_AZIMUTH + env.sunAzimuth;
+    this.sunDir.set(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az));
     // 그림자는 카메라가 보는 곳 둘레에 맞춘다. 1 단위 격자에 붙여 따라갈 때 그림자 경계가 일렁이지 않게 한다
     const tg = this.controls.target;
     this.shadowCenter.set(Math.round(tg.x), Math.round(tg.y), Math.round(tg.z));
@@ -470,10 +621,14 @@ export class World {
     const baked = this.stage.baked === true;
     // 구운 장면은 그늘을 라이트맵이 밝혀 주므로 해를 조금 줄여 밝은 면이 하얗게 날지 않게
     this.sun.intensity = env.sunIntensity * (baked ? 0.72 : 0.85);
+    // 흐릴수록 그림자가 옅다. 구운 장면은 틈 그늘만 라이트맵에 있고 해 그림자는 실시간이라 그대로(1),
+    // 실시간 장면은 그늘이 탁해지지 않게 옅게(0.7)
+    this.sun.shadow.intensity = (baked ? 1 : 0.7) * (1 - env.overcast * 0.8);
+    this.updateShadowMap(dt, env);
     this.hemi.color.copy(env.hemiSky);
     // 구운 장면은 라이트맵이, 나머지는 하늘 환경광이 그늘을 채우므로 반구광은 약하게
     this.hemi.intensity = baked ? 0 : env.hemiIntensity * 0.45 + flash * 2.5;
-    updateSkyTint(env, flash);
+    updateSurface(dt, env, flash, { shade: this.effects.shade, sway: this.effects.wind && !still });
     const skyEnv = this.skyLight.update(dt, env);
     if (skyEnv) this.skyEnv = skyEnv;
     this.scene.environment = this.skyEnv ?? null;
@@ -488,37 +643,93 @@ export class World {
     this.fog.far = lerp((floating ? (baked ? 80 : 150) : 105) * this.viewScale, (floating ? 34 : 30) * this.viewScale, env.fog);
 
     this.sky.update(env, this.sunDir, flash, baked ? 0.9 : 0);
-    this.clouds.update(dt, env, baked);
+    // 구름 그늘을 셰이더로 그릴 때는 구름을 그림자 맵에 넣지 않는다
+    this.clouds.update(dt, env, baked, !this.effects.shade);
     updateSharedMaterials(env);
     this.stage.update(dt, this.time, env);
     this.floaters.update(dt, this.time);
-    this.explorer.update(dt, this.time, this.camera);
+    this.glass.update(dt, env, canvas.width / Math.max(1, canvas.height), still);
+    const explorer = this.explorer;
+    explorer?.update(dt, this.time, this.camera);
+    // 지난 프레임에 더한 시차 이동을 걷어 낸 자리에서 카메라를 움직인다
+    this.camera.position.sub(this.leanOffset);
     // 돌아다니는 주인공이 있으면 카메라가 부드럽게 따라간다(보는 각도는 유지).
-    // 사용자가 시점을 돌리는 동안과 그 뒤 잠시(자동 회전이 다시 켜질 때까지)는 멈춘다
+    // 사용자가 시점을 돌리는 동안과 그 뒤 잠시는 멈춘다
     const flying = this.fly !== null;
-    if (this.explorer.active || flying) this.updateExploreCamera(dt);
-    else if (this.stage.focus && this.controls.autoRotate) {
+    const inside = explorer !== null && (explorer.active || flying);
+    if (inside) this.updateExploreCamera(dt, explorer);
+    else if (this.stage.focus && this.idle && !still) {
       this.stage.focus(this.focusPoint);
       this.focusDelta.subVectors(this.focusPoint, this.controls.target).multiplyScalar(1 - Math.exp(-dt * 0.8));
       this.controls.target.add(this.focusDelta);
       this.camera.position.add(this.focusDelta);
     }
     if (!flying) this.controls.update(dt);
-    if (this.explorer.active && !flying) this.keepCameraClear(dt);
+    if (explorer?.active && !flying) this.keepCameraClear(dt, explorer);
     // 땅 테마: 카메라가 언덕·먼 나무·집 속으로 들어가지 않게 위로 밀어 올린다.
     // 부드럽게 올려 높이 격자 칸이 바뀔 때 들썩이지 않게 하되, 여유(0.8) 절반 아래로는 절대 내려가지 않는다
     // 들어가기 모드는 가리는 물체를 숨기거나 카메라를 당기므로 밀어 올리지 않는다(나무 높이까지 솟는다)
-    if (this.stage.groundHeight && !this.explorer.active && !flying) {
+    if (this.stage.groundHeight && !explorer?.active && !flying) {
       const p = this.camera.position;
       const floor = this.stage.groundHeight(p.x, p.z) + 0.8;
       if (p.y < floor) p.y = Math.max(floor - 0.4, p.y + (floor - p.y) * (1 - Math.exp(-dt * 6)));
     }
+    this.applyLean(dt, inside || still);
     this.render();
     this.onFrame?.(env);
   }
 
+  /**
+   * 그림자 맵을 다시 그릴지 정한다. 해 방향이나 그림자 가운데가 바뀌면 바로, 그 밖에는
+   * 나무 흔들림·움직이는 것에 맞춘 간격으로만 다시 그린다(매 프레임 그리면 그리는 양의 절반 가까이가 그림자다).
+   */
+  private updateShadowMap(dt: number, env: Env): void {
+    if (!this.renderer.shadowMap.enabled) return;
+    this.shadowAge += dt;
+    const moved = this.shadowSun.distanceToSquared(this.sunDir) > 1e-8 || !this.shadowAt.equals(this.shadowCenter);
+    const every = shadowInterval({
+      lowPower: this.effects.lowPower,
+      wind: env.wind,
+      moverHz: this.stage.moverHz ?? 0,
+      shadowStrength: this.sun.shadow.intensity * Math.min(1, env.sunIntensity),
+    });
+    if (!moved && this.shadowAge < every - 0.004) return;
+    this.shadowSun.copy(this.sunDir);
+    this.shadowAt.copy(this.shadowCenter);
+    this.shadowAge = 0;
+    this.renderer.shadowMap.needsUpdate = true;
+  }
+
+  /**
+   * 창 시차: 마우스가 창 위를 지나거나 창을 화면에서 옮기면 카메라가 보는 점 둘레로 조금 돌아
+   * 창틀 너머에 고정된 풍경을 들여다보는 느낌을 준다. 시선 고정에서는 여기에 아주 느린 좌우 흔들림을 더한다.
+   */
+  private applyLean(dt: number, off: boolean): void {
+    const on = this.effects.parallax && !off;
+    let x = 0;
+    let y = 0;
+    if (on) {
+      x = this.pointer.x * 0.6 + this.windowBias.x * 0.5;
+      y = this.pointer.y * 0.6 + this.windowBias.y * 0.5;
+    }
+    if (this.effects.still && !off) x += Math.sin(this.time * 0.13) * 0.9;
+    this.lean.x += (x - this.lean.x) * (1 - Math.exp(-dt * 3));
+    this.lean.y += (y - this.lean.y) * (1 - Math.exp(-dt * 3));
+    if (Math.abs(this.lean.x) < 1e-4 && Math.abs(this.lean.y) < 1e-4) {
+      this.leanOffset.set(0, 0, 0);
+      return;
+    }
+    const dist = this.camera.position.distanceTo(this.controls.target);
+    this.camSide.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    this.camUp.set(0, 1, 0).applyQuaternion(this.camera.quaternion);
+    this.leanOffset.set(0, 0, 0).addScaledVector(this.camSide, this.lean.x * dist * 0.045).addScaledVector(this.camUp, this.lean.y * dist * 0.03);
+    this.camera.position.add(this.leanOffset);
+    this.camera.lookAt(this.controls.target);
+  }
+
   private render(): void {
-    if (this.useComposer && !this.stage.baked) this.composer.render();
-    else this.renderer.render(this.scene, this.camera);
+    // 그림자 맵이 아직 없으면(처음, 화질을 바꾼 직후) 이번에 꼭 그린다. 빈 그림자 맵을 읽으면 그리기 오류가 난다
+    if (this.renderer.shadowMap.enabled && !this.sun.shadow.map) this.renderer.shadowMap.needsUpdate = true;
+    this.renderer.render(this.scene, this.camera);
   }
 }
