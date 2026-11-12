@@ -105,6 +105,7 @@ npm run tauri dev                    # desktop widget (needs Rust once: https://
 npm run build                        # type-check + web build
 npm test                             # pure-logic tests (node --test)
 npm run models:optimize -- <in> <out> # glb post-processing: single-sided closed meshes, weld, Draco re-compress
+blender -b -P tools/blender/drive.py -- <dir> case && node tools/gltf/swap-case.mjs public/models/drive.glb <dir>/drive_case.glb  # rebuild only the plinth (no re-bake)
 ```
 
 In the web version, press `F` or open `?showcase` to frame the scene in a rounded window.

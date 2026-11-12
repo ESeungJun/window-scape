@@ -10,6 +10,7 @@ import { Precipitation } from './precipitation';
 import { SkyDome, SkyLight } from './sky';
 import { TOON_UNIFORM, updateSurface } from './baked';
 import { Glass } from './glass';
+import { Backdrop } from './backdrop';
 import { frameCap, shadowInterval } from './pace';
 import type { Explorer } from './explore';
 
@@ -49,11 +50,9 @@ const MINI_FOV = 15;
 /** 같은 크기로 보이게 하려면 카메라를 이만큼 멀리 둬야 한다(화각 절반의 탄젠트 비) */
 const MINI_LENS = Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2)) / Math.tan(THREE.MathUtils.degToRad(MINI_FOV / 2));
 /** 미니어처 처음 거리: 받침을 화면에 크게 담는다(디오라마는 구름바다까지 보이게 한 발 물러서 있다) */
-const MINI_FRAME = 0.8;
-/** 미니어처 배경: 낮에도 밤에도 장면이 떠 보이는 짙은 남색. 하늘빛을 조금만 머금는다 */
-const MINI_BG = new THREE.Color('#23253f');
-const MINI_BG_NIGHT = new THREE.Color('#12131f');
-const WHITE_FLASH = new THREE.Color('#c9d2ff');
+const MINI_FRAME = 0.88;
+/** 미니어처는 받침 아래 땅 단면까지 담으므로 보는 점을 그만큼 내린다(판이 아래쪽 예보 막대에 가리지 않게) */
+const MINI_DROP = 1.1;
 const AUTO_ROTATE_DELAY_MS = 6000;
 /** 들어가기 모드: 카메라가 캐릭터 뒤 위쪽에서 따라가는 거리·내려다보는 각도, 들어가고 나오는 데 걸리는 시간 */
 const EXPLORE_DISTANCE = 2.6;
@@ -104,7 +103,11 @@ export class World {
   private mini = false;
   /** 미니어처일 때 카메라 거리 배율(아니면 1) */
   private lens = 1;
-  private readonly bg = new THREE.Color();
+  /** 미니어처 배경(그라데이션·받침 그림자·빛 알갱이) */
+  private readonly backdrop = new Backdrop();
+  /** 지금 테마 받침의 바닥 가운데와 반폭. 모델을 다 받은 뒤 찾는다(못 찾으면 null) */
+  private foot: { at: THREE.Vector3; half: number } | null = null;
+  private footStage: Stage | null = null;
   private readonly precip: Precipitation;
   private readonly sunDir = new THREE.Vector3();
   private last = performance.now() / 1000;
@@ -216,7 +219,7 @@ export class World {
     this.scene.fog = this.fog;
     this.scene.add(
       this.sun, this.sun.target, this.hemi, this.sky.group, this.stage.group, this.floaters.group, this.clouds.group, this.precip.group,
-      this.glass.mesh,
+      this.glass.mesh, this.backdrop.mesh,
     );
 
     this.applyStageView();
@@ -353,7 +356,8 @@ export class World {
     this.lens = this.mini ? MINI_LENS : 1;
     // 하늘 구름도 숨긴다(좁은 화각에서는 화면 귀퉁이에 덩어리로만 걸린다). 구름 그늘은 셰이더라 그대로 흐른다
     this.sky.group.visible = this.clouds.group.visible = !this.mini;
-    if (!this.mini) this.scene.background = null;
+    this.backdrop.mesh.visible = this.mini;
+    this.stage.setMini?.(this.mini);
     TOON_UNIFORM.value = this.mini ? 1 : 0;
     this.setFov(this.mini ? MINI_FOV : BASE_FOV);
     const c = this.controls;
@@ -384,8 +388,21 @@ export class World {
     // 돌아다니는 주인공이 있으면 처음부터 그쪽을 비춘다
     if (this.stage.focus) this.stage.focus(c.target);
     else c.target.copy(this.stage.view.target);
+    if (this.mini) c.target.y -= MINI_DROP;
     this.camera.position.copy(c.target).addScaledVector(dir, this.stage.view.distance * this.lens * (this.mini ? MINI_FRAME : 1) * (narrow ? 1.45 : 1));
     c.update();
+  }
+
+  /** 미니어처 받침 바닥(암반 case_bedrock, 옛 모델은 case_foot)의 가운데와 반폭. 모델은 늦게 오므로 찾을 때까지 프레임마다 다시 본다 */
+  private findFoot(): { at: THREE.Vector3; half: number } | null {
+    if (this.footStage === this.stage && this.foot) return this.foot;
+    this.footStage = this.stage;
+    const o = this.stage.group.getObjectByName('case_bedrock') ?? this.stage.group.getObjectByName('case_foot');
+    if (!o) return (this.foot = null);
+    const box = new THREE.Box3().setFromObject(o);
+    const size = box.getSize(new THREE.Vector3());
+    this.foot = { at: box.getCenter(new THREE.Vector3()).setY(box.min.y), half: Math.max(size.x, size.z) / 2 };
+    return this.foot;
   }
 
   private setFov(fov: number): void {
@@ -697,8 +714,8 @@ export class World {
       const d = this.camera.position.distanceTo(this.controls.target);
       this.fog.near = d + lerp(60, 4, env.fog);
       this.fog.far = d + lerp(400, 40, env.fog);
-      this.fog.color.copy(this.bg.copy(MINI_BG).lerp(MINI_BG_NIGHT, env.stars).lerp(env.skyTop, 0.03).lerp(WHITE_FLASH, flash * 0.12));
-      this.scene.background = this.bg;
+      this.backdrop.update(dt, env, flash, this.camera, this.stage.view.target, this.findFoot(), still);
+      this.fog.color.copy(this.backdrop.edgeColor);
     }
 
     this.sky.update(env, this.sunDir, flash, baked ? 0.9 : 0);

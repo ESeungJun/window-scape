@@ -752,6 +752,15 @@ def bake_lightmap(path, size, samples, lamps=None):
             m.node_tree.nodes.remove(nd)
 
 
+def export_case(path):
+    """받침(case_*)만 따로 내보낸다. 굽지 않는 부품이라 라이트맵을 다시 굽지 않고 tools/gltf/swap-case.mjs 로
+    이미 있는 테마 glb 의 받침만 갈아 끼울 수 있다"""
+    for o in list(bpy.data.objects):
+        if not o.name.startswith('case_'):
+            bpy.data.objects.remove(o, do_unlink=True)
+    export_glb(path, join=False)
+
+
 def export_glb(path, join=True, lightmap=None, size=2048, samples=512, layout=None):
     # 미리보기 전용(물·구름·조명·카메라)은 빼고, 앱에서 바꾸지 않는 물체는 하나로 합친다
     for o in list(bpy.data.objects):

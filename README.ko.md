@@ -111,6 +111,7 @@ npm run tauri dev                    # 데스크톱 위젯 (처음 한 번 Rust 
 npm run build                        # 타입 검사 + 웹 빌드
 npm test                             # 날씨 코드·시간대·재시도 같은 순수 로직 테스트 (node --test)
 npm run models:optimize -- <입력> <출력>  # glb 후처리: 닫힌 도형 한 면 처리, 정점 병합, Draco 재압축
+blender -b -P tools/blender/drive.py -- <폴더> case && node tools/gltf/swap-case.mjs public/models/drive.glb <폴더>/drive_case.glb  # 받침만 다시 만들기(라이트맵은 그대로)
 ```
 
 웹 버전은 `F` 키나 `?showcase` 주소로 둥근 창 안에 화면을 담는 쇼케이스 모드를 켤 수 있어요.
