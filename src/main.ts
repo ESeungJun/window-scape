@@ -77,7 +77,7 @@ if (import.meta.env.DEV) {
     __view: (o: Partial<ViewOptions>) => {
       Object.assign(state.view, o);
       if (o.quality) world.setQuality(o.quality);
-      if (o.shape) world.setCase(o.shape === 'case');
+      if (o.shape) world.setShape(o.shape);
       refresh();
     },
     // 들어가기 모드 점검용
@@ -150,7 +150,8 @@ function loadSavedTheme(): Theme {
 
 function loadSavedShape(): Shape {
   try {
-    if (localStorage.getItem(KEYS.shape) === 'case') return 'case';
+    const saved = localStorage.getItem(KEYS.shape);
+    if (saved === 'case' || saved === 'mini') return saved;
   } catch {
     // 저장소를 못 쓰면 기본 모양
   }
@@ -456,7 +457,7 @@ syncSettings = renderSettings($('settingsBody'), state.view, (next) => {
   if (next.quality !== state.view.quality) world.setQuality(next.quality);
   if (next.frame !== state.view.frame) applyFrame(next.frame);
   if (next.shape !== state.view.shape) {
-    world.setCase(next.shape === 'case');
+    world.setShape(next.shape);
     saveShape(next.shape);
   }
   if (next.theme !== state.view.theme) {
@@ -467,7 +468,7 @@ syncSettings = renderSettings($('settingsBody'), state.view, (next) => {
   refresh();
 });
 applyFrame(state.view.frame);
-world.setCase(state.view.shape === 'case');
+world.setShape(state.view.shape);
 const syncEffects = renderEffects($('effectsBody'), effects, (next) => {
   effects = next;
   world.setEffects(next);
