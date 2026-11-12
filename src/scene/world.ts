@@ -11,7 +11,7 @@ import { SkyDome, SkyLight } from './sky';
 import { TOON_UNIFORM, updateSurface } from './baked';
 import { Glass } from './glass';
 import { Backdrop } from './backdrop';
-import { frameCap, pixelRatioFor, shadowInterval } from './pace';
+import { frameCap, lowPowerFor, pixelRatioFor, shadowInterval } from './pace';
 import type { Explorer } from './explore';
 
 export type Quality = 'auto' | 'low' | 'medium' | 'high';
@@ -41,6 +41,8 @@ export interface WorldOptions {
   theme?: Theme;
   /** 하루 종일 떠 있는 위젯은 'low-power' 로 내장 GPU 를 쓴다(그래픽이 둘인 노트북의 배터리·발열) */
   powerPreference?: WebGLPowerPreference;
+  /** 창이 크면 저절로 절전처럼 그린다(데스크톱 앱. pace.ts 의 lowPowerFor) */
+  autoLowPower?: boolean;
 }
 
 const SUN_AZIMUTH = 0.9;
@@ -103,6 +105,9 @@ export class World {
   private mini = false;
   /** 미니어처일 때 카메라 거리 배율(아니면 1) */
   private lens = 1;
+  private readonly autoLowPower: boolean;
+  /** 지금 절전으로 그리는지(설정, 또는 큰 창 자동 절전). 창 크기·설정이 바뀔 때 applyQuality 가 정한다 */
+  private lowPower = false;
   /** 미니어처 배경(그라데이션·받침 그림자·빛 알갱이) */
   private readonly backdrop = new Backdrop();
   /** 지금 테마 받침의 바닥 가운데와 반폭. 모델을 다 받은 뒤 찾는다(못 찾으면 null) */
@@ -158,7 +163,8 @@ export class World {
   private readonly camUp = new THREE.Vector3();
   private readonly camRay = new THREE.Vector3();
 
-  constructor(private readonly container: HTMLElement, { theme = 'island', powerPreference = 'high-performance' }: WorldOptions = {}) {
+  constructor(private readonly container: HTMLElement, { theme = 'island', powerPreference = 'high-performance', autoLowPower = false }: WorldOptions = {}) {
+    this.autoLowPower = autoLowPower;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -605,7 +611,9 @@ export class World {
 
   private applyQuality(): void {
     const q = this.quality;
-    const low = this.effects.lowPower;
+    const low = (this.lowPower = lowPowerFor({
+      setting: this.effects.lowPower, auto: this.autoLowPower, width: this.container.clientWidth, height: this.container.clientHeight,
+    }));
     let level = q === 'auto' ? (window.innerWidth < 800 || window.devicePixelRatio < 1.5 ? 'medium' : 'high') : q;
     // 절전: 그림자는 남기되 한 단계 낮춘다
     if (low && level === 'high') level = 'medium';
@@ -656,7 +664,7 @@ export class World {
     const cap = frameCap({
       visible: true,
       baseFps: this.baseFps,
-      lowPower: this.effects.lowPower,
+      lowPower: this.lowPower,
       active: now - this.lastInput < ACTIVE_S || !this.idle || this.fly !== null || this.exploring,
       lively: cur.rain > 0.05 || cur.snow > 0.05 || cur.wind > 0.6 || cur.storm > 0.5,
     });
@@ -764,7 +772,7 @@ export class World {
     this.shadowAge += dt;
     const moved = this.shadowSun.distanceToSquared(this.sunDir) > 1e-8 || !this.shadowAt.equals(this.shadowCenter);
     const every = shadowInterval({
-      lowPower: this.effects.lowPower,
+      lowPower: this.lowPower,
       wind: env.wind,
       // 들어가 있는 동안과 누른 직후(풍차 가속·폴짝)는 그림자가 끊겨 보이지 않게 매 프레임에 가깝게
       moverHz: this.exploring || this.fly !== null || this.time - this.pokedAt < 2.5 ? 30 : (this.stage.moverHz ?? 0),

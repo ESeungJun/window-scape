@@ -39,7 +39,7 @@ const $ = <T extends Element = HTMLElement>(id: string) => document.querySelecto
 
 // 저장된 테마로 바로 시작한다(하늘섬을 먼저 만들었다 바꾸지 않게)
 // 하루 종일 떠 있는 위젯은 내장 GPU 를 쓰게 한다
-const world = new World($('scene'), { theme: loadSavedTheme(), powerPreference: isDesktopApp ? 'low-power' : 'high-performance' });
+const world = new World($('scene'), { theme: loadSavedTheme(), powerPreference: isDesktopApp ? 'low-power' : 'high-performance', autoLowPower: isDesktopApp });
 const ambience = new Ambience();
 world.setFrameCap(isDesktopApp ? WIDGET_FPS : WEB_FPS);
 if (isDesktopApp) {
