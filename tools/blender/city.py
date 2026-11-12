@@ -1009,6 +1009,9 @@ layout = {
 if MODE == 'glb':
     out = os.path.abspath(OUT)
     export_glb(os.path.join(out, 'city.glb'), lightmap=os.path.join(out, 'city_light.png'), samples=SAMPLES, layout=layout)
+if MODE == 'case':
+    # 받침만 내보내기: node tools/gltf/swap-case.mjs 로 city.glb 에 갈아 끼운다
+    lib.export_case(os.path.join(os.path.abspath(OUT), 'city_case.glb'))
 if MODE == 'preview':
     scene.render.filepath = os.path.join(OUT, 'preview.png')
     bpy.ops.render.render(write_still=True)

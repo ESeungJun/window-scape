@@ -8,12 +8,16 @@ import { FLOATING_VIEW, Floaters, reducedMotion, updateSharedMaterials, type Sta
 import { createStage, type Theme } from './themes';
 import { Precipitation } from './precipitation';
 import { SkyDome, SkyLight } from './sky';
-import { updateSurface } from './baked';
+import { TOON_UNIFORM, updateSurface } from './baked';
 import { Glass } from './glass';
-import { frameCap, shadowInterval } from './pace';
+import { Backdrop } from './backdrop';
+import { frameCap, lowPowerFor, pixelRatioFor, shadowInterval } from './pace';
 import type { Explorer } from './explore';
 
 export type Quality = 'auto' | 'low' | 'medium' | 'high';
+
+/** 땅 테마의 모양: 지평선까지 이어진 땅 / 받침 위 디오라마(구름바다) / 미니어처(망원으로 내려다본 받침, 단색 배경, 툰 색감) */
+export type Shape = 'land' | 'case' | 'mini';
 
 /** 켜고 끌 수 있는 연출. 저장은 main.ts 가 맡는다 */
 export interface Effects {
@@ -37,9 +41,20 @@ export interface WorldOptions {
   theme?: Theme;
   /** 하루 종일 떠 있는 위젯은 'low-power' 로 내장 GPU 를 쓴다(그래픽이 둘인 노트북의 배터리·발열) */
   powerPreference?: WebGLPowerPreference;
+  /** 창이 크면 저절로 절전처럼 그린다(데스크톱 앱. pace.ts 의 lowPowerFor) */
+  autoLowPower?: boolean;
 }
 
 const SUN_AZIMUTH = 0.9;
+/** 평소 화각과 미니어처 화각. 미니어처는 화각을 좁히고 그만큼 멀리서 찍어 원근이 거의 없는 '보드게임 판' 느낌을 낸다 */
+const BASE_FOV = 38;
+const MINI_FOV = 15;
+/** 같은 크기로 보이게 하려면 카메라를 이만큼 멀리 둬야 한다(화각 절반의 탄젠트 비) */
+const MINI_LENS = Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2)) / Math.tan(THREE.MathUtils.degToRad(MINI_FOV / 2));
+/** 미니어처 처음 거리: 받침을 화면에 크게 담는다(디오라마는 구름바다까지 보이게 한 발 물러서 있다) */
+const MINI_FRAME = 0.88;
+/** 미니어처는 받침 아래 땅 단면까지 담으므로 보는 점을 그만큼 내린다(판이 아래쪽 예보 막대에 가리지 않게) */
+const MINI_DROP = 1.1;
 const AUTO_ROTATE_DELAY_MS = 6000;
 /** 들어가기 모드: 카메라가 캐릭터 뒤 위쪽에서 따라가는 거리·내려다보는 각도, 들어가고 나오는 데 걸리는 시간 */
 const EXPLORE_DISTANCE = 2.6;
@@ -66,7 +81,7 @@ export class World {
   private readonly target: Env = createEnv();
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(38, 1, 0.1, 1000);
+  private readonly camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 1000);
   private readonly controls: OrbitControls;
   private readonly sun = new THREE.DirectionalLight('#ffffff', 3);
   private readonly hemi = new THREE.HemisphereLight('#ffffff', '#b9c3cc', 1);
@@ -83,8 +98,21 @@ export class World {
   private stage: Stage;
   private readonly glass = new Glass();
   private effects: Effects = { ...DEFAULT_EFFECTS };
-  /** 땅 테마를 디오라마 모양으로 볼지 */
+  /** 땅 테마를 받침 위에 올려 볼지(디오라마·미니어처) */
   private cased = false;
+  /** 사용자가 미니어처 모양을 골랐는지. 실제로 켜지는 건 받침이 있는 땅 테마일 때뿐(mini) */
+  private miniWanted = false;
+  private mini = false;
+  /** 미니어처일 때 카메라 거리 배율(아니면 1) */
+  private lens = 1;
+  private readonly autoLowPower: boolean;
+  /** 지금 절전으로 그리는지(설정, 또는 큰 창 자동 절전). 창 크기·설정이 바뀔 때 applyQuality 가 정한다 */
+  private lowPower = false;
+  /** 미니어처 배경(그라데이션·받침 그림자·빛 알갱이) */
+  private readonly backdrop = new Backdrop();
+  /** 지금 테마 받침의 바닥 가운데와 반폭. 모델을 다 받은 뒤 찾는다(못 찾으면 null) */
+  private foot: { at: THREE.Vector3; half: number } | null = null;
+  private footStage: Stage | null = null;
   private readonly precip: Precipitation;
   private readonly sunDir = new THREE.Vector3();
   private last = performance.now() / 1000;
@@ -135,7 +163,8 @@ export class World {
   private readonly camUp = new THREE.Vector3();
   private readonly camRay = new THREE.Vector3();
 
-  constructor(private readonly container: HTMLElement, { theme = 'island', powerPreference = 'high-performance' }: WorldOptions = {}) {
+  constructor(private readonly container: HTMLElement, { theme = 'island', powerPreference = 'high-performance', autoLowPower = false }: WorldOptions = {}) {
+    this.autoLowPower = autoLowPower;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -196,7 +225,7 @@ export class World {
     this.scene.fog = this.fog;
     this.scene.add(
       this.sun, this.sun.target, this.hemi, this.sky.group, this.stage.group, this.floaters.group, this.clouds.group, this.precip.group,
-      this.glass.mesh,
+      this.glass.mesh, this.backdrop.mesh,
     );
 
     this.applyStageView();
@@ -306,13 +335,18 @@ export class World {
     this.applyStageView();
   }
 
-  /** 땅 테마의 모양: 디오라마(받침 위, 구름바다에 뜸) / 지평선까지 이어진 땅 */
-  setCase(on: boolean): void {
-    if (on === this.cased) return;
+  /** 땅 테마의 모양. 하늘섬은 모양이 하나라 무시한다(받침이 없다) */
+  setShape(shape: Shape): void {
+    const on = shape !== 'land';
+    const mini = shape === 'mini';
+    if (on === this.cased && mini === this.miniWanted) return;
     this.leave(true);
+    // 디오라마 ↔ 미니어처는 받침은 그대로라 테마에 다시 알리지 않는다
+    if (on !== this.cased) this.stage.setCase?.(on);
     this.cased = on;
+    this.miniWanted = mini;
+    // 하늘섬은 모양이 없으니 시점을 건드리지 않는다(값만 기억해 두고 땅 테마로 가면 쓴다)
     if (!this.stage.setCase) return;
-    this.stage.setCase(on);
     this.applyStageView();
   }
 
@@ -323,9 +357,18 @@ export class World {
     const floating = this.stage.kind === 'floating';
     // 떠다니는 작은 섬은 하늘섬에만(디오라마 받침 둘레에는 띄우지 않는다)
     this.floaters.group.visible = floating && !this.stage.setCase;
+    // 미니어처: 하늘·구름바다 대신 단색 배경(frame 에서 칠한다), 좁은 화각, 툰 색감
+    this.mini = this.miniWanted && this.cased && this.stage.setCase !== undefined;
+    this.lens = this.mini ? MINI_LENS : 1;
+    // 하늘 구름도 숨긴다(좁은 화각에서는 화면 귀퉁이에 덩어리로만 걸린다). 구름 그늘은 셰이더라 그대로 흐른다
+    this.sky.group.visible = this.clouds.group.visible = !this.mini;
+    this.backdrop.mesh.visible = this.mini;
+    this.stage.setMini?.(this.mini);
+    TOON_UNIFORM.value = this.mini ? 1 : 0;
+    this.setFov(this.mini ? MINI_FOV : BASE_FOV);
     const c = this.controls;
-    c.minDistance = floating ? 14 : 10;
-    c.maxDistance = floating ? 45 : 42;
+    c.minDistance = (floating ? 14 : 10) * this.lens;
+    c.maxDistance = (floating ? 45 : 42) * this.lens;
     // 땅 테마는 땅 밑을 보지 않게 수평선 위로만
     c.maxPolarAngle = Math.PI * (floating ? 0.64 : 0.46);
     // 모든 테마: 그림자는 넓게 흐린다. 구운 장면은 틈 그늘만 라이트맵에 있고 해 그림자는 실시간이라 그대로(1),
@@ -335,7 +378,7 @@ export class World {
     // 기본보다 큰 섬(기본 거리보다 멀리서 보는 섬)은 그림자·안개·떠다니는 섬을 그만큼 넓힌다
     this.viewScale = floating ? this.stage.view.distance / FLOATING_VIEW.distance : 1;
     this.floaters.spread(this.viewScale);
-    this.clouds.setSea(floating, this.viewScale);
+    this.clouds.setSea(floating && !this.mini, this.viewScale);
     const half = (floating ? 10 : 16) * this.viewScale;
     const sc = this.sun.shadow.camera;
     sc.left = sc.bottom = -half;
@@ -351,8 +394,27 @@ export class World {
     // 돌아다니는 주인공이 있으면 처음부터 그쪽을 비춘다
     if (this.stage.focus) this.stage.focus(c.target);
     else c.target.copy(this.stage.view.target);
-    this.camera.position.copy(c.target).addScaledVector(dir, this.stage.view.distance * (narrow ? 1.45 : 1));
+    if (this.mini) c.target.y -= MINI_DROP;
+    this.camera.position.copy(c.target).addScaledVector(dir, this.stage.view.distance * this.lens * (this.mini ? MINI_FRAME : 1) * (narrow ? 1.45 : 1));
     c.update();
+  }
+
+  /** 미니어처 받침 바닥(암반 case_bedrock, 옛 모델은 case_foot)의 가운데와 반폭. 모델은 늦게 오므로 찾을 때까지 프레임마다 다시 본다 */
+  private findFoot(): { at: THREE.Vector3; half: number } | null {
+    if (this.footStage === this.stage && this.foot) return this.foot;
+    this.footStage = this.stage;
+    const o = this.stage.group.getObjectByName('case_bedrock') ?? this.stage.group.getObjectByName('case_foot');
+    if (!o) return (this.foot = null);
+    const box = new THREE.Box3().setFromObject(o);
+    const size = box.getSize(new THREE.Vector3());
+    this.foot = { at: box.getCenter(new THREE.Vector3()).setY(box.min.y), half: Math.max(size.x, size.z) / 2 };
+    return this.foot;
+  }
+
+  private setFov(fov: number): void {
+    if (this.camera.fov === fov) return;
+    this.camera.fov = fov;
+    this.camera.updateProjectionMatrix();
   }
 
   get exploring(): boolean {
@@ -432,6 +494,7 @@ export class World {
     c.enableZoom = true;
     c.target.copy(s.target);
     this.camera.position.copy(s.pos);
+    this.setFov(this.mini ? MINI_FOV : BASE_FOV);
     c.enabled = true;
     this.idle = true;
     this.syncRotate();
@@ -489,6 +552,8 @@ export class World {
       }
       c.target.lerpVectors(fly.target, this.flyTarget, k);
       this.camera.position.lerpVectors(fly.pos, this.flyPos, k);
+      // 미니어처의 좁은 화각은 캐릭터 바로 뒤에서 쓰기엔 답답하다. 날아가는 동안 평소 화각으로 바꾸고, 나올 때 되돌린다
+      if (this.mini) this.setFov(THREE.MathUtils.lerp(MINI_FOV, BASE_FOV, fly.leaving ? 1 - k : k));
       this.camera.lookAt(c.target);
       if (fly.t < 1) return;
       this.fly = null;
@@ -546,12 +611,14 @@ export class World {
 
   private applyQuality(): void {
     const q = this.quality;
-    const low = this.effects.lowPower;
+    const low = (this.lowPower = lowPowerFor({
+      setting: this.effects.lowPower, auto: this.autoLowPower, width: this.container.clientWidth, height: this.container.clientHeight,
+    }));
     let level = q === 'auto' ? (window.innerWidth < 800 || window.devicePixelRatio < 1.5 ? 'medium' : 'high') : q;
     // 절전: 그림자는 남기되 한 단계 낮춘다
     if (low && level === 'high') level = 'medium';
-    const cap = level === 'low' ? 1 : level === 'medium' ? 1.5 : 2;
-    const ratio = Math.min(window.devicePixelRatio, low ? Math.min(cap, 1.25) : cap);
+    // 큰 창에서는 픽셀 예산에 맞춰 비율을 낮춘다(pace.ts)
+    const ratio = pixelRatioFor({ dpr: window.devicePixelRatio, level, lowPower: low, width: this.container.clientWidth, height: this.container.clientHeight });
     const shadows = level !== 'low';
     const size = level === 'high' ? 2048 : 1024;
     // 창 크기를 바꿀 때마다 불리므로 값이 그대로면 손대지 않는다(픽셀 비율을 다시 넣으면 화면이 지워져 깜빡인다)
@@ -597,7 +664,7 @@ export class World {
     const cap = frameCap({
       visible: true,
       baseFps: this.baseFps,
-      lowPower: this.effects.lowPower,
+      lowPower: this.lowPower,
       active: now - this.lastInput < ACTIVE_S || !this.idle || this.fly !== null || this.exploring,
       lively: cur.rain > 0.05 || cur.snow > 0.05 || cur.wind > 0.6 || cur.storm > 0.5,
     });
@@ -649,6 +716,15 @@ export class World {
     // 땅 테마: 가운데 땅은 또렷하게 두고 지평선 쪽 먼 풍경만 하늘에 녹인다
     this.fog.near = lerp((floating ? (baked ? 18 : 30) : 30) * this.viewScale, 6, env.fog);
     this.fog.far = lerp((floating ? (baked ? 80 : 150) : 105) * this.viewScale, (floating ? 34 : 30) * this.viewScale, env.fog);
+    if (this.mini) {
+      // 미니어처는 멀리서 찍으므로 거리 안개를 걷는다(받침만 보이니 지평선을 녹일 일이 없다).
+      // 짙은 날씨의 뿌연 느낌은 가까운 쪽만 살짝 남긴다
+      const d = this.camera.position.distanceTo(this.controls.target);
+      this.fog.near = d + lerp(60, 4, env.fog);
+      this.fog.far = d + lerp(400, 40, env.fog);
+      this.backdrop.update(dt, env, flash, this.camera, this.stage.view.target, this.findFoot(), still);
+      this.fog.color.copy(this.backdrop.edgeColor);
+    }
 
     this.sky.update(env, this.sunDir, flash, baked ? 0.9 : 0);
     // 구름 그늘을 셰이더로 그릴 때는 구름을 그림자 맵에 넣지 않는다
@@ -696,7 +772,7 @@ export class World {
     this.shadowAge += dt;
     const moved = this.shadowSun.distanceToSquared(this.sunDir) > 1e-8 || !this.shadowAt.equals(this.shadowCenter);
     const every = shadowInterval({
-      lowPower: this.effects.lowPower,
+      lowPower: this.lowPower,
       wind: env.wind,
       // 들어가 있는 동안과 누른 직후(풍차 가속·폴짝)는 그림자가 끊겨 보이지 않게 매 프레임에 가깝게
       moverHz: this.exploring || this.fly !== null || this.time - this.pokedAt < 2.5 ? 30 : (this.stage.moverHz ?? 0),

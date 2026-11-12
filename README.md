@@ -43,6 +43,7 @@ The Walking Castle is an original design — a ramshackle castle on mechanical l
 inspired by the idea of a moving castle, not a copy of any film's design.
 
 Apart from the sky island, each world can also be shown as a diorama on a wooden plinth instead of land running to the horizon (Settings → Shape).
+Pick *Miniature* to see the same plinth through a long lens on a dark navy backdrop, with saturated toon colors and water drawn with foam lines.
 
 ## It follows the sky
 
@@ -104,6 +105,7 @@ npm run tauri dev                    # desktop widget (needs Rust once: https://
 npm run build                        # type-check + web build
 npm test                             # pure-logic tests (node --test)
 npm run models:optimize -- <in> <out> # glb post-processing: single-sided closed meshes, weld, Draco re-compress
+blender -b -P tools/blender/drive.py -- <dir> case && node tools/gltf/swap-case.mjs public/models/drive.glb <dir>/drive_case.glb  # rebuild only the plinth (no re-bake)
 ```
 
 In the web version, press `F` or open `?showcase` to frame the scene in a rounded window.

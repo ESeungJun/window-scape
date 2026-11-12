@@ -31,7 +31,12 @@ const U = {
   wsLampBaked: { value: 0 },
   /** x, z: 바람 방향, y: 흔들리는 폭, w: 누적 위상 */
   wsSway: { value: new THREE.Vector4() },
+  /** 미니어처 모양의 툰 색감(0 끔 ~ 1 켬). 물 셰이더(water.ts)도 같은 값을 본다 */
+  wsToon: { value: 0 },
 };
+
+/** 미니어처 모양의 툰 색감 세기. 물 재질이 같은 객체를 나눠 써서 한 번에 켜고 끈다 */
+export const TOON_UNIFORM = U.wsToon;
 
 const VERTEX_PARS = /* glsl */ `
   varying vec3 wsPos;
@@ -75,6 +80,7 @@ const FRAGMENT_PARS = /* glsl */ `
   uniform vec3 wsLamps[${MAX_LAMPS}];
   uniform int wsLampCount;
   uniform float wsLampBaked;
+  uniform float wsToon;
   varying vec3 wsPos;
   float wsHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float wsNoise(vec2 p) {
@@ -104,14 +110,32 @@ const FRAGMENT_ALBEDO = /* glsl */ `
   }
   float wsWetAmt = wsWet * (1.0 - wsSnowAmt) * (0.55 + 0.45 * max(wsUp, 0.0));
   diffuseColor.rgb *= 1.0 - 0.3 * wsWetAmt;
+  // 미니어처: 장난감처럼 채도를 올린다(회색 축에서 멀어지게)
+  if (wsToon > 0.003) {
+    float wsLuma = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+    diffuseColor.rgb = max(mix(vec3(wsLuma), diffuseColor.rgb, 1.0 + 0.3 * wsToon), 0.0);
+  }
 `;
 
 const FRAGMENT_ROUGHNESS = /* glsl */ `
   roughnessFactor = mix(roughnessFactor, 0.38, wsWetAmt * 0.7);
 `;
 
-// 조명 뒤: 구름 그늘은 햇빛(직접광)만 가리고, 밤 불빛은 그 뒤에 더한다
+// 조명 뒤: 구름 그늘은 햇빛(직접광)만 가리고, 밤 불빛은 그 뒤에 더한다.
+// 미니어처에서는 그 전에 빛 색을 나눈다: 햇빛은 살짝 따뜻하게, 그늘(라이트맵·환경광)은 검게 죽지 않고 보라·파랑 쪽으로.
+// 틈 그늘은 한 번 더 눌러(제곱) 물건이 바닥에 붙어 보이게 한다
 const FRAGMENT_LIGHTS = /* glsl */ `
+  if (wsToon > 0.003) {
+    vec3 wsInd = reflectedLight.indirectDiffuse;
+    // 바탕색 밝기를 나눠 '받은 빛'만 본다(어두운 물체를 그늘로 착각하지 않게). 1 이 하얀 하늘 아래 트인 면
+    vec3 wsLumaW = vec3(0.299, 0.587, 0.114);
+    float wsIrr = dot(wsInd, wsLumaW) / max(dot(BRDF_Lambert(material.diffuseColor), wsLumaW), 1e-3);
+    // 어두운 틈일수록 더 차갑고 더 어둡게(트인 면은 거의 그대로)
+    float wsCool = 1.0 - smoothstep(0.2, 0.95, wsIrr);
+    vec3 wsTint = mix(vec3(1.0), vec3(0.8, 0.8, 1.25), 0.3 + 0.7 * wsCool) * (1.0 - 0.22 * wsCool);
+    reflectedLight.indirectDiffuse = mix(wsInd, wsInd * wsTint, wsToon);
+    reflectedLight.directDiffuse *= mix(vec3(1.0), vec3(1.08, 1.0, 0.9), wsToon);
+  }
   if (wsShade.z > 0.003) {
     float cs = wsNoise(wsPos.xz * 0.11 + wsShade.xy) * 0.65 + wsNoise(wsPos.xz * 0.27 + wsShade.xy * 1.6) * 0.35;
     float shade = 1.0 - wsShade.z * smoothstep(0.42, 0.7, cs);
