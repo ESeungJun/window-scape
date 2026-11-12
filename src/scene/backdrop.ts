@@ -4,7 +4,7 @@ import type { Env } from './env';
 /**
  * 미니어처 모양의 배경. 하늘 대신 화면 전체에 깔리는 판 하나를 셰이더로 그린다(그리기 호출 1, 텍스처 없음).
  *  - 그라데이션: 판 뒤가 은은하게 밝고 가장자리로 갈수록 짙어진다. 색은 지금 하늘(아침 복숭아, 낮 하늘, 노을, 밤 남색)에서 뽑는다
- *  - 그림자: 받침 바닥 아래 보이지 않는 바닥에 진 것처럼 흐린 타원을 깐다(판보다 먼저 그려 판 둘레로만 보인다)
+ *  - 그림자: 받침 바닥 아래 보이지 않는 바닥에 진 것처럼 흐린 타원을 깐다(판이 먼저 그려져 깊이 검사로 가려지므로 판 둘레로만 보인다)
  *  - 빛 알갱이: 낮에는 천천히 떠다니는 먼지, 밤에는 반짝이는 별과 반딧불
  * world.ts 가 미니어처일 때만 보이게 하고 프레임마다 update 를 부른다.
  */
@@ -13,7 +13,7 @@ const VERTEX = /* glsl */ `
   varying vec2 vUv;
   void main() {
     vUv = uv;
-    // 카메라와 상관없이 화면을 그대로 덮는다(깊이는 맨 뒤)
+    // 카메라와 상관없이 화면을 그대로 덮는다. 깊이는 맨 뒤(1)라 장면이 그려진 픽셀은 깊이 검사에서 걸러진다
     gl_Position = vec4(position.xy, 1.0, 1.0);
   }
 `;
@@ -100,15 +100,17 @@ export class Backdrop {
       uniforms: this.u,
       vertexShader: VERTEX,
       fragmentShader: FRAGMENT,
-      depthTest: false,
+      // 장면(불투명)을 다 그린 뒤 깊이 검사를 켜고 그린다: 판에 가려진 픽셀은 셰이더를 돌리지 않는다.
+      // 맨 먼저 깊이 검사 없이 그리면 화면 전체 픽셀을 계산해 큰 창에서 프레임당 GPU 3ms 를 더 썼다
+      depthTest: true,
       depthWrite: false,
       toneMapped: false,
     });
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
     this.mesh.name = 'mini_backdrop';
-    // 화면을 덮는 판이라 카메라 시야 검사·그림자·클릭 검사에서 뺀다. 장면보다 먼저 그린다
+    // 화면을 덮는 판이라 카메라 시야 검사·그림자·클릭 검사에서 뺀다. 불투명한 것 중 맨 마지막에 그린다(투명한 물·비는 그 뒤)
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = -1000;
+    this.mesh.renderOrder = 1000;
     this.mesh.raycast = () => {};
     this.mesh.visible = false;
   }

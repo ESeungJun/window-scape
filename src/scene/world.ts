@@ -11,7 +11,7 @@ import { SkyDome, SkyLight } from './sky';
 import { TOON_UNIFORM, updateSurface } from './baked';
 import { Glass } from './glass';
 import { Backdrop } from './backdrop';
-import { frameCap, shadowInterval } from './pace';
+import { frameCap, pixelRatioFor, shadowInterval } from './pace';
 import type { Explorer } from './explore';
 
 export type Quality = 'auto' | 'low' | 'medium' | 'high';
@@ -609,8 +609,8 @@ export class World {
     let level = q === 'auto' ? (window.innerWidth < 800 || window.devicePixelRatio < 1.5 ? 'medium' : 'high') : q;
     // 절전: 그림자는 남기되 한 단계 낮춘다
     if (low && level === 'high') level = 'medium';
-    const cap = level === 'low' ? 1 : level === 'medium' ? 1.5 : 2;
-    const ratio = Math.min(window.devicePixelRatio, low ? Math.min(cap, 1.25) : cap);
+    // 큰 창에서는 픽셀 예산에 맞춰 비율을 낮춘다(pace.ts)
+    const ratio = pixelRatioFor({ dpr: window.devicePixelRatio, level, lowPower: low, width: this.container.clientWidth, height: this.container.clientHeight });
     const shadows = level !== 'low';
     const size = level === 'high' ? 2048 : 1024;
     // 창 크기를 바꿀 때마다 불리므로 값이 그대로면 손대지 않는다(픽셀 비율을 다시 넣으면 화면이 지워져 깜빡인다)
