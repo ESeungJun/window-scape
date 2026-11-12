@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { TOON_UNIFORM } from './baked';
 
 const VERTEX = /* glsl */ `
   varying vec2 vUv;
@@ -24,15 +25,40 @@ const NOISE = /* glsl */ `
   }
 `;
 
+// 미니어처(툰) 물: 깊이에 따라 또렷한 청록 → 파랑, 물가에 흰 거품선 두 줄(바깥 줄은 천천히 밀려왔다 빠진다),
+// 물 위에 펜으로 그린 듯한 얇은 물결선. shore: 0 깊음 ~ 1 물가, p: 물결 무늬 좌표
+const TOON = /* glsl */ `
+  uniform float toon;
+  uniform vec3 deep;
+  uniform vec3 light;
+  vec3 toonWater(vec3 col, float shore, vec2 p) {
+    if (toon < 0.003) return col;
+    float wob = noise(p * 0.9 + time * 0.15) - 0.5;
+    // 평소 물색(deep·light)에서 뽑는다: 깊은 곳은 더 짙고 푸르게, 얕은 곳은 청록으로. 밝기는 bright 가 함께 낮춘다
+    vec3 tc = mix(deep * vec3(0.45, 0.85, 1.0), light * vec3(0.7, 1.05, 0.92), smoothstep(0.15, 0.95, shore + wob * 0.12));
+    // 물결선: 느리게 흐르는 무늬의 등고선 중 일부만 짧게 끊어 보이게
+    float n = noise(p * 0.55 + vec2(time * 0.05, -time * 0.035));
+    float iso = abs(fract(n * 5.0) - 0.5);
+    float dash = smoothstep(0.55, 0.75, noise(p * 1.3 + 4.0));
+    tc = mix(tc, vec3(0.85, 0.95, 1.0), (1.0 - smoothstep(0.02, 0.05, iso)) * dash * 0.55 * (1.0 - shore * 0.5));
+    // 거품선: 물가 바로 앞 한 줄(고정)과 그 바깥에서 오가는 한 줄
+    float e = shore + wob * 0.06;
+    float tide = 0.78 + sin(time * 0.6) * 0.03;
+    float foam = (1.0 - smoothstep(0.012, 0.03, abs(e - 0.9))) + (1.0 - smoothstep(0.01, 0.025, abs(e - tide))) * 0.75;
+    tc = mix(tc, vec3(0.92), clamp(foam, 0.0, 1.0) * 0.85);
+    tc = mix(tc, vec3(0.92), smoothstep(0.95, 1.0, e) * 0.8);
+    return mix(col, tc, toon);
+  }
+`;
+
 // vUv.x: 강폭 방향(0~1), vUv.y: 흐르는 방향 누적 거리
 const RIVER_FRAGMENT = /* glsl */ `
   uniform float time;
   uniform float bright;
-  uniform vec3 deep;
-  uniform vec3 light;
   varying vec2 vUv;
   #include <fog_pars_fragment>
   ${NOISE}
+  ${TOON}
   void main() {
     // 강폭 방향으로는 촘촘하고 흐르는 방향으로는 길게 늘어진 결이 물살을 따라 천천히 내려간다
     float edge = abs(vUv.x - 0.5) * 2.0;
@@ -41,6 +67,8 @@ const RIVER_FRAGMENT = /* glsl */ `
     vec3 col = mix(deep, light, smoothstep(0.3, 1.0, edge) * 0.5 + flow * 0.2);
     col += smoothstep(0.75, 0.92, ripple) * 0.14;
     col = mix(col, vec3(0.95), smoothstep(0.85, 1.0, edge) * 0.35);
+    // 강은 흐르는 방향으로 무늬를 끌고 내려간다
+    col = toonWater(col, edge * 0.9, vec2(vUv.x * 3.0, vUv.y * 0.6 - time * 0.5));
     gl_FragColor = vec4(col * bright, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -52,14 +80,13 @@ const RIVER_FRAGMENT = /* glsl */ `
 const STILL_FRAGMENT = /* glsl */ `
   uniform float time;
   uniform float bright;
-  uniform vec3 deep;
-  uniform vec3 light;
   uniform float rain;
   uniform float ice;
   varying vec2 vUv;
   varying vec2 vWorld;
   #include <fog_pars_fragment>
   ${NOISE}
+  ${TOON}
   // 빗방울이 떨어진 자리에서 퍼지는 동심원(칸마다 하나씩, 박자를 달리해 되풀이)
   float rings(vec2 p) {
     vec2 g = p * 1.7;
@@ -76,6 +103,7 @@ const STILL_FRAGMENT = /* glsl */ `
     // 햇빛에 반짝이는 작은 잔물결
     col += smoothstep(0.86, 0.97, noise(vWorld * 2.4 + vec2(time * 0.1, -time * 0.08))) * 0.07;
     col = mix(col, vec3(0.95), smoothstep(0.88, 1.0, shore) * 0.3);
+    col = toonWater(col, shore, vWorld);
     if (rain > 0.01) col += (rings(vWorld) + rings(vWorld * 1.9 + 7.0) * 0.6) * rain * 0.22;
     // 영하면 물가부터 얼어 들어온다(얼음은 잔물결 없이 희푸르다)
     if (ice > 0.01) {
@@ -121,6 +149,8 @@ export function riverMaterial(still = false): THREE.ShaderMaterial {
       ice: { value: 0 },
       deep: { value: new THREE.Color('#2f8cc4') },
       light: { value: new THREE.Color('#8fd8f2') },
+      // 복제하지 않고 나눠 쓴다(미니어처를 켜면 모든 물이 함께 바뀐다)
+      toon: TOON_UNIFORM,
     },
     vertexShader: VERTEX,
     fragmentShader: still ? STILL_FRAGMENT : RIVER_FRAGMENT,

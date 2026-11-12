@@ -203,6 +203,8 @@ export interface Stage {
   readonly baked?: boolean;
   /** 디오라마 모양으로(땅 테마만): 둘레 땅 대신 받침에 올려 구름바다 위에 띄운다 */
   setCase?(on: boolean): void;
+  /** 미니어처 모양으로(받침 모양일 때만): 나무 받침을 숨겨 땅 단면 층을 드러낸다 */
+  setMini?(on: boolean): void;
   /** 움직이는 것(자동차·걷는 성)의 그림자가 끊겨 보이지 않을 그림자 갱신 횟수(초당). 없으면 나무 흔들림 기준 */
   readonly moverHz?: number;
   /** 누른 물체가 한 번 반응한다(풍차가 빨리 돌고 나무가 흔들린다). 반응한 것이 있으면 true */

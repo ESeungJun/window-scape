@@ -15,6 +15,9 @@ import { Hops, Sway, Waterfall, ancestorNamed, disposeTree, waterBrightness, typ
  * 움직이는 것(mover_*)은 테마별 하위 클래스가 onLoad/tick 에서 움직인다.
  */
 
+/** 디오라마 모양에만 씌우는 나무 받침 부품(미니어처에서는 숨긴다). 땅 단면 층(case_soil·gravel·bedrock)은 둘 다 보인다 */
+const isPlinth = (o: THREE.Object3D) => /^case_(plinth|trim|foot|plate)/.test(o.name);
+
 /** 모델과 함께 오는 자리(tools/blender 의 layout). 좌표는 앱 좌표(x, y, z) */
 export interface Layout {
   lights?: [number, number, number][];
@@ -71,6 +74,8 @@ export abstract class Diorama implements Stage {
   /** 디오라마 모양에서 숨기는 것(먼 풍경·타일 밖 물체·불빛)과 보이는 받침 */
   private readonly outside: THREE.Object3D[] = [];
   private readonly caseParts: THREE.Object3D[] = [];
+  /** 미니어처 모양인지. 이때는 나무 받침(놋쇠 띠·발·이름판 포함)을 숨겨 땅 단면 층을 드러낸다 */
+  private mini = false;
   private readonly landDistance: number;
   /** 받침 가장자리에서 자를 재질(받침 자신은 빼고)과 그 네 평면 */
   private readonly clipped = new Set<THREE.Material>();
@@ -194,9 +199,19 @@ export abstract class Diorama implements Stage {
     // 받침까지 화면에 들어오게 조금 물러난다
     this.view.distance = this.landDistance * (on ? 1.4 : 1);
     for (const o of this.outside) o.visible = !on;
-    for (const o of this.caseParts) o.visible = on;
+    this.showCase();
     for (const m of this.clipped) m.clippingPlanes = on ? this.clipPlanes : null;
     this.onCase(on);
+  }
+
+  /** 미니어처 모양(받침 위 단면만, 나무 받침 없이). 받침 모양(setCase(true))일 때만 보인다 */
+  setMini(on: boolean): void {
+    this.mini = on;
+    this.showCase();
+  }
+
+  private showCase(): void {
+    for (const o of this.caseParts) o.visible = this.cased && !(this.mini && isPlinth(o));
   }
 
   /** 모양이 바뀔 때(테마별로 타일 밖을 다니는 것 정리) */

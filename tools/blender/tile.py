@@ -394,24 +394,75 @@ WALNUT = mat('walnut', '#6b4630', 0.55, 0.08, 6.0)
 BRASS = mat('brass', '#c9a24e', 0.3, 0.03)
 
 
+# 미니어처 단면 층(위에서 아래로): 겉흙(기존 절벽 띠) → 자갈 섞인 흙 → 짙은 보랏빛 암반. 레퍼런스 디오라마의 잘라 낸 땅 단면
+GRAVEL = mat('case_gravel', '#b49a7a', 0.95, 0.14, 7.0)
+BEDROCK = lib.banded('case_bedrock', ['#5a5370', '#4d4762', '#625a78', '#544d69'], 2.4, 1.6, 0.4)
+PEBBLE = mat('case_pebble', '#9d958c', 0.9, 0.12, 6.0)
+# 암반 바닥: 받침(case_plinth) 바닥과 같은 높이라, 디오라마 모양에서는 받침 속에 숨는다
+STRATA_DEPTH = 1.6
+
+
+def strata_wall(name, edge, upper, lower, m, close_bottom=False):
+    """가장자리 한 바퀴를 따라 upper(i) ~ lower(i) 높이 사이를 세운 벽"""
+    bm = bmesh.new()
+    n = len(edge)
+    top = [bm.verts.new((x, y, upper(i))) for i, (x, y) in enumerate(edge)]
+    bot = [bm.verts.new((x, y, lower(i))) for i, (x, y) in enumerate(edge)]
+    for i in range(n):
+        j = (i + 1) % n
+        bm.faces.new([bot[i], bot[j], top[j], top[i]])
+    if close_bottom:
+        bm.faces.new(bot[::-1])
+    finish(new_obj(name, bm), m, smooth=False)
+
+
+def pebbles(name, edge, band, W, D, count=130):
+    """자갈층 단면에 반쯤 박힌 돌. 벽에서 살짝 튀어나오게 바깥으로 민다.
+    공용 rnd 를 쓰면 뒤에 오는 배치가 바뀌므로 따로 둔다"""
+    rnd = lib.random.Random(11)
+    bm = bmesh.new()
+    for _ in range(count):
+        i = rnd.randrange(len(edge))
+        x, y = edge[i]
+        lo, hi = band(i)
+        if hi - lo < 0.2:
+            continue
+        z = rnd.uniform(lo + 0.08, hi - 0.08)
+        # 바깥쪽 법선(어느 변 위인지로 정한다)
+        nx = 1 if x >= W / 2 - 1e-3 else -1 if x <= -W / 2 + 1e-3 else 0
+        ny = 1 if y >= D / 2 - 1e-3 else -1 if y <= -D / 2 + 1e-3 else 0
+        r = rnd.uniform(0.07, 0.17)
+        g = bmesh.ops.create_icosphere(bm, subdivisions=1, radius=r)
+        vs = g['verts']
+        bmesh.ops.scale(bm, vec=Vector((rnd.uniform(1.0, 1.6), rnd.uniform(1.0, 1.6), rnd.uniform(0.6, 0.9))), verts=vs)
+        bmesh.ops.translate(bm, vec=Vector((x + nx * r * 0.35, y + ny * r * 0.35, z)), verts=vs)
+    finish(new_obj(name, bm), PEBBLE, smooth=False)
+
+
 def case(W, D, hfn, water=None):
-    """디오라마 모양(앱 설정 '디오라마')일 때만 보이는 받침(case_*: 굽지 않는다). 타일 가장자리 땅 높이에서 곧게 내린
-    지층 단면 + 물 단면, 그 아래 호두나무 받침·놋쇠 띠·발·이름판. 지평선 모양에서는 앱이 숨긴다"""
+    """받침 모양(앱 설정 '디오라마'·'미니어처')일 때만 보이는 단면(case_*: 굽지 않는다). 지평선 모양에서는 앱이 숨긴다.
+    타일 가장자리 땅 높이에서 곧게 내린 겉흙 + 자갈층 + 암반, 물이 있으면 물 단면.
+    디오라마는 그 아래(암반 높이)에 호두나무 받침·놋쇠 띠·발·이름판을 씌우고, 미니어처는 받침을 숨겨 층을 드러낸다"""
     step = 0.2
     nx, ny = round(W / step), round(D / step)
     edge = ([(-W / 2 + step * i, -D / 2) for i in range(nx)] + [(W / 2, -D / 2 + step * i) for i in range(ny)]
             + [(W / 2 - step * i, D / 2) for i in range(nx)] + [(-W / 2, D / 2 - step * i) for i in range(ny)])
     hs = [hfn(x, y) for x, y in edge]
     z0 = min(hs) - 1.2
-    bm = bmesh.new()
-    top = [bm.verts.new((x, y, h - 0.02)) for (x, y), h in zip(edge, hs)]
-    bot = [bm.verts.new((x, y, z0)) for x, y in edge]
+    zb = z0 - STRATA_DEPTH
     n = len(edge)
-    for i in range(n):
-        j = (i + 1) % n
-        bm.faces.new([bot[i], bot[j], top[j], top[i]])
-    bm.faces.new(bot[::-1])
-    finish(new_obj('case_soil', bm), CLIFF, smooth=False)
+    # 층 경계는 가장자리를 따라 천천히 물결친다(한 바퀴에 몇 번, 길이 기준이라 네 변이 이어진다)
+    along = [0.0]
+    for i in range(1, n):
+        along.append(along[-1] + step)
+    wave = lambda i, k, ph: math.sin(along[i] * k + ph) * 0.5 + math.sin(along[i] * k * 2.3 + ph * 1.7) * 0.25
+    # 겉흙 아래 경계: 땅 높이를 따라가되 너무 얇거나 두껍지 않게, 자갈층 아래 경계: 거의 평평
+    soil_lo = [max(min(hs[i] - 0.8 + wave(i, 0.9, 0.3) * 0.22, hs[i] - 0.45), z0 + 0.3) for i in range(n)]
+    grav_lo = [min(z0 - 0.35 + wave(i, 0.6, 2.1) * 0.22, soil_lo[i] - 0.25) for i in range(n)]
+    strata_wall('case_soil', edge, lambda i: hs[i] - 0.02, lambda i: soil_lo[i], CLIFF)
+    strata_wall('case_gravel', edge, lambda i: soil_lo[i], lambda i: grav_lo[i], GRAVEL)
+    strata_wall('case_bedrock', edge, lambda i: grav_lo[i], lambda i: zb, BEDROCK, close_bottom=True)
+    pebbles('case_pebbles', edge, lambda i: (grav_lo[i], soil_lo[i]), W, D)
     if water is not None:
         bm = bmesh.new()
         for i in range(n):
