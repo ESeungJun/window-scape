@@ -10,7 +10,7 @@ import { ancestorNamed } from './kit';
  * 모래사장과 바다, 바위섬 등대, 바다를 도는 돛단배, 바람 따라 도는 언덕 위 풍력 발전기.
  */
 const LANE = 0.55;
-/** 디오라마 모양에서 받침 안 고리를 도는 차 수 */
+/** 미니어처 모양에서 타일 안 고리를 도는 차 수 */
 const LOOP_CARS = 5;
 
 interface Car {
@@ -31,7 +31,7 @@ export class Drive extends Diorama {
   private sea?: THREE.CatmullRomCurve3;
   private sail?: THREE.Object3D;
   private sailU = 0;
-  /** 받침 안에 드는 도로 구간(길이 단위). 디오라마 모양에서 차가 이 구간을 U턴하며 돈다 */
+  /** 타일 안에 드는 도로 구간(길이 단위). 미니어처 모양에서 차가 이 구간을 U턴하며 돈다 */
   private span: [number, number] = [0, 0];
   private loopU = 0;
   private readonly p = new THREE.Vector3();
@@ -46,7 +46,7 @@ export class Drive extends Diorama {
     if (!layout.paths) return;
     this.road = pathCurve(layout.paths.road, false);
     this.sea = pathCurve(layout.paths.sea, true);
-    // 길을 잘게 따라가며 받침 안(가장자리에서 조금 안쪽)에 드는 처음과 끝
+    // 길을 잘게 따라가며 타일 안(가장자리에서 조금 안쪽)에 드는 처음과 끝
     const len = this.road.getLength();
     const ins: number[] = [];
     for (let i = 0; i <= 400; i++) {
@@ -111,15 +111,15 @@ export class Drive extends Diorama {
   }
 
   /**
-   * 디오라마 모양: 받침 안 구간을 한 바퀴 도는 길(한 차로로 가서 끝에서 U턴해 다른 차로로 돌아온다).
-   * 모든 차가 같은 속도로 같은 고리를 돌아 서로 겹치지 않고, 받침 밖으로 나가지 않는다
+   * 미니어처 모양: 타일 안 구간을 한 바퀴 도는 길(한 차로로 가서 끝에서 U턴해 다른 차로로 돌아온다).
+   * 모든 차가 같은 속도로 같은 고리를 돌아 서로 겹치지 않고, 타일 밖으로 나가지 않는다
    */
   private loopCars(dt: number): void {
     const [a, b] = this.span;
     const r = LANE;
     const straight = Math.max(0, b - a - 2 * r);
     const loop = 2 * straight + 2 * Math.PI * r;
-    // 받침 안 길은 짧아서 몇 대만 달린다. 한 박자를 같이 쓰고 차마다 고리 길이의 1/n 씩 벌린다
+    // 타일 안 길은 짧아서 몇 대만 달린다. 한 박자를 같이 쓰고 차마다 고리 길이의 1/n 씩 벌린다
     const n = Math.min(this.cars.length, LOOP_CARS);
     this.loopU = (this.loopU + (2.2 * dt) / loop) % 1;
     this.cars.forEach((c, k) => {

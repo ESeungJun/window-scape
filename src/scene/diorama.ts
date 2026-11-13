@@ -10,13 +10,10 @@ import { Hops, Sway, Waterfall, ancestorNamed, disposeTree, waterBrightness, typ
  * 땅에 놓인 디오라마 테마(드라이브·도시·성·숲)의 공통 틀. 모양은 Blender 에서 직접 모델링한 public/models/<이름>.glb
  * (만드는 법: tools/blender/<이름>.py, 공용 바닥: tools/blender/tile.py)이고 빛은 구운 라이트맵에 하늘빛을 곱해 쓴다.
  * 가운데 네모 땅은 구운 빛, 그 둘레를 지평선까지 잇는 먼 풍경(far_*)은 탁 트인 하늘빛을 받는다.
- * 디오라마 모양(setCase)에서는 먼 풍경과 타일 밖 물체를 숨기고 받침(case_*)을 보이며, 하늘섬처럼 구름바다 위에 뜬다.
+ * 미니어처 모양(setCase)에서는 먼 풍경과 타일 밖 물체를 숨기고 땅 단면(case_*)을 보인다.
  * 여기서는 그 위에 물(liquid_*), 폭포, 나무 흔들림, 계절 색, 밤 불빛을 입히고,
  * 움직이는 것(mover_*)은 테마별 하위 클래스가 onLoad/tick 에서 움직인다.
  */
-
-/** 디오라마 모양에만 씌우는 나무 받침 부품(미니어처에서는 숨긴다). 땅 단면 층(case_soil·gravel·bedrock)은 둘 다 보인다 */
-const isPlinth = (o: THREE.Object3D) => /^case_(plinth|trim|foot|plate)/.test(o.name);
 
 /** 모델과 함께 오는 자리(tools/blender 의 layout). 좌표는 앱 좌표(x, y, z) */
 export interface Layout {
@@ -69,15 +66,13 @@ export const TILE_HALF = 8;
 
 export abstract class Diorama implements Stage {
   readonly group = new THREE.Group();
-  /** 디오라마 모양(둘레 땅 대신 받침)인지 */
+  /** 미니어처 모양(둘레 땅 대신 잘라 낸 땅 단면)인지 */
   protected cased = false;
-  /** 디오라마 모양에서 숨기는 것(먼 풍경·타일 밖 물체·불빛)과 보이는 받침 */
+  /** 미니어처 모양에서 숨기는 것(먼 풍경·타일 밖 물체·불빛)과 보이는 땅 단면 */
   private readonly outside: THREE.Object3D[] = [];
   private readonly caseParts: THREE.Object3D[] = [];
-  /** 미니어처 모양인지. 이때는 나무 받침(놋쇠 띠·발·이름판 포함)을 숨겨 땅 단면 층을 드러낸다 */
-  private mini = false;
   private readonly landDistance: number;
-  /** 받침 가장자리에서 자를 재질(받침 자신은 빼고)과 그 네 평면 */
+  /** 단면 가장자리에서 자를 재질(단면 자신은 빼고)과 그 네 평면 */
   private readonly clipped = new Set<THREE.Material>();
   private readonly clipPlanes = [
     new THREE.Plane(new THREE.Vector3(1, 0, 0), TILE_HALF + 0.02),
@@ -92,7 +87,7 @@ export abstract class Diorama implements Stage {
   private readonly water = riverMaterial();
   private readonly still = riverMaterial(true);
   private readonly falls: Waterfall[] = [];
-  /** 밤 불빛 자리(이 테마 기준 좌표)와, 디오라마 모양에서도 켜 두는 받침 안쪽 것 */
+  /** 밤 불빛 자리(이 테마 기준 좌표)와, 미니어처 모양에서도 켜 두는 타일 안쪽 것 */
   private readonly lamps: THREE.Vector3[] = [];
   private lampsInside: THREE.Vector3[] = [];
   private lampsBaked = false;
@@ -116,8 +111,8 @@ export abstract class Diorama implements Stage {
     loadModel(`models/${name}.glb`, (root) => {
       // 다 받기 전에 다른 테마로 넘어가 해제됐으면 받은 것을 바로 버린다
       if (this.disposed) return disposeTree(root);
-      // 먼 풍경·받침은 라이트맵 자리가 없으므로 재질을 따로 둔다(가운데 땅과 같은 재질을 쓰면 라이트맵 엉뚱한 곳을 읽는다).
-      // 받침은 가장자리에서 잘리지 않게 먼 풍경과도 따로
+      // 먼 풍경·단면은 라이트맵 자리가 없으므로 재질을 따로 둔다(가운데 땅과 같은 재질을 쓰면 라이트맵 엉뚱한 곳을 읽는다).
+      // 단면은 가장자리에서 잘리지 않게 먼 풍경과도 따로
       const far = new Map<THREE.Material, THREE.MeshStandardMaterial>();
       const stand = new Map<THREE.Material, THREE.MeshStandardMaterial>();
       root.traverse((o) => {
@@ -162,7 +157,7 @@ export abstract class Diorama implements Stage {
       for (const [x, y, z] of layout.lights ?? []) this.lamps.push(new THREE.Vector3(x, y, z));
       this.lampsInside = this.lamps.filter((p) => Math.max(Math.abs(p.x), Math.abs(p.z)) <= TILE_HALF);
       this.lampsBaked = layout.lampsBaked === true;
-      // 맨 위 물체마다: 받침, 또는 디오라마 모양에서 숨길 것(먼 풍경, 가운데가 타일 밖인 것)
+      // 맨 위 물체마다: 단면, 또는 미니어처 모양에서 숨길 것(먼 풍경, 가운데가 타일 밖인 것)
       const box = new THREE.Box3();
       const c = new THREE.Vector3();
       root.updateMatrixWorld(true);
@@ -179,7 +174,7 @@ export abstract class Diorama implements Stage {
         this.smoke = { fx: new Smoke(rng, 60, 1.4), at: new THREE.Vector3(...layout.smoke) };
         this.group.add(this.smoke.fx.points);
       }
-      // 받침 밖으로 걸친 것(나무 가지·길 끝 등)을 자를 재질: 받침과 물(셰이더 재질) 말고 모두
+      // 타일 밖으로 걸친 것(나무 가지·길 끝 등)을 자를 재질: 단면과 물(셰이더 재질) 말고 모두
       root.traverse((o) => {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh || o.name.startsWith('case_')) return;
@@ -193,25 +188,15 @@ export abstract class Diorama implements Stage {
     });
   }
 
-  /** 디오라마 모양(true) / 지평선까지 이어진 땅(false) */
+  /** 미니어처 모양(true) / 지평선까지 이어진 땅(false) */
   setCase(on: boolean): void {
     this.cased = on;
-    // 받침까지 화면에 들어오게 조금 물러난다
+    // 단면까지 화면에 들어오게 조금 물러난다
     this.view.distance = this.landDistance * (on ? 1.4 : 1);
     for (const o of this.outside) o.visible = !on;
-    this.showCase();
+    for (const o of this.caseParts) o.visible = on;
     for (const m of this.clipped) m.clippingPlanes = on ? this.clipPlanes : null;
     this.onCase(on);
-  }
-
-  /** 미니어처 모양(받침 위 단면만, 나무 받침 없이). 받침 모양(setCase(true))일 때만 보인다 */
-  setMini(on: boolean): void {
-    this.mini = on;
-    this.showCase();
-  }
-
-  private showCase(): void {
-    for (const o of this.caseParts) o.visible = this.cased && !(this.mini && isPlinth(o));
   }
 
   /** 모양이 바뀔 때(테마별로 타일 밖을 다니는 것 정리) */
@@ -262,7 +247,7 @@ export abstract class Diorama implements Stage {
   groundHeight(x: number, z: number): number {
     const g = this.ground;
     if (!g) return 0;
-    // 디오라마 모양: 받침 밖은 땅이 없다(카메라가 아래에서 올려다볼 수 있게)
+    // 미니어처 모양: 타일 밖은 땅이 없다(카메라가 아래에서 올려다볼 수 있게)
     if (this.cased && Math.max(Math.abs(x), Math.abs(z)) > TILE_HALF + 1) return -Infinity;
     const f = (v: number) => THREE.MathUtils.clamp(((v + g.half) / (2 * g.half)) * (g.n - 1), 0, g.n - 1.001);
     const fx = f(x);

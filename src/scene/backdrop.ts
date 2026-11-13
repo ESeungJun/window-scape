@@ -4,7 +4,7 @@ import type { Env } from './env';
 /**
  * 미니어처 모양의 배경. 하늘 대신 화면 전체에 깔리는 판 하나를 셰이더로 그린다(그리기 호출 1, 텍스처 없음).
  *  - 그라데이션: 판 뒤가 은은하게 밝고 가장자리로 갈수록 짙어진다. 색은 지금 하늘(아침 복숭아, 낮 하늘, 노을, 밤 남색)에서 뽑는다
- *  - 그림자: 받침 바닥 아래 보이지 않는 바닥에 진 것처럼 흐린 타원을 깐다(판이 먼저 그려져 깊이 검사로 가려지므로 판 둘레로만 보인다)
+ *  - 그림자: 판 바닥 아래 보이지 않는 바닥에 진 것처럼 흐린 타원을 깐다(판이 먼저 그려져 깊이 검사로 가려지므로 판 둘레로만 보인다)
  *  - 빛 알갱이: 낮에는 천천히 떠다니는 먼지, 밤에는 반짝이는 별과 반딧불
  * world.ts 가 미니어처일 때만 보이게 하고 프레임마다 update 를 부른다.
  */
@@ -54,7 +54,7 @@ const FRAGMENT = /* glsl */ `
     float d = length(p - vec2(glow.x * aspect, glow.y));
     vec3 col = mix(center, edge, smoothstep(0.0, 1.35, d));
     col *= 1.0 - 0.25 * smoothstep(0.9, 1.8, length(vec2(ndc.x * 1.1, ndc.y)));
-    // 2. 받침 그림자
+    // 2. 판 그림자
     vec2 s = (ndc - shadow.xy) / shadow.zw;
     col *= 1.0 - shadowAmt * (1.0 - smoothstep(0.3, 1.0, length(s)));
     // 3. 빛 알갱이: 큰 것은 느리게 위로, 작은 것은 더 느리게(멀어 보이게). 밤에는 반짝임이 커진다
@@ -122,7 +122,7 @@ export class Backdrop {
 
   /**
    * @param center 판 가운데(월드). 그라데이션의 밝은 곳이 이 뒤에 온다
-   * @param foot 받침 바닥 가운데(월드)와 반폭. 모르면 null(그림자를 그리지 않는다)
+   * @param foot 판 바닥 가운데(월드)와 반폭. 모르면 null(그림자를 그리지 않는다)
    */
   update(dt: number, env: Env, flash: number, camera: THREE.PerspectiveCamera, center: THREE.Vector3, foot: { at: THREE.Vector3; half: number } | null, still: boolean): void {
     const u = this.u;
@@ -143,7 +143,7 @@ export class Backdrop {
     // 밝은 곳: 판 가운데보다 조금 위(판이 화면 아래쪽을 차지하므로 뒤쪽 하늘이 빛나 보이게)
     this.tmp.copy(center).project(camera);
     u.glow.value.set(this.tmp.x, this.tmp.y + 0.15);
-    // 그림자: 받침 바닥 가운데와 그 옆 한 점을 화면에 찍어 반지름을 잰다. 세로는 내려다보는 각도만큼 눌린다
+    // 그림자: 판 바닥 가운데와 그 옆 한 점을 화면에 찍어 반지름을 잰다. 세로는 내려다보는 각도만큼 눌린다
     if (foot) {
       const pitch = Math.max(0.15, -camera.getWorldDirection(this.tmp2).y);
       this.tmp.copy(foot.at).project(camera);

@@ -233,7 +233,7 @@ j.location.z = LEVEL + 0.04
 bt = jb + Vector((math.cos(ja), math.sin(ja))) * 1.3 + Vector((-math.sin(ja), math.cos(ja))) * -0.55
 o = grow(look.rowboat('boat_0', bt.x, bt.y, LEVEL - 0.03, ja + 0.1), 1.4)
 
-# 바위섬 등대(타일 밖이라 먼 풍경 far_: 디오라마 모양에서는 숨는다)
+# 바위섬 등대(타일 밖이라 먼 풍경 far_: 미니어처 모양에서는 숨는다)
 grow(lighthouse(ISLET.x, ISLET.y + 0.1), 1.05).name = 'far_lighthouse'
 for k in range(10):
     a = k / 10 * math.tau

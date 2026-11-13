@@ -237,7 +237,7 @@ function attach(root: THREE.Object3D, tex: THREE.Texture): void {
     // 물처럼 따로 그리는 셰이더 재질은 건너뛴다
     if (done.has(m) || !m.isMeshStandardMaterial) return;
     done.add(m);
-    // 먼 풍경·받침은 이미 흰 라이트맵을 받았다
+    // 먼 풍경·단면은 이미 흰 라이트맵을 받았다
     if (m.lightMap) return;
     use(m, tex);
   });

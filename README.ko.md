@@ -43,8 +43,24 @@ Blender랑 Three.js로 만든 작은 섬이 실제 날씨에 맞춰 바뀌는 �
 움직이는 성은 지브리 느낌을 좋아해서 넣긴 했는데요,
 영화 속 성을 그대로 옮기면 안 되니까 '네 발로 걷는 고철 성'이라는 발상만 가져와서 따로 디자인했습니다.
 
-하늘섬을 뺀 네 테마는 설정의 '모양'에서 지평선까지 이어진 땅 대신 나무 받침에 올린 디오라마로도 볼 수 있어요.
-'미니어처'를 고르면 같은 받침을 망원 렌즈로 내려다보듯 짙은 남색 배경 위에 올리고, 채도 높은 툰 색감과 거품선이 그려진 물로 보여 줘요.
+## 미니어처
+
+하늘섬을 뺀 네 테마는 설정의 '모양'에서 지평선까지 이어진 땅(위 테마 사진들) 대신 '미니어처'로 볼 수 있어요.
+
+- 풍경을 네모나게 잘라 보드게임 판처럼 망원 렌즈로 내려다봐요. 잘린 면에는 겉흙·자갈층·암반 세 층의 땅 단면이 보여요.
+- 원근이 줄고, 채도 높은 툰 색감에 그늘은 보랏빛, 물에는 물가 거품선과 물결선이 그려져요.
+  배경은 시간대 따라 아침엔 복숭아빛, 낮엔 푸른 회색, 노을엔 분홍빛, 밤엔 남색으로 바뀌고, 낮엔 먼지가, 밤엔 별과 반딧불이 떠다녀요.
+
+<table>
+  <tr>
+    <td align="center" width="50%"><b>아침</b><br><img src="docs/images/shape-mini-morning.jpg" alt="아침 햇살의 숲 미니어처"></td>
+    <td align="center" width="50%"><b>낮</b><br><img src="docs/images/shape-mini-day.jpg" alt="미니어처로 내려다본 해안도로"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>노을</b><br><img src="docs/images/shape-mini-evening.jpg" alt="노을 진 움직이는 성 미니어처"></td>
+    <td align="center"><b>밤</b><br><img src="docs/images/shape-mini-night.jpg" alt="별이 뜬 밤의 피렌체 도시 미니어처"></td>
+  </tr>
+</table>
 
 ## 날씨에 따라 바뀌는 것들
 
@@ -112,7 +128,7 @@ npm run tauri dev                    # 데스크톱 위젯 (처음 한 번 Rust 
 npm run build                        # 타입 검사 + 웹 빌드
 npm test                             # 날씨 코드·시간대·재시도 같은 순수 로직 테스트 (node --test)
 npm run models:optimize -- <입력> <출력>  # glb 후처리: 닫힌 도형 한 면 처리, 정점 병합, Draco 재압축
-blender -b -P tools/blender/drive.py -- <폴더> case && node tools/gltf/swap-case.mjs public/models/drive.glb <폴더>/drive_case.glb  # 받침만 다시 만들기(라이트맵은 그대로)
+blender -b -P tools/blender/drive.py -- <폴더> case && node tools/gltf/swap-case.mjs public/models/drive.glb <폴더>/drive_case.glb  # 땅 단면만 다시 만들기(라이트맵은 그대로)
 ```
 
 웹 버전은 `F` 키나 `?showcase` 주소로 둥근 창 안에 화면을 담는 쇼케이스 모드를 켤 수 있어요.
@@ -130,6 +146,9 @@ blender -b -P tools/blender/drive.py -- <폴더> case && node tools/gltf/swap-ca
 | `src/scene/world.ts` | 렌더러·카메라·조명, 테마 전환, 프레임 루프 |
 | `src/scene/explore.ts` | 들어가기 모드: 걷는 캐릭터와 3인칭 카메라 |
 | `src/scene/{env,sky,clouds,precipitation}.ts` | 시간대·날씨·계절 연출, 하늘, 구름, 비·눈·번개·무지개 |
+| `src/scene/backdrop.ts` | 미니어처 배경: 시간대 그라데이션, 판 그림자, 먼지·별·반딧불 |
+| `src/scene/pace.ts` | 화질·절전 단계에 따른 그리기 빈도와 픽셀 상한, 큰 창 자동 절전 |
+| `tools/gltf/{optimize,swap-case}.mjs` | glb 후처리, 땅 단면(`case_*`)만 갈아 끼우기 |
 | `src/data/weather.ts` | Open-Meteo 예보·지명 검색, 날씨 코드 변환, 현지 시간대·계절 |
 | `src/ui/*` | 현재 날씨, 예보, 보기 설정, 위젯 설정(배치·투명도·업데이트) |
 | `src-tauri/` | Tauri 앱: 메뉴 막대, 창 배치, 현재 위치(CoreLocation), 업데이터 |

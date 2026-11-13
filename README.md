@@ -42,8 +42,24 @@ so WINDOW SCAPE is a native desktop widget for macOS and Windows. It started as 
 The Walking Castle is an original design — a ramshackle castle on mechanical legs —
 inspired by the idea of a moving castle, not a copy of any film's design.
 
-Apart from the sky island, each world can also be shown as a diorama on a wooden plinth instead of land running to the horizon (Settings → Shape).
-Pick *Miniature* to see the same plinth through a long lens on a dark navy backdrop, with saturated toon colors and water drawn with foam lines.
+## Miniature
+
+Apart from the sky island, every world can be shown as a *Miniature* instead of land running to the horizon (Settings → Shape).
+
+- The scene is cut into a square tile and seen like a board game through a long lens, with a cross-section of topsoil, gravel and bedrock on its sides.
+- Flattened perspective, saturated toon colors with violet shade, and water drawn with shoreline foam and ripple lines.
+  The backdrop follows the time of day (peach in the morning, blue-grey by day, pink at sunset, navy at night), with drifting dust by day and stars and fireflies at night.
+
+<table>
+  <tr>
+    <td align="center" width="50%"><b>Morning</b><br><img src="docs/images/shape-mini-morning.jpg" alt="Forest miniature in morning light"></td>
+    <td align="center" width="50%"><b>Day</b><br><img src="docs/images/shape-mini-day.jpg" alt="Coastal Drive seen as a miniature"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Sunset</b><br><img src="docs/images/shape-mini-evening.jpg" alt="Walking Castle miniature at sunset"></td>
+    <td align="center"><b>Night</b><br><img src="docs/images/shape-mini-night.jpg" alt="Florence Town miniature under the stars"></td>
+  </tr>
+</table>
 
 ## It follows the sky
 
@@ -69,6 +85,10 @@ Pick *Miniature* to see the same plinth through a long lens on a dark navy backd
 - **Opacity** — fade it down to 30% for a subtle ambient view.
 - **Responsive** — resize freely; small shows just the scene, larger adds the 7-day bar and hourly chart.
 - **Step inside** — tap the walker icon to drop a tiny character into the scene and wander around in third person (click to walk, WASD, Space to jump; click the Ferris wheel in Florence to ride it). Still experimental.
+- **Effects** — toggle window glass (raindrops, fog and frost you can wipe off by dragging), wind, cloud shadows, parallax, gaze lock and power saving one by one under Settings → Effects.
+  In the desktop app, a large window automatically draws in power-saving mode (fewer frames while idle, one quality step down) to keep the fans quiet.
+- **Tap around** — the windmill, trees, rabbits and cars react when you click them. Open a day and drag the hourly chart to preview the scene at that hour.
+- **Rests when hidden** — drawing pauses when the window is covered or hidden, to save battery.
 - **Auto-update** — new versions download and install themselves.
 - **And more** — current-location weather (Mac only; on Windows pick a city), city search, launch at login, and optional waterfall and rain ambience.
 
@@ -105,7 +125,7 @@ npm run tauri dev                    # desktop widget (needs Rust once: https://
 npm run build                        # type-check + web build
 npm test                             # pure-logic tests (node --test)
 npm run models:optimize -- <in> <out> # glb post-processing: single-sided closed meshes, weld, Draco re-compress
-blender -b -P tools/blender/drive.py -- <dir> case && node tools/gltf/swap-case.mjs public/models/drive.glb <dir>/drive_case.glb  # rebuild only the plinth (no re-bake)
+blender -b -P tools/blender/drive.py -- <dir> case && node tools/gltf/swap-case.mjs public/models/drive.glb <dir>/drive_case.glb  # rebuild only the ground cross-section (no re-bake)
 ```
 
 In the web version, press `F` or open `?showcase` to frame the scene in a rounded window.
@@ -123,6 +143,9 @@ In the web version, press `F` or open `?showcase` to frame the scene in a rounde
 | `src/scene/world.ts` | Renderer, camera, lights, theme switching, frame loop |
 | `src/scene/explore.ts` | Step-inside mode: the walking character and third-person camera |
 | `src/scene/{env,sky,clouds,precipitation}.ts` | Time/weather/season blending, sky, clouds, rain/snow/lightning/rainbow |
+| `src/scene/backdrop.ts` | Miniature backdrop: time-of-day gradient, tile shadow, dust/stars/fireflies |
+| `src/scene/pace.ts` | Frame rate and pixel budget per quality/power level, auto power saving for large windows |
+| `tools/gltf/{optimize,swap-case}.mjs` | glb post-processing, swapping just the ground cross-section (`case_*`) |
 | `src/data/weather.ts` | Open-Meteo forecast and geocoding, weather codes, local time and season |
 | `src/ui/*` | Current weather, forecast, view settings, widget settings (layer, opacity, updates) |
 | `src-tauri/` | Tauri app: menu bar, window layering, current location (CoreLocation), updater |

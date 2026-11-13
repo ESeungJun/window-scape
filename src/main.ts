@@ -151,7 +151,8 @@ function loadSavedTheme(): Theme {
 function loadSavedShape(): Shape {
   try {
     const saved = localStorage.getItem(KEYS.shape);
-    if (saved === 'case' || saved === 'mini') return saved;
+    // 'case'(1.0.0 까지 있던 디오라마 모양)는 미니어처로 옮긴다
+    if (saved === 'case' || saved === 'mini') return 'mini';
   } catch {
     // 저장소를 못 쓰면 기본 모양
   }
