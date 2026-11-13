@@ -390,15 +390,13 @@ def heightmap(hfn, half=40.0, n=81):
     return {'half': half, 'n': n, 'h': [round(max(hfn(x, -z), TOPS.get((round(x), round(-z)), -9.0)), 2) for x in g for z in g]}
 
 
-WALNUT = mat('walnut', '#6b4630', 0.55, 0.08, 6.0)
-BRASS = mat('brass', '#c9a24e', 0.3, 0.03)
 
 
 # 미니어처 단면 층(위에서 아래로): 겉흙(기존 절벽 띠) → 자갈 섞인 흙 → 짙은 보랏빛 암반. 레퍼런스 디오라마의 잘라 낸 땅 단면
 GRAVEL = mat('case_gravel', '#b49a7a', 0.95, 0.14, 7.0)
 BEDROCK = lib.banded('case_bedrock', ['#5a5370', '#4d4762', '#625a78', '#544d69'], 2.4, 1.6, 0.4)
 PEBBLE = mat('case_pebble', '#9d958c', 0.9, 0.12, 6.0)
-# 암반 바닥: 받침(case_plinth) 바닥과 같은 높이라, 디오라마 모양에서는 받침 속에 숨는다
+# 암반 두께: 자갈층 아래로 내려가는 깊이
 STRATA_DEPTH = 1.6
 
 
@@ -440,9 +438,8 @@ def pebbles(name, edge, band, W, D, count=130):
 
 
 def case(W, D, hfn, water=None):
-    """받침 모양(앱 설정 '디오라마'·'미니어처')일 때만 보이는 단면(case_*: 굽지 않는다). 지평선 모양에서는 앱이 숨긴다.
-    타일 가장자리 땅 높이에서 곧게 내린 겉흙 + 자갈층 + 암반, 물이 있으면 물 단면.
-    디오라마는 그 아래(암반 높이)에 호두나무 받침·놋쇠 띠·발·이름판을 씌우고, 미니어처는 받침을 숨겨 층을 드러낸다"""
+    """미니어처 모양(앱 설정)일 때만 보이는 땅 단면(case_*: 굽지 않는다). 지평선 모양에서는 앱이 숨긴다.
+    타일 가장자리 땅 높이에서 곧게 내린 겉흙 + 자갈층 + 암반(바닥 면까지), 물이 있으면 물 단면"""
     step = 0.2
     nx, ny = round(W / step), round(D / step)
     edge = ([(-W / 2 + step * i, -D / 2) for i in range(nx)] + [(W / 2, -D / 2 + step * i) for i in range(ny)]
@@ -477,7 +474,3 @@ def case(W, D, hfn, water=None):
             finish(new_obj('case_water', bm), WATER_SIDE, smooth=False)
         else:
             bm.free()
-    lib.box('case_plinth', (W + 1.6, D + 1.6, 1.6), (0, 0, z0 - 0.8), WALNUT, bevel=0.12)
-    lib.box('case_trim', (W + 1.75, D + 1.75, 0.12), (0, 0, z0 - 0.08), BRASS, bevel=0.03)
-    lib.box('case_foot', (W + 2.2, D + 2.2, 0.35), (0, 0, z0 - 1.75), WALNUT, bevel=0.1)
-    lib.box('case_plate', (4.0, 0.08, 0.6), (0, -D / 2 - 0.84, z0 - 0.8), BRASS, bevel=0.05)
