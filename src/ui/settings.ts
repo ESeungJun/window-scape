@@ -20,7 +20,7 @@ type AnyGroup = { [K in keyof ViewOptions]: Group<K> }[keyof ViewOptions];
 
 const GROUPS: AnyGroup[] = [
   { key: 'theme', title: '테마', items: THEMES },
-  { key: 'shape', title: '모양', items: [['land', '지평선까지'], ['case', '디오라마'], ['mini', '미니어처']] },
+  { key: 'shape', title: '모양', items: [['land', '지평선까지'], ['mini', '미니어처']] },
   { key: 'time', title: '시간대', items: [['live', '실시간'], ['morning', '아침'], ['day', '낮'], ['evening', '저녁'], ['night', '밤']] },
   {
     key: 'cond',

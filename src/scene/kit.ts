@@ -7,7 +7,7 @@ import { applyWeather, openSky } from './baked';
 
 /**
  * 테마들이 함께 쓰는 것: 하늘섬 윤곽, 강 띠·폭포, 바람 흔들림, 둘레를 떠다니는 작은 섬, 계절 공용 재질.
- * 섬과 디오라마 모양은 Blender 모델(tools/blender)이 맡는다.
+ * 섬과 미니어처 모양은 Blender 모델(tools/blender)이 맡는다.
  */
 export const R = 6;
 export const TOP = 0.25;
@@ -191,7 +191,7 @@ function miniIsland(rng: Rng, size: number): THREE.Group {
 /** 테마 하나 = 풍경 하나(떠 있는 섬 또는 지평선까지 이어진 땅). 하늘·구름·날씨·조명은 World 가 공통으로 맡는다. */
 export interface Stage {
   readonly group: THREE.Group;
-  /** floating: 구름바다 위에 뜬 섬(디오라마 모양 포함) / ground: 지평선까지 이어진 땅(또는 바다) */
+  /** floating: 구름바다 위에 뜬 섬(미니어처 모양 포함) / ground: 지평선까지 이어진 땅(또는 바다) */
   readonly kind: 'floating' | 'ground';
   /** 카메라가 바라볼 점과 처음 거리 */
   readonly view: { target: THREE.Vector3; distance: number };
@@ -201,10 +201,8 @@ export interface Stage {
   groundHeight?(x: number, z: number): number;
   /** 빛을 구운 장면(라이트맵 + 하늘빛). 실시간 반구광·오클루전 대신 구운 빛을 쓴다 */
   readonly baked?: boolean;
-  /** 디오라마 모양으로(땅 테마만): 둘레 땅 대신 받침에 올려 구름바다 위에 띄운다 */
+  /** 미니어처 모양으로(땅 테마만): 둘레 땅을 숨기고 네모 땅을 잘라 단면 층을 드러낸다 */
   setCase?(on: boolean): void;
-  /** 미니어처 모양으로(받침 모양일 때만): 나무 받침을 숨겨 땅 단면 층을 드러낸다 */
-  setMini?(on: boolean): void;
   /** 움직이는 것(자동차·걷는 성)의 그림자가 끊겨 보이지 않을 그림자 갱신 횟수(초당). 없으면 나무 흔들림 기준 */
   readonly moverHz?: number;
   /** 누른 물체가 한 번 반응한다(풍차가 빨리 돌고 나무가 흔들린다). 반응한 것이 있으면 true */

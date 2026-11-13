@@ -42,23 +42,22 @@ so WINDOW SCAPE is a native desktop widget for macOS and Windows. It started as 
 The Walking Castle is an original design — a ramshackle castle on mechanical legs —
 inspired by the idea of a moving castle, not a copy of any film's design.
 
-## Land · Diorama · Miniature
+## Miniature
 
-Apart from the sky island, every world can be viewed three ways (Settings → Shape).
+Apart from the sky island, every world can be shown as a *Miniature* instead of land running to the horizon (Settings → Shape).
 
-- **Land** — the scene runs all the way to the horizon (the theme shots above).
-- **Diorama** — the scene is cut out and set on a wooden plinth, with a cross-section of topsoil, gravel and bedrock showing above it.
-- **Miniature** — look down on it like a board game through a long lens: flattened perspective, saturated toon colors with violet shade, and water drawn with shoreline foam and ripple lines.
+- The scene is cut into a square tile and seen like a board game through a long lens, with a cross-section of topsoil, gravel and bedrock on its sides.
+- Flattened perspective, saturated toon colors with violet shade, and water drawn with shoreline foam and ripple lines.
   The backdrop follows the time of day (peach in the morning, blue-grey by day, pink at sunset, navy at night), with drifting dust by day and stars and fireflies at night.
 
 <table>
   <tr>
-    <td align="center" width="50%"><b>Diorama</b><br><img src="docs/images/shape-diorama.jpg" alt="Coastal Drive diorama on a wooden plinth"></td>
-    <td align="center" width="50%"><b>Miniature · day</b><br><img src="docs/images/shape-mini-day.jpg" alt="Coastal Drive seen as a miniature"></td>
+    <td align="center" width="50%"><b>Morning</b><br><img src="docs/images/shape-mini-morning.jpg" alt="Forest miniature in morning light"></td>
+    <td align="center" width="50%"><b>Day</b><br><img src="docs/images/shape-mini-day.jpg" alt="Coastal Drive seen as a miniature"></td>
   </tr>
   <tr>
-    <td align="center"><b>Miniature · sunset</b><br><img src="docs/images/shape-mini-evening.jpg" alt="Walking Castle miniature at sunset"></td>
-    <td align="center"><b>Miniature · night</b><br><img src="docs/images/shape-mini-night.jpg" alt="Florence Town miniature under the stars"></td>
+    <td align="center"><b>Sunset</b><br><img src="docs/images/shape-mini-evening.jpg" alt="Walking Castle miniature at sunset"></td>
+    <td align="center"><b>Night</b><br><img src="docs/images/shape-mini-night.jpg" alt="Florence Town miniature under the stars"></td>
   </tr>
 </table>
 
@@ -126,7 +125,7 @@ npm run tauri dev                    # desktop widget (needs Rust once: https://
 npm run build                        # type-check + web build
 npm test                             # pure-logic tests (node --test)
 npm run models:optimize -- <in> <out> # glb post-processing: single-sided closed meshes, weld, Draco re-compress
-blender -b -P tools/blender/drive.py -- <dir> case && node tools/gltf/swap-case.mjs public/models/drive.glb <dir>/drive_case.glb  # rebuild only the plinth (no re-bake)
+blender -b -P tools/blender/drive.py -- <dir> case && node tools/gltf/swap-case.mjs public/models/drive.glb <dir>/drive_case.glb  # rebuild only the ground cross-section (no re-bake)
 ```
 
 In the web version, press `F` or open `?showcase` to frame the scene in a rounded window.
@@ -144,9 +143,9 @@ In the web version, press `F` or open `?showcase` to frame the scene in a rounde
 | `src/scene/world.ts` | Renderer, camera, lights, theme switching, frame loop |
 | `src/scene/explore.ts` | Step-inside mode: the walking character and third-person camera |
 | `src/scene/{env,sky,clouds,precipitation}.ts` | Time/weather/season blending, sky, clouds, rain/snow/lightning/rainbow |
-| `src/scene/backdrop.ts` | Miniature backdrop: time-of-day gradient, plinth shadow, dust/stars/fireflies |
+| `src/scene/backdrop.ts` | Miniature backdrop: time-of-day gradient, tile shadow, dust/stars/fireflies |
 | `src/scene/pace.ts` | Frame rate and pixel budget per quality/power level, auto power saving for large windows |
-| `tools/gltf/{optimize,swap-case}.mjs` | glb post-processing, swapping just the plinth (`case_*`) |
+| `tools/gltf/{optimize,swap-case}.mjs` | glb post-processing, swapping just the ground cross-section (`case_*`) |
 | `src/data/weather.ts` | Open-Meteo forecast and geocoding, weather codes, local time and season |
 | `src/ui/*` | Current weather, forecast, view settings, widget settings (layer, opacity, updates) |
 | `src-tauri/` | Tauri app: menu bar, window layering, current location (CoreLocation), updater |

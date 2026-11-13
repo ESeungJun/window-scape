@@ -454,7 +454,7 @@ export class Explorer {
       const now = obj.getWorldPosition(this.v2);
       car.vel.subVectors(now, car.last).divideScalar(Math.max(dt, 1e-3));
       car.last.copy(now);
-      // 디오라마 모양에서 쉬는 차는 숨긴 채 제자리에 남는다
+      // 미니어처 모양에서 쉬는 차는 숨긴 채 제자리에 남는다
       if (!obj.visible) continue;
       const p = obj.worldToLocal(group.localToWorld(this.v1.copy(pos)));
       const r = BODY_RADIUS / obj.getWorldScale(this.v2).x;
@@ -563,7 +563,7 @@ export class Explorer {
 
   private inBounds(x: number, z: number): boolean {
     const s = this.stage!;
-    // 받침에 올린 디오라마: 받침 안에서만
+    // 미니어처: 타일 안에서만
     if (s.setCase && s.kind === 'floating') return Math.max(Math.abs(x), Math.abs(z)) < TILE_HALF - 0.15;
     if (s.kind === 'ground') return Math.hypot(x, z) < LAND_RADIUS;
     // 하늘섬은 땅 끝(광선이 비면)에서 막힌다

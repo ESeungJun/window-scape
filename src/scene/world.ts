@@ -16,8 +16,8 @@ import type { Explorer } from './explore';
 
 export type Quality = 'auto' | 'low' | 'medium' | 'high';
 
-/** 땅 테마의 모양: 지평선까지 이어진 땅 / 받침 위 디오라마(구름바다) / 미니어처(망원으로 내려다본 받침, 단색 배경, 툰 색감) */
-export type Shape = 'land' | 'case' | 'mini';
+/** 땅 테마의 모양: 지평선까지 이어진 땅 / 미니어처(망원으로 내려다본 잘라 낸 땅, 단색 배경, 툰 색감) */
+export type Shape = 'land' | 'mini';
 
 /** 켜고 끌 수 있는 연출. 저장은 main.ts 가 맡는다 */
 export interface Effects {
@@ -51,7 +51,7 @@ const BASE_FOV = 38;
 const MINI_FOV = 15;
 /** 같은 크기로 보이게 하려면 카메라를 이만큼 멀리 둬야 한다(화각 절반의 탄젠트 비) */
 const MINI_LENS = Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2)) / Math.tan(THREE.MathUtils.degToRad(MINI_FOV / 2));
-/** 미니어처 처음 거리: 받침을 화면에 크게 담는다(디오라마는 구름바다까지 보이게 한 발 물러서 있다) */
+/** 미니어처 처음 거리: 받침을 화면에 크게 담는다 */
 const MINI_FRAME = 0.88;
 /** 미니어처는 받침 아래 땅 단면까지 담으므로 보는 점을 그만큼 내린다(판이 아래쪽 예보 막대에 가리지 않게) */
 const MINI_DROP = 1.1;
@@ -98,17 +98,15 @@ export class World {
   private stage: Stage;
   private readonly glass = new Glass();
   private effects: Effects = { ...DEFAULT_EFFECTS };
-  /** 땅 테마를 받침 위에 올려 볼지(디오라마·미니어처) */
+  /** 사용자가 미니어처 모양을 골랐는지. 실제로 켜지는 건 땅 테마일 때뿐(mini) */
   private cased = false;
-  /** 사용자가 미니어처 모양을 골랐는지. 실제로 켜지는 건 받침이 있는 땅 테마일 때뿐(mini) */
-  private miniWanted = false;
   private mini = false;
   /** 미니어처일 때 카메라 거리 배율(아니면 1) */
   private lens = 1;
   private readonly autoLowPower: boolean;
   /** 지금 절전으로 그리는지(설정, 또는 큰 창 자동 절전). 창 크기·설정이 바뀔 때 applyQuality 가 정한다 */
   private lowPower = false;
-  /** 미니어처 배경(그라데이션·받침 그림자·빛 알갱이) */
+  /** 미니어처 배경(그라데이션·판 그림자·빛 알갱이) */
   private readonly backdrop = new Backdrop();
   /** 지금 테마 받침의 바닥 가운데와 반폭. 모델을 다 받은 뒤 찾는다(못 찾으면 null) */
   private foot: { at: THREE.Vector3; half: number } | null = null;
@@ -170,7 +168,7 @@ export class World {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     // 그림자 맵은 해·장면이 움직였을 때만 다시 그린다(frame 에서 정한다)
     this.renderer.shadowMap.autoUpdate = false;
-    // 디오라마 모양: 받침 가장자리에서 장면을 자른다(재질별 clippingPlanes)
+    // 미니어처 모양: 타일 가장자리에서 장면을 자른다(재질별 clippingPlanes)
     this.renderer.localClippingEnabled = true;
     container.appendChild(this.renderer.domElement);
     this.skyLight = new SkyLight(this.renderer);
@@ -335,16 +333,13 @@ export class World {
     this.applyStageView();
   }
 
-  /** 땅 테마의 모양. 하늘섬은 모양이 하나라 무시한다(받침이 없다) */
+  /** 땅 테마의 모양. 하늘섬은 모양이 하나라 무시한다(단면이 없다) */
   setShape(shape: Shape): void {
-    const on = shape !== 'land';
-    const mini = shape === 'mini';
-    if (on === this.cased && mini === this.miniWanted) return;
+    const on = shape === 'mini';
+    if (on === this.cased) return;
     this.leave(true);
-    // 디오라마 ↔ 미니어처는 받침은 그대로라 테마에 다시 알리지 않는다
-    if (on !== this.cased) this.stage.setCase?.(on);
+    this.stage.setCase?.(on);
     this.cased = on;
-    this.miniWanted = mini;
     // 하늘섬은 모양이 없으니 시점을 건드리지 않는다(값만 기억해 두고 땅 테마로 가면 쓴다)
     if (!this.stage.setCase) return;
     this.applyStageView();
@@ -355,15 +350,14 @@ export class World {
     this.clearLean();
     this.shadowAge = 1e9;
     const floating = this.stage.kind === 'floating';
-    // 떠다니는 작은 섬은 하늘섬에만(디오라마 받침 둘레에는 띄우지 않는다)
+    // 떠다니는 작은 섬은 하늘섬에만(미니어처 둘레에는 띄우지 않는다)
     this.floaters.group.visible = floating && !this.stage.setCase;
     // 미니어처: 하늘·구름바다 대신 단색 배경(frame 에서 칠한다), 좁은 화각, 툰 색감
-    this.mini = this.miniWanted && this.cased && this.stage.setCase !== undefined;
+    this.mini = this.cased && this.stage.setCase !== undefined;
     this.lens = this.mini ? MINI_LENS : 1;
     // 하늘 구름도 숨긴다(좁은 화각에서는 화면 귀퉁이에 덩어리로만 걸린다). 구름 그늘은 셰이더라 그대로 흐른다
     this.sky.group.visible = this.clouds.group.visible = !this.mini;
     this.backdrop.mesh.visible = this.mini;
-    this.stage.setMini?.(this.mini);
     TOON_UNIFORM.value = this.mini ? 1 : 0;
     this.setFov(this.mini ? MINI_FOV : BASE_FOV);
     const c = this.controls;
@@ -399,11 +393,11 @@ export class World {
     c.update();
   }
 
-  /** 미니어처 받침 바닥(암반 case_bedrock, 옛 모델은 case_foot)의 가운데와 반폭. 모델은 늦게 오므로 찾을 때까지 프레임마다 다시 본다 */
+  /** 미니어처 단면 바닥(암반 case_bedrock)의 가운데와 반폭. 모델은 늦게 오므로 찾을 때까지 프레임마다 다시 본다 */
   private findFoot(): { at: THREE.Vector3; half: number } | null {
     if (this.footStage === this.stage && this.foot) return this.foot;
     this.footStage = this.stage;
-    const o = this.stage.group.getObjectByName('case_bedrock') ?? this.stage.group.getObjectByName('case_foot');
+    const o = this.stage.group.getObjectByName('case_bedrock');
     if (!o) return (this.foot = null);
     const box = new THREE.Box3().setFromObject(o);
     const size = box.getSize(new THREE.Vector3());
@@ -523,7 +517,7 @@ export class World {
   private poke(ndc: THREE.Vector2): void {
     if (!this.stage.poke) return;
     this.raycaster.setFromCamera(ndc, this.camera);
-    // 광선 검사는 숨긴 물체(디오라마 모양의 받침 밖 나무, 눈 올 때의 꽃)도 맞히므로 보이는 것만 본다.
+    // 광선 검사는 숨긴 물체(미니어처 모양의 타일 밖 나무, 눈 올 때의 꽃)도 맞히므로 보이는 것만 본다.
     // 맨 앞 물체가 반응하지 않으면(땅·집) 거기서 멈춘다: 가려진 뒤쪽 물체가 반응하면 이상하다
     const shown = (o: THREE.Object3D | null): boolean => {
       for (let p = o; p; p = p.parent) if (!p.visible) return false;
