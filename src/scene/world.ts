@@ -393,11 +393,11 @@ export class World {
     c.update();
   }
 
-  /** 미니어처 단면 바닥(암반 case_bedrock)의 가운데와 반폭. 모델은 늦게 오므로 찾을 때까지 프레임마다 다시 본다 */
+  /** 미니어처 단면(case_ground: 벽과 바닥이 한 덩어리)의 가운데와 반폭. 모델은 늦게 오므로 찾을 때까지 프레임마다 다시 본다 */
   private findFoot(): { at: THREE.Vector3; half: number } | null {
     if (this.footStage === this.stage && this.foot) return this.foot;
     this.footStage = this.stage;
-    const o = this.stage.group.getObjectByName('case_bedrock');
+    const o = this.stage.group.getObjectByName('case_ground');
     if (!o) return (this.foot = null);
     const box = new THREE.Box3().setFromObject(o);
     const size = box.getSize(new THREE.Vector3());
