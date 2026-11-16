@@ -331,7 +331,7 @@ tile.far_houses('far_town', items)
 
 setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
-tile.case(W, D, height, water=LEVEL)
+tile.case(W, D, height, water=LEVEL, paint=paint)
 layout = {
     'ground': tile.heightmap(hfar),
     # 길 중심선(양쪽 안개 속 먼 끝에서 끝난다)

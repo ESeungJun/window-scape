@@ -51,10 +51,12 @@ const BASE_FOV = 38;
 const MINI_FOV = 15;
 /** 같은 크기로 보이게 하려면 카메라를 이만큼 멀리 둬야 한다(화각 절반의 탄젠트 비) */
 const MINI_LENS = Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2)) / Math.tan(THREE.MathUtils.degToRad(MINI_FOV / 2));
-/** 미니어처 처음 거리: 받침을 화면에 크게 담는다 */
-const MINI_FRAME = 0.88;
-/** 미니어처는 받침 아래 땅 단면까지 담으므로 보는 점을 그만큼 내린다(판이 아래쪽 예보 막대에 가리지 않게) */
-const MINI_DROP = 1.1;
+/** 미니어처 처음 거리: 오르골 상자까지 화면에 담는다 */
+const MINI_FRAME = 1.05;
+/** 미니어처는 받침까지 담으므로 보는 점을 조금 내린다(판이 아래쪽 예보 막대에 가리지 않게) */
+const MINI_DROP = 1.7;
+/** 노출: 밝은 파스텔 색감(레퍼런스: 처음 받은 항구 디오라마). 모든 모양에 쓴다 */
+const EXPOSURE = 1.15;
 const AUTO_ROTATE_DELAY_MS = 6000;
 /** 들어가기 모드: 카메라가 캐릭터 뒤 위쪽에서 따라가는 거리·내려다보는 각도, 들어가고 나오는 데 걸리는 시간 */
 const EXPLORE_DISTANCE = 2.6;
@@ -72,6 +74,10 @@ const CLEAR_RAYS: [number, number][] = [[0, 0], [0.45, 0.3], [-0.45, 0.3], [0.45
 /** 렌더러·카메라·조명과 장면 구성 요소를 묶고 매 프레임 연출 값을 반영한다. */
 export class World {
   onFrame?: (env: Env) => void;
+  /** 미니어처(오르골) 모양이 실제로 켜져 있는지(땅 테마일 때만). 오르골 소리를 켜고 끄는 데 쓴다 */
+  get miniature(): boolean {
+    return this.mini;
+  }
   /** 들어가기 모드가 켜지거나 꺼질 때 */
   onExplore?: (on: boolean) => void;
   /** 들어가기 모드에서 탈것(대관람차)에 타거나 내릴 때 */
@@ -165,6 +171,7 @@ export class World {
     this.autoLowPower = autoLowPower;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
+    this.renderer.toneMappingExposure = EXPOSURE;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     // 그림자 맵은 해·장면이 움직였을 때만 다시 그린다(frame 에서 정한다)
     this.renderer.shadowMap.autoUpdate = false;
@@ -393,11 +400,11 @@ export class World {
     c.update();
   }
 
-  /** 미니어처 단면 바닥(암반 case_bedrock)의 가운데와 반폭. 모델은 늦게 오므로 찾을 때까지 프레임마다 다시 본다 */
+  /** 미니어처 나무 받침(case_plinth)의 가운데와 반폭. 모델은 늦게 오므로 찾을 때까지 프레임마다 다시 본다 */
   private findFoot(): { at: THREE.Vector3; half: number } | null {
     if (this.footStage === this.stage && this.foot) return this.foot;
     this.footStage = this.stage;
-    const o = this.stage.group.getObjectByName('case_bedrock');
+    const o = this.stage.group.getObjectByName('case_plinth');
     if (!o) return (this.foot = null);
     const box = new THREE.Box3().setFromObject(o);
     const size = box.getSize(new THREE.Vector3());

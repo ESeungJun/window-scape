@@ -46,8 +46,8 @@ inspired by the idea of a moving castle, not a copy of any film's design.
 
 Apart from the sky island, every world can be shown as a *Miniature* instead of land running to the horizon (Settings → Shape).
 
-- The scene is cut into a square tile and seen like a board game through a long lens, with a cross-section of topsoil, gravel and bedrock on its sides.
-- Flattened perspective, saturated toon colors with violet shade, and water drawn with shoreline foam and ripple lines.
+- The scene is cut into a square tile, set on a gold-trimmed music box and seen through a long lens. The wind-up key on its side turns slowly, and with sound on a small music-box tune plays.
+- Flattened perspective and water drawn with shoreline foam and ripple lines. Every shape uses soft pastel colors with light lavender shade.
   The backdrop follows the time of day (peach in the morning, blue-grey by day, pink at sunset, navy at night), with drifting dust by day and stars and fireflies at night.
 
 <table>
@@ -125,7 +125,7 @@ npm run tauri dev                    # desktop widget (needs Rust once: https://
 npm run build                        # type-check + web build
 npm test                             # pure-logic tests (node --test)
 npm run models:optimize -- <in> <out> # glb post-processing: single-sided closed meshes, weld, Draco re-compress
-blender -b -P tools/blender/drive.py -- <dir> case && node tools/gltf/swap-case.mjs public/models/drive.glb <dir>/drive_case.glb  # rebuild only the ground cross-section (no re-bake)
+blender -b -P tools/blender/drive.py -- <dir> case && node tools/gltf/swap-case.mjs public/models/drive.glb <dir>/drive_case.glb  # rebuild only the base under the dome (no re-bake)
 ```
 
 In the web version, press `F` or open `?showcase` to frame the scene in a rounded window.
@@ -145,7 +145,7 @@ In the web version, press `F` or open `?showcase` to frame the scene in a rounde
 | `src/scene/{env,sky,clouds,precipitation}.ts` | Time/weather/season blending, sky, clouds, rain/snow/lightning/rainbow |
 | `src/scene/backdrop.ts` | Miniature backdrop: time-of-day gradient, tile shadow, dust/stars/fireflies |
 | `src/scene/pace.ts` | Frame rate and pixel budget per quality/power level, auto power saving for large windows |
-| `tools/gltf/{optimize,swap-case}.mjs` | glb post-processing, swapping just the ground cross-section (`case_*`) |
+| `tools/gltf/{optimize,swap-case}.mjs` | glb post-processing, swapping just the base under the dome (`case_*`) |
 | `src/data/weather.ts` | Open-Meteo forecast and geocoding, weather codes, local time and season |
 | `src/ui/*` | Current weather, forecast, view settings, widget settings (layer, opacity, updates) |
 | `src-tauri/` | Tauri app: menu bar, window layering, current location (CoreLocation), updater |

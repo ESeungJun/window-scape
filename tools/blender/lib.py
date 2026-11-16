@@ -828,7 +828,15 @@ def export_glb(path, join=True, lightmap=None, size=2048, samples=512, layout=No
         if o.type != 'MESH':
             continue
         me = o.data
+        # 직접 칠한 꼭짓점 색('Paint', 예: 미니어처 단면)이 있으면 그대로 옮긴다
+        own = me.color_attributes.get('Paint')
+        own = [tuple(d.color[:3]) for d in own.data] if own else None
         attr = me.color_attributes.new('Col', 'BYTE_COLOR', 'CORNER')
+        if own:
+            for li, c in enumerate(own):
+                attr.data[li].color = (*c, 1)
+            me.color_attributes.active_color = attr
+            continue
         mw = o.matrix_world
         for poly in me.polygons:
             mname = me.materials[poly.material_index].name if me.materials else ''

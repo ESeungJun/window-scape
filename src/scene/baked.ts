@@ -31,11 +31,11 @@ const U = {
   wsLampBaked: { value: 0 },
   /** x, z: 바람 방향, y: 흔들리는 폭, w: 누적 위상 */
   wsSway: { value: new THREE.Vector4() },
-  /** 미니어처 모양의 툰 색감(0 끔 ~ 1 켬). 물 셰이더(water.ts)도 같은 값을 본다 */
+  /** 미니어처 모양의 툰 물(0 끔 ~ 1 켬). 물 셰이더(water.ts)가 본다. 파스텔 색감은 모든 모양에 늘 켜져 있다 */
   wsToon: { value: 0 },
 };
 
-/** 미니어처 모양의 툰 색감 세기. 물 재질이 같은 객체를 나눠 써서 한 번에 켜고 끈다 */
+/** 미니어처 모양의 툰 물 세기. 물 재질이 같은 객체를 나눠 써서 한 번에 켜고 끈다 */
 export const TOON_UNIFORM = U.wsToon;
 
 const VERTEX_PARS = /* glsl */ `
@@ -110,10 +110,12 @@ const FRAGMENT_ALBEDO = /* glsl */ `
   }
   float wsWetAmt = wsWet * (1.0 - wsSnowAmt) * (0.55 + 0.45 * max(wsUp, 0.0));
   diffuseColor.rgb *= 1.0 - 0.3 * wsWetAmt;
-  // 미니어처: 장난감처럼 채도를 올린다(회색 축에서 멀어지게)
-  if (wsToon > 0.003) {
+  // 파스텔 색감(모든 모양·테마): 채도는 살짝만 올리고 따뜻한 크림색 쪽으로 밝힌다(원색이 튀지 않게).
+  // 레퍼런스: 처음 미니어처를 만들 때 받은 항구 디오라마 게임 화면
+  {
     float wsLuma = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-    diffuseColor.rgb = max(mix(vec3(wsLuma), diffuseColor.rgb, 1.0 + 0.3 * wsToon), 0.0);
+    diffuseColor.rgb = max(mix(vec3(wsLuma), diffuseColor.rgb, 1.05), 0.0);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.95, 0.88), 0.08);
   }
 `;
 
@@ -122,19 +124,20 @@ const FRAGMENT_ROUGHNESS = /* glsl */ `
 `;
 
 // 조명 뒤: 구름 그늘은 햇빛(직접광)만 가리고, 밤 불빛은 그 뒤에 더한다.
-// 미니어처에서는 그 전에 빛 색을 나눈다: 햇빛은 살짝 따뜻하게, 그늘(라이트맵·환경광)은 검게 죽지 않고 보라·파랑 쪽으로.
+// 그 전에 빛 색을 나눈다(모든 모양·테마): 햇빛은 살짝 따뜻하게, 그늘(라이트맵·환경광)은 검게 죽지 않고 보라·파랑 쪽으로.
 // 틈 그늘은 한 번 더 눌러(제곱) 물건이 바닥에 붙어 보이게 한다
 const FRAGMENT_LIGHTS = /* glsl */ `
-  if (wsToon > 0.003) {
+  {
     vec3 wsInd = reflectedLight.indirectDiffuse;
     // 바탕색 밝기를 나눠 '받은 빛'만 본다(어두운 물체를 그늘로 착각하지 않게). 1 이 하얀 하늘 아래 트인 면
     vec3 wsLumaW = vec3(0.299, 0.587, 0.114);
     float wsIrr = dot(wsInd, wsLumaW) / max(dot(BRDF_Lambert(material.diffuseColor), wsLumaW), 1e-3);
     // 어두운 틈일수록 더 차갑고 더 어둡게(트인 면은 거의 그대로)
     float wsCool = 1.0 - smoothstep(0.2, 0.95, wsIrr);
-    vec3 wsTint = mix(vec3(1.0), vec3(0.8, 0.8, 1.25), 0.3 + 0.7 * wsCool) * (1.0 - 0.22 * wsCool);
-    reflectedLight.indirectDiffuse = mix(wsInd, wsInd * wsTint, wsToon);
-    reflectedLight.directDiffuse *= mix(vec3(1.0), vec3(1.08, 1.0, 0.9), wsToon);
+    // 그늘은 검게 죽이지 않고 밝은 라벤더색으로(파스텔 미니어처는 그늘도 밝다)
+    vec3 wsTint = mix(vec3(1.0), vec3(0.9, 0.8, 1.18), 0.35 + 0.65 * wsCool) * (1.06 - 0.12 * wsCool);
+    reflectedLight.indirectDiffuse = wsInd * wsTint;
+    reflectedLight.directDiffuse *= vec3(1.22, 1.06, 0.86);
   }
   if (wsShade.z > 0.003) {
     float cs = wsNoise(wsPos.xz * 0.11 + wsShade.xy) * 0.65 + wsNoise(wsPos.xz * 0.27 + wsShade.xy * 1.6) * 0.35;
