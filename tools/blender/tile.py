@@ -392,15 +392,15 @@ def heightmap(hfn, half=40.0, n=81):
 
 
 
-# 미니어처 = 나무 받침 위 유리 돔 속 풍경. 유리 돔은 앱이 그리고(src/scene/jar.ts) 받침 윗면(case_plinth 꼭대기)에 얹는다.
-# 여기서는 타일 옆면 흙(case_ground)과 둥근 네모 나무 받침(case_plinth)을 만든다. 색은 꼭짓점 색('Paint')에 직접 칠한다.
-# 받침 윗면의 반 폭은 PLINTH_HALF, 유리 돔은 그보다 조금 안쪽(jar.ts 의 DOME_HALF)에 선다.
+# 미니어처 = 오르골 상자 위 풍경. 여기서는 타일 옆면 흙(case_ground)과 오르골 상자(case_plinth)를 만든다.
+# 색은 꼭짓점 색('Paint')에 직접 칠한다. 옆면 태엽 손잡이는 앱이 그린다(src/scene/musicbox.ts).
 PLINTH_HALF = 9.1
-PLINTH_R = 2.6
+PLINTH_R = 0.9
 CASE_PAINT = mat('case_paint', '#ffffff', 0.95, 0.0)
 SOIL_COLS = ['#6b4631', '#5e3d29', '#77503a', '#62402c']
 WATER_CUT = ['#3f9fd0', '#2a74a8']
-WOOD_COLS = ['#6e4529', '#5f3b23', '#7a4e30', '#573620']
+WOOD_COLS = ['#7a4a2e', '#6a3f26', '#875636', '#5f3822']
+GOLD_COLS = ['#e2bd62', '#c99a3e']
 
 
 def _mix(a, b, t):
@@ -449,10 +449,11 @@ def case(W, D, hfn, water=None, paint=None):
     """미니어처 모양(앱 설정)일 때만 보이는 타일 옆 흙과 나무 받침(case_*: 굽지 않는다). 지평선 모양에서는 앱이 숨긴다.
     water: 수면 높이(물이 가장자리에 닿은 자리는 수면~땅 사이를 물 단면으로). paint 는 쓰지 않는다(다른 테마와 인자를 맞춘다).
     1. 타일 가장자리를 따라 땅(또는 수면) 높이에서 받침 윗면까지 흙벽을 세운다. 흙은 짙은 갈색에 옅은 가로 띠.
-    2. 둥근 네모 받침: 윗판(살짝 둥근 윗모서리) + 그보다 조금 넓은 아랫단. 나뭇결은 가로 띠."""
+    2. 오르골 상자: 넓은 밑단 → 금테 → 몸통 → 금테 → 조금 튀어나온 뚜껑. 나뭇결은 가로 띠."""
     from mathutils import noise as mn
     L = lambda h: tuple(lib.lin(h)[:3])
     soil_c, water_c, wood_c = [L(c) for c in SOIL_COLS], [L(c) for c in WATER_CUT], [L(c) for c in WOOD_COLS]
+    gold_c = [L(c) for c in GOLD_COLS]
 
     step = 0.2
     nx, ny = round(W / step), round(D / step)
@@ -489,16 +490,16 @@ def case(W, D, hfn, water=None, paint=None):
     _paint(wall, lambda vi: (water_c[0] if info[vi][1] == 0 else soil(info[vi][0], info[vi][2]))
            if wet[info[vi][0]] else soil(info[vi][0], info[vi][2]))
 
-    # 2. 받침: (높이, 반 폭, 모서리 반지름) 층을 이어 옆면을 만들고 윗면·바닥을 막는다
-    levels = [
-        (deck - 1.25, PLINTH_HALF + 0.25, PLINTH_R + 0.25),
-        (deck - 0.95, PLINTH_HALF + 0.25, PLINTH_R + 0.25),
-        (deck - 0.9, PLINTH_HALF + 0.05, PLINTH_R + 0.05),
-        (deck - 0.88, PLINTH_HALF, PLINTH_R),
-        (deck - 0.08, PLINTH_HALF, PLINTH_R),
-        (deck - 0.02, PLINTH_HALF - 0.06, PLINTH_R - 0.06),
-        (deck, PLINTH_HALF - 0.14, PLINTH_R - 0.14),
+    # 2. 오르골 상자: (높이, 바깥으로 더 나온 폭, 칠) 층을 이어 옆면을 만들고 윗면·바닥을 막는다.
+    #    칠: d 어두운 밑단 나무, w 몸통 나무, g 금테
+    H, R = PLINTH_HALF, PLINTH_R
+    spec = [
+        (-2.9, 0.4, 'd'), (-2.6, 0.4, 'd'), (-2.57, 0.16, 'g'), (-2.42, 0.16, 'g'),
+        (-2.4, 0.0, 'w'), (-0.62, 0.0, 'w'), (-0.6, 0.12, 'g'), (-0.46, 0.12, 'g'),
+        (-0.44, 0.26, 'w'), (-0.08, 0.26, 'w'), (-0.02, 0.18, 'w'), (0.0, 0.1, 'w'),
     ]
+    levels = [(deck + dz, H + o, R + o) for dz, o, _ in spec]
+    kinds = [k for _, _, k in spec]
     bm = bmesh.new()
     rings = [[bm.verts.new((x, y, z)) for x, y in _rounded(h, r)] for z, h, r in levels]
     m = len(rings[0])
@@ -509,6 +510,7 @@ def case(W, D, hfn, water=None, paint=None):
     bm.faces.new(rings[-1])
     bm.faces.new(rings[0][::-1])
     zs = [z for z, _, _ in levels for _ in range(m)]
+    kind = [k for k in kinds for _ in range(m)]
     xy = [p for _, h, r in levels for p in _rounded(h, r)]
     plinth = new_obj('case_plinth', bm)
     finish(plinth, CASE_PAINT, smooth=True)
@@ -517,8 +519,10 @@ def case(W, D, hfn, water=None, paint=None):
         x, y = xy[vi]
         z = zs[vi]
         t = 0.5 + 0.5 * math.sin(z * 22.0 + mn.noise(Vector((x * 0.25, y * 0.25, z * 2.0))) * 3.0)
+        if kind[vi] == 'g':
+            return _ramp(gold_c, 0.5 + 0.5 * math.sin(x * 0.7 + y * 0.9))
         c = _ramp(wood_c, t)
-        # 아랫단은 조금 어둡게(받침이 두 단으로 읽히게)
-        return tuple(v * (0.82 if z < deck - 0.92 else 1.0) for v in c)
+        # 밑단은 조금 어둡게(상자가 받침대 위에 올라앉은 것처럼)
+        return tuple(v * (0.78 if kind[vi] == 'd' else 1.0) for v in c)
     _paint(plinth, wood)
 

@@ -551,7 +551,7 @@ soundBtn.addEventListener('click', async () => {
   soundBtn.setAttribute('aria-pressed', String(on));
   soundBtn.querySelector('span')!.textContent = on ? '소리 끄기' : '소리 켜기';
 });
-world.onFrame = (env) => ambience.update(env);
+world.onFrame = (env) => ambience.update(env, world.miniature);
 
 // ── 들어가기 모드 ──
 const exploreBar = $('explore');
