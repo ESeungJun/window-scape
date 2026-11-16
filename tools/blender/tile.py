@@ -5,7 +5,7 @@
 # 물(liquid_)과 움직이는 것(mover_)은 앱이 따로 그린다(lib.dynamic).
 import math
 import bmesh
-from mathutils import Vector
+from mathutils import Matrix, Vector
 import lib
 from lib import CLIFF, CLIFF_LEDGE, blob, finish, mat, new_obj, rnd
 
@@ -392,74 +392,220 @@ def heightmap(hfn, half=40.0, n=81):
 
 
 
-# 미니어처 단면 층(위에서 아래로): 겉흙(기존 절벽 띠) → 자갈 섞인 흙 → 짙은 보랏빛 암반. 레퍼런스 디오라마의 잘라 낸 땅 단면
-GRAVEL = mat('case_gravel', '#b49a7a', 0.95, 0.14, 7.0)
-BEDROCK = lib.banded('case_bedrock', ['#5a5370', '#4d4762', '#625a78', '#544d69'], 2.4, 1.6, 0.4)
-PEBBLE = mat('case_pebble', '#9d958c', 0.9, 0.12, 6.0)
+# 미니어처 단면(위에서 아래로): 윗면이 살짝 넘친 턱 → 겉흙(위쪽은 짙은 부엽토) → 자갈 섞인 흙 → 울퉁불퉁한 보랏빛 암반.
+# 색은 재질 대신 꼭짓점 색('Paint')에 직접 칠한다(lib.export_glb 가 그대로 옮긴다). 재질은 흰 무광 하나.
+CASE_PAINT = mat('case_paint', '#ffffff', 0.95, 0.0)
+SOIL_COLS = ['#a2653e', '#8f5636', '#b07450', '#7f4c31', '#9a603c']
+HUMUS = '#5e3f2b'
+GRAVEL_COLS = ['#b49a7a', '#a08868', '#c4ab88']
+BEDROCK_COLS = ['#5f5878', '#48425c', '#6a6384', '#514a66']
+CRACK = '#3b3650'
+PEBBLE_COLS = ['#9a8e7e', '#86796a', '#a99c88', '#7a7064', '#b2a48e']
+BOULDER_COLS = ['#5e5874', '#534d68', '#686180']
 # 암반 두께: 자갈층 아래로 내려가는 깊이
 STRATA_DEPTH = 1.6
 
 
-def strata_wall(name, edge, upper, lower, m, close_bottom=False):
-    """가장자리 한 바퀴를 따라 upper(i) ~ lower(i) 높이 사이를 세운 벽"""
-    bm = bmesh.new()
-    n = len(edge)
-    top = [bm.verts.new((x, y, upper(i))) for i, (x, y) in enumerate(edge)]
-    bot = [bm.verts.new((x, y, lower(i))) for i, (x, y) in enumerate(edge)]
-    for i in range(n):
-        j = (i + 1) % n
-        bm.faces.new([bot[i], bot[j], top[j], top[i]])
-    if close_bottom:
-        bm.faces.new(bot[::-1])
-    finish(new_obj(name, bm), m, smooth=False)
+def _mix(a, b, t):
+    return tuple(a[i] * (1 - t) + b[i] * t for i in range(3))
 
 
-def pebbles(name, edge, band, W, D, count=130):
-    """자갈층 단면에 반쯤 박힌 돌. 벽에서 살짝 튀어나오게 바깥으로 민다.
-    공용 rnd 를 쓰면 뒤에 오는 배치가 바뀌므로 따로 둔다"""
-    rnd = lib.random.Random(11)
-    bm = bmesh.new()
-    for _ in range(count):
-        i = rnd.randrange(len(edge))
-        x, y = edge[i]
-        lo, hi = band(i)
-        if hi - lo < 0.2:
-            continue
-        z = rnd.uniform(lo + 0.08, hi - 0.08)
-        # 바깥쪽 법선(어느 변 위인지로 정한다)
-        nx = 1 if x >= W / 2 - 1e-3 else -1 if x <= -W / 2 + 1e-3 else 0
-        ny = 1 if y >= D / 2 - 1e-3 else -1 if y <= -D / 2 + 1e-3 else 0
-        r = rnd.uniform(0.07, 0.17)
-        g = bmesh.ops.create_icosphere(bm, subdivisions=1, radius=r)
-        vs = g['verts']
-        bmesh.ops.scale(bm, vec=Vector((rnd.uniform(1.0, 1.6), rnd.uniform(1.0, 1.6), rnd.uniform(0.6, 0.9))), verts=vs)
-        bmesh.ops.translate(bm, vec=Vector((x + nx * r * 0.35, y + ny * r * 0.35, z)), verts=vs)
-    finish(new_obj(name, bm), PEBBLE, smooth=False)
+def _ramp(cols, t):
+    """cols(선형 색) 사이를 t(0~1)로 고른다"""
+    t = min(max(t, 0.0), 1.0) * (len(cols) - 1)
+    i = min(int(t), len(cols) - 2)
+    return _mix(cols[i], cols[i + 1], t - i)
 
 
-def case(W, D, hfn, water=None):
+def _top_color(m):
+    """윗면 재질의 대표 색(선형). 단면 위 턱을 윗면과 같은 색으로 칠할 때 쓴다"""
+    if m.node_tree:
+        ramp = next((nd for nd in m.node_tree.nodes if nd.type == 'VALTORGB'), None)
+        if ramp:
+            els = ramp.color_ramp.elements
+            return tuple(sum(e.color[i] for e in els) / len(els) for i in range(3))
+        b = m.node_tree.nodes.get('Principled BSDF')
+        if b:
+            return tuple(b.inputs['Base Color'].default_value[:3])
+    return tuple(lib.lin('#9aae62')[:3])
+
+
+def _paint(o, color_of):
+    """꼭짓점마다 color_of(꼭짓점 번호) 색을 'Paint' 속성에 칠한다"""
+    me = o.data
+    attr = me.color_attributes.new('Paint', 'BYTE_COLOR', 'CORNER')
+    cache = {}
+    for li, lp in enumerate(me.loops):
+        vi = lp.vertex_index
+        if vi not in cache:
+            cache[vi] = color_of(vi)
+        attr.data[li].color = (*cache[vi], 1)
+
+
+def case(W, D, hfn, water=None, paint=None):
     """미니어처 모양(앱 설정)일 때만 보이는 땅 단면(case_*: 굽지 않는다). 지평선 모양에서는 앱이 숨긴다.
-    타일 가장자리 땅 높이에서 곧게 내린 겉흙 + 자갈층 + 암반(바닥 면까지), 물이 있으면 물 단면"""
+    paint(x, y, z) -> 윗면 재질(있으면 턱을 그 색으로). 물이 있으면 물 단면을 얹는다.
+    1. 가장자리 한 바퀴의 땅 높이와 층 경계(겉흙·자갈·암반)를 정한다.
+    2. 벽을 세로로 잘게 나눈 격자로 세우고, 층마다 다른 세기로 바깥쪽에 울퉁불퉁 민다(암반이 가장 크게).
+    3. 꼭짓점 색으로 층 색·띠·금·움푹한 곳 그늘을 칠한다.
+    4. 윗면 가장자리에 살짝 넘친 턱, 자갈층에 박힌 돌, 암반에 튀어나온 바위를 붙인다."""
+    from mathutils import noise as mn
+    L = lambda h: tuple(lib.lin(h)[:3])
+    soil_c, grav_c, rock_c = [L(c) for c in SOIL_COLS], [L(c) for c in GRAVEL_COLS], [L(c) for c in BEDROCK_COLS]
+    humus, crack = L(HUMUS), L(CRACK)
+
     step = 0.2
     nx, ny = round(W / step), round(D / step)
-    edge = ([(-W / 2 + step * i, -D / 2) for i in range(nx)] + [(W / 2, -D / 2 + step * i) for i in range(ny)]
-            + [(W / 2 - step * i, D / 2) for i in range(nx)] + [(-W / 2, D / 2 - step * i) for i in range(ny)])
+    edge = ([(-W / 2 + W * i / nx, -D / 2) for i in range(nx)] + [(W / 2, -D / 2 + D * i / ny) for i in range(ny)]
+            + [(W / 2 - W * i / nx, D / 2) for i in range(nx)] + [(-W / 2, D / 2 - D * i / ny) for i in range(ny)])
+    n = len(edge)
+
+    def out(x, y):
+        """바깥쪽 방향(모서리에서는 대각선)"""
+        ox = 1 if x >= W / 2 - 1e-3 else -1 if x <= -W / 2 + 1e-3 else 0
+        oy = 1 if y >= D / 2 - 1e-3 else -1 if y <= -D / 2 + 1e-3 else 0
+        return ox, oy
+    normals = [out(x, y) for x, y in edge]
     hs = [hfn(x, y) for x, y in edge]
     z0 = min(hs) - 1.2
-    zb = z0 - STRATA_DEPTH
-    n = len(edge)
-    # 층 경계는 가장자리를 따라 천천히 물결친다(한 바퀴에 몇 번, 길이 기준이라 네 변이 이어진다)
-    along = [0.0]
-    for i in range(1, n):
-        along.append(along[-1] + step)
+    along = [step * i for i in range(n)]
     wave = lambda i, k, ph: math.sin(along[i] * k + ph) * 0.5 + math.sin(along[i] * k * 2.3 + ph * 1.7) * 0.25
-    # 겉흙 아래 경계: 땅 높이를 따라가되 너무 얇거나 두껍지 않게, 자갈층 아래 경계: 거의 평평
     soil_lo = [max(min(hs[i] - 0.8 + wave(i, 0.9, 0.3) * 0.22, hs[i] - 0.45), z0 + 0.3) for i in range(n)]
     grav_lo = [min(z0 - 0.35 + wave(i, 0.6, 2.1) * 0.22, soil_lo[i] - 0.25) for i in range(n)]
-    strata_wall('case_soil', edge, lambda i: hs[i] - 0.02, lambda i: soil_lo[i], CLIFF)
-    strata_wall('case_gravel', edge, lambda i: soil_lo[i], lambda i: grav_lo[i], GRAVEL)
-    strata_wall('case_bedrock', edge, lambda i: grav_lo[i], lambda i: zb, BEDROCK, close_bottom=True)
-    pebbles('case_pebbles', edge, lambda i: (grav_lo[i], soil_lo[i]), W, D)
+    # 바닥은 고르지 않게(아래에서 올려다볼 일은 거의 없지만 옆에서 보면 끝이 들쭉날쭉)
+    bot = [z0 - STRATA_DEPTH - 0.18 * abs(mn.noise(Vector((along[i] * 0.7, 3.1, 0.0)))) * 2 for i in range(n)]
+
+    # 2. 벽 격자. 위 한 줄은 밀지 않아 윗면 가장자리와 맞닿는다
+    rows = 34
+
+    def push(x, y, z, i):
+        p = Vector((x * 1.0, y * 1.0, z))
+        if z > soil_lo[i]:
+            # 겉흙: 잔 요철. 위로 갈수록 0(턱 아래로 숨는다)
+            fade = min(1.0, (hs[i] - z) / 0.25)
+            return fade * (0.035 + 0.03 * mn.noise(p * 2.2))
+        if z > grav_lo[i]:
+            return 0.05 + 0.035 * mn.noise(p * 3.0)
+        # 암반: 큰 덩어리 + 잔 요철, 덩어리는 위아래로 납작하게(층이 진 바위)
+        q = Vector((p.x * 0.8, p.y * 0.8, p.z * 1.6))
+        return 0.09 + 0.08 * mn.noise(q) + 0.03 * mn.noise(p * 3.5)
+
+    bm = bmesh.new()
+    grid, info = [], []
+    for i, (x, y) in enumerate(edge):
+        ox, oy = normals[i]
+        top, lo = hs[i] - 0.02, bot[i]
+        col = []
+        for k in range(rows + 1):
+            z = top + (lo - top) * k / rows
+            d = 0.0 if k == 0 else push(x, y, z, i)
+            col.append(bm.verts.new((x + ox * d, y + oy * d, z)))
+            info.append((i, x, y, z, d))
+        grid.append(col)
+    for i in range(n):
+        j = (i + 1) % n
+        for k in range(rows):
+            bm.faces.new([grid[i][k + 1], grid[j][k + 1], grid[j][k], grid[i][k]])
+    bm.faces.new([grid[i][rows] for i in range(n)][::-1])
+    wall = new_obj('case_ground', bm)
+
+    # 3. 꼭짓점 색
+    def wall_color(vi):
+        i, x, y, z, d = info[vi]
+        p = Vector((x, y, z))
+        jit = 0.06 * mn.noise(p * 4.0)
+        if z > soil_lo[i] + jit:
+            t = 0.5 + 0.5 * math.sin(z * 9.0 + mn.noise(p * 0.8) * 2.4)
+            c = _ramp(soil_c, t)
+            depth = hs[i] - z
+            if depth < 0.22:
+                c = _mix(humus, c, smooth(0.06, 0.22, depth))
+            if z - soil_lo[i] < 0.05:
+                c = _mix(c, humus, 0.45)
+        elif z > grav_lo[i] + jit:
+            t = 0.5 + 0.5 * mn.noise(p * 9.0)
+            c = _ramp(grav_c, t)
+            if z - grav_lo[i] < 0.05:
+                c = _mix(c, crack, 0.35)
+        else:
+            t = 0.5 + 0.5 * math.sin(z * 6.0 + (x + y) * 0.35 + mn.noise(p * 0.6) * 1.8)
+            c = _ramp(rock_c, t)
+            nz = mn.noise(Vector((p.x * 1.7, p.y * 1.7, p.z * 3.2)))
+            if abs(nz) < 0.05:
+                c = _mix(c, crack, 0.75)
+        # 움푹 들어간 곳은 어둡게, 맨 아래로 갈수록 조금 어둡게
+        shade = 0.82 + 0.18 * min(1.0, d / 0.12) if d > 0 else 1.0
+        shade *= 1.0 - 0.18 * smooth(grav_lo[i] - 0.4, bot[i], z)
+        return tuple(v * shade for v in c)
+    # 부드러운 음영: 꼭짓점을 이웃 면과 나눠 써서 파일이 작고, 흙·바위 덩어리가 점토처럼 둥글게 보인다
+    finish(wall, CASE_PAINT, smooth=True)
+    _paint(wall, wall_color)
+
+    # 4-1. 턱: 윗면 가장자리에서 바깥으로 살짝 나왔다가 물방울처럼 들쭉날쭉 내려온다. 물가(땅이 수면 아래)는 뺀다
+    dry = [water is None or hs[i] >= water - 0.005 for i in range(n)]
+    lip_col = [(_top_color(paint(x, y, hs[i])) if paint else L('#9aae62')) for i, (x, y) in enumerate(edge)]
+    bm = bmesh.new()
+    lip, lip_info = [], []
+    for i, (x, y) in enumerate(edge):
+        ox, oy = normals[i]
+        drip = 0.07 + 0.06 * max(0.0, mn.noise(Vector((along[i] * 2.6, 7.7, 0.0)))) * 2
+        pts = [(-0.04, 0.012), (0.05, -0.005), (0.06, -drip * 0.6), (0.035, -drip)]
+        col = []
+        for k, (o_, dz) in enumerate(pts):
+            col.append(bm.verts.new((x + ox * o_, y + oy * o_, hs[i] + dz)))
+            lip_info.append((i, k))
+        lip.append(col)
+    for i in range(n):
+        j = (i + 1) % n
+        if not (dry[i] and dry[j]):
+            continue
+        for k in range(3):
+            bm.faces.new([lip[i][k + 1], lip[j][k + 1], lip[j][k], lip[i][k]])
+    loose = [v for v in bm.verts if not v.link_faces]
+    keep_info = [lip_info[k] for k, v in enumerate(bm.verts) if v.link_faces]
+    bmesh.ops.delete(bm, geom=loose, context='VERTS')
+    if bm.faces:
+        o = new_obj('case_lip', bm)
+        finish(o, CASE_PAINT, smooth=True)
+        # 아래쪽 끝은 그늘이 지게 조금 어둡게
+        _paint(o, lambda vi: tuple(v * (1.0 - 0.12 * keep_info[vi][1]) for v in lip_col[keep_info[vi][0]]))
+    else:
+        bm.free()
+
+    # 4-2. 자갈층에 반쯤 박힌 돌과 암반에서 튀어나온 바위. 공용 rnd 를 쓰면 뒤에 오는 배치가 바뀌므로 따로 둔다
+    r_ = lib.random.Random(11)
+    bm = bmesh.new()
+    owner = []
+    def stone(i, z, r, d, cols):
+        x, y = edge[i]
+        ox, oy = normals[i]
+        g = bmesh.ops.create_icosphere(bm, subdivisions=1, radius=r)
+        vs = g['verts']
+        bmesh.ops.scale(bm, vec=Vector((r_.uniform(1.0, 1.7), r_.uniform(1.0, 1.7), r_.uniform(0.55, 0.85))), verts=vs)
+        bmesh.ops.rotate(bm, verts=vs, cent=Vector(), matrix=Matrix.Rotation(r_.uniform(0, 6.28), 3, 'Z'))
+        # 벽 속으로 반 넘게 묻는다(튀어나온 쪽만 보인다)
+        bmesh.ops.translate(bm, vec=Vector((x + ox * (d - r * 0.15), y + oy * (d - r * 0.15), z)), verts=vs)
+        c = r_.choice(cols)
+        k = r_.uniform(0.85, 1.08)
+        owner.extend([tuple(v * k for v in c)] * len(vs))
+    pcols, bcols = [L(c) for c in PEBBLE_COLS], [L(c) for c in BOULDER_COLS]
+    for _ in range(520):
+        i = r_.randrange(n)
+        lo, hi = grav_lo[i], soil_lo[i]
+        if hi - lo < 0.2:
+            continue
+        z = r_.uniform(lo + 0.06, hi - 0.06)
+        x, y = edge[i]
+        stone(i, z, r_.uniform(0.07, 0.15), push(x, y, z, i), pcols)
+    for _ in range(45):
+        i = r_.randrange(n)
+        z = r_.uniform(bot[i] + 0.25, grav_lo[i] - 0.15)
+        x, y = edge[i]
+        stone(i, z, r_.uniform(0.12, 0.26), push(x, y, z, i), bcols)
+    o = new_obj('case_pebbles', bm)
+    finish(o, CASE_PAINT, smooth=True)
+    _paint(o, lambda vi: owner[vi])
+
     if water is not None:
         bm = bmesh.new()
         for i in range(n):

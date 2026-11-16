@@ -539,7 +539,7 @@ if os.environ.get('CLOSE'):
 else:
     setup_render((12.8 * 1.5, -14.4 * 1.5, 9.6 * 1.5), (0, 0, -0.6))
 
-tile.case(W, D, height, water=None)
+tile.case(W, D, height, water=None, paint=paint)
 layout = {
     'ground': tile.heightmap(hfar),
     # inner: 디오라마 모양(둘레 땅이 없다)일 때 걷는 농장 안 연못 둘레 길
