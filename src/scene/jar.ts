@@ -9,14 +9,14 @@ import * as THREE from 'three';
  * 뒤쪽 면(BackSide)을 먼저, 앞쪽 면을 나중에 그려 두 겹이 겹쳐 보이게 한다. 그림자는 드리우지 않는다.
  */
 
-/** 돔 아래 둘레: 받침 윗면(반 폭 9.1 - 0.14)보다 조금 안쪽 */
-const DOME_HALF = 8.75;
-const DOME_R = 1.3;
+/** 돔 아래 둘레: 모서리를 크게 둥글린 네모(받침 윗면 반 폭 9.85 - 0.14 보다 조금 안쪽). 타일 모서리(8, 8)가 안에 들도록 반 폭 ≥ 8 + 0.293 × 반지름 */
+const DOME_HALF = 9.5;
+const DOME_R = 4.6;
 /** 곧은 몸통 위 둥근 지붕 높이 */
-const CAP = 5.5;
+const CAP = 7.5;
 /** 둥근 네모 둘레를 같은 개수의 점으로 나눈다(층마다 이어 붙일 수 있게) */
-const SIDE_PTS = 6;
-const ARC_PTS = 8;
+const SIDE_PTS = 4;
+const ARC_PTS = 16;
 
 /** 반 폭 half, 모서리 반지름 r 인 둥근 네모 둘레 점(x, z) */
 function roundedSquare(half: number, r: number): [number, number][] {
@@ -115,10 +115,10 @@ export class Jar {
 
   /**
    * bottom: 받침 윗면 높이, top: 돔 안 물체 꼭대기 높이(앱 좌표 y).
-   * 몸통은 꼭대기보다 넉넉히 위까지 곧게 서고, 그 위에서 둥근 지붕이 닫힌다(풍경 위로 빈 공간이 있어야 돔처럼 보인다).
+   * 몸통은 꼭대기 근처까지 짧게 서고, 그 위로 높은 종 모양 지붕이 닫힌다(풍경 위로 빈 공간이 있어야 돔처럼 보인다).
    */
   constructor(bottom: number, top: number) {
-    const yS = top + 1.2;
+    const yS = top - 0.3;
     const levels: [number, number, number][] = [
       [bottom, DOME_HALF, DOME_R],
       [yS, DOME_HALF, DOME_R],

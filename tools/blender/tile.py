@@ -395,8 +395,8 @@ def heightmap(hfn, half=40.0, n=81):
 # 미니어처 = 나무 받침 위 유리 돔 속 풍경. 유리 돔은 앱이 그리고(src/scene/jar.ts) 받침 윗면(case_plinth 꼭대기)에 얹는다.
 # 여기서는 타일 옆면 흙(case_ground)과 둥근 네모 나무 받침(case_plinth)을 만든다. 색은 꼭짓점 색('Paint')에 직접 칠한다.
 # 받침 윗면의 반 폭은 PLINTH_HALF, 유리 돔은 그보다 조금 안쪽(jar.ts 의 DOME_HALF)에 선다.
-PLINTH_HALF = 9.1
-PLINTH_R = 1.4
+PLINTH_HALF = 9.85
+PLINTH_R = 4.9
 CASE_PAINT = mat('case_paint', '#ffffff', 0.95, 0.0)
 SOIL_COLS = ['#6b4631', '#5e3d29', '#77503a', '#62402c']
 WATER_CUT = ['#3f9fd0', '#2a74a8']
@@ -426,7 +426,7 @@ def _paint(o, color_of):
         attr.data[li].color = (*cache[vi], 1)
 
 
-def _rounded(half, r, arc=8, side=10):
+def _rounded(half, r, arc=16, side=6):
     """반 폭 half, 모서리 반지름 r 인 둥근 네모 둘레 점(같은 인자면 같은 개수)"""
     c = half - r
     pts = []
