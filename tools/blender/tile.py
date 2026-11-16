@@ -5,7 +5,7 @@
 # 물(liquid_)과 움직이는 것(mover_)은 앱이 따로 그린다(lib.dynamic).
 import math
 import bmesh
-from mathutils import Matrix, Vector
+from mathutils import Vector
 import lib
 from lib import CLIFF, CLIFF_LEDGE, blob, finish, mat, new_obj, rnd
 
@@ -392,17 +392,15 @@ def heightmap(hfn, half=40.0, n=81):
 
 
 
-# 미니어처 = 유리병(테라리움) 속 풍경. 유리는 앱이 그리고(src/scene/jar.ts), 여기서는 유리에 눌린 흙층을 만든다.
-# 유리 안쪽 윤곽: 반 폭 JAR_HALF, 모서리 반지름 JAR_R 인 둥근 네모(jar.ts 의 같은 이름 상수와 맞춘다).
-# 층(위에서 아래로): 윗면과 같은 색 테두리 → 짙은 흙 → 숯 띠 → 배수 자갈. 색은 꼭짓점 색('Paint')에 직접 칠한다.
-JAR_HALF = 8.45
-JAR_R = 1.25
+# 미니어처 = 나무 받침 위 유리 돔 속 풍경. 유리 돔은 앱이 그리고(src/scene/jar.ts) 받침 윗면(case_plinth 꼭대기)에 얹는다.
+# 여기서는 타일 옆면 흙(case_ground)과 둥근 네모 나무 받침(case_plinth)을 만든다. 색은 꼭짓점 색('Paint')에 직접 칠한다.
+# 받침 윗면의 반 폭은 PLINTH_HALF, 유리 돔은 그보다 조금 안쪽(jar.ts 의 DOME_HALF)에 선다.
+PLINTH_HALF = 9.1
+PLINTH_R = 1.4
 CASE_PAINT = mat('case_paint', '#ffffff', 0.95, 0.0)
-SOIL_COLS = ['#5e3d29', '#6b4631', '#553624', '#70492f']
-CHARCOAL = '#2c2826'
-DRAIN_BG = '#6f675e'
+SOIL_COLS = ['#6b4631', '#5e3d29', '#77503a', '#62402c']
 WATER_CUT = ['#3f9fd0', '#2a74a8']
-PEBBLE_COLS = ['#b9b2a6', '#a49c90', '#c9c1b3', '#8f877c', '#bfa98c', '#a38f74']
+WOOD_COLS = ['#6e4529', '#5f3b23', '#7a4e30', '#573620']
 
 
 def _mix(a, b, t):
@@ -414,19 +412,6 @@ def _ramp(cols, t):
     t = min(max(t, 0.0), 1.0) * (len(cols) - 1)
     i = min(int(t), len(cols) - 2)
     return _mix(cols[i], cols[i + 1], t - i)
-
-
-def _top_color(m):
-    """윗면 재질의 대표 색(선형). 흙 위 테두리를 윗면과 같은 색으로 칠할 때 쓴다"""
-    if m.node_tree:
-        ramp = next((nd for nd in m.node_tree.nodes if nd.type == 'VALTORGB'), None)
-        if ramp:
-            els = ramp.color_ramp.elements
-            return tuple(sum(e.color[i] for e in els) / len(els) for i in range(3))
-        b = m.node_tree.nodes.get('Principled BSDF')
-        if b:
-            return tuple(b.inputs['Base Color'].default_value[:3])
-    return tuple(lib.lin('#9aae62')[:3])
 
 
 def _paint(o, color_of):
@@ -441,146 +426,99 @@ def _paint(o, color_of):
         attr.data[li].color = (*cache[vi], 1)
 
 
-def _jar_sdf(x, y):
-    """유리 안쪽 둥근 네모까지의 부호 있는 거리(안쪽 음수)"""
-    qx, qy = abs(x) - (JAR_HALF - JAR_R), abs(y) - (JAR_HALF - JAR_R)
-    return math.hypot(max(qx, 0), max(qy, 0)) + min(max(qx, qy), 0) - JAR_R
-
-
-def _to_jar(x, y):
-    """가운데에서 (x, y) 쪽으로 뻗어 유리에 닿는 점과 그 자리의 바깥 방향"""
-    lo, hi = 0.0, 2.0
-    for _ in range(40):
-        mid = (lo + hi) / 2
-        if _jar_sdf(x * mid, y * mid) < 0:
-            lo = mid
-        else:
-            hi = mid
-    px, py = x * lo, y * lo
-    e = 1e-3
-    nx = _jar_sdf(px + e, py) - _jar_sdf(px - e, py)
-    ny = _jar_sdf(px, py + e) - _jar_sdf(px, py - e)
-    k = math.hypot(nx, ny) or 1.0
-    return px, py, nx / k, ny / k
+def _rounded(half, r, arc=8, side=10):
+    """반 폭 half, 모서리 반지름 r 인 둥근 네모 둘레 점(같은 인자면 같은 개수)"""
+    c = half - r
+    pts = []
+    for k, (cx, cy) in enumerate(((c, c), (-c, c), (-c, -c), (c, -c))):
+        a0 = k * math.pi / 2
+        for i in range(arc):
+            a = a0 + i / arc * math.pi / 2
+            pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
+        sx, sy = cx + math.cos(a0 + math.pi / 2) * r, cy + math.sin(a0 + math.pi / 2) * r
+        nx_, ny_ = ((-c, c), (-c, -c), (c, -c), (c, c))[k]
+        na = a0 + math.pi / 2
+        ex, ey = nx_ + math.cos(na) * r, ny_ + math.sin(na) * r
+        for i in range(side):
+            t = i / side
+            pts.append((sx + (ex - sx) * t, sy + (ey - sy) * t))
+    return pts
 
 
 def case(W, D, hfn, water=None, paint=None):
-    """미니어처 모양(앱 설정)일 때만 보이는 유리병 속 흙(case_*: 굽지 않는다). 지평선 모양에서는 앱이 숨긴다.
-    paint(x, y, z) -> 윗면 재질(테두리를 그 색으로). water: 수면 높이(물이 가장자리에 닿으면 그 자리는 물 단면).
-    1. 타일 가장자리 점마다 가운데에서 뻗어 유리에 닿는 점을 찾는다.
-    2. 타일 가장자리와 유리 사이를 윗면 높이로 메우는 테두리(case_rim)를 깐다.
-    3. 유리를 따라 평평한 흙벽(case_ground)을 바닥까지 세우고 층 색을 칠한다. 바닥은 평평(병 바닥에 놓인다).
-    4. 배수 자갈층에 유리에 눌린 돌(case_pebbles)을 촘촘히 붙인다."""
+    """미니어처 모양(앱 설정)일 때만 보이는 타일 옆 흙과 나무 받침(case_*: 굽지 않는다). 지평선 모양에서는 앱이 숨긴다.
+    water: 수면 높이(물이 가장자리에 닿은 자리는 수면~땅 사이를 물 단면으로). paint 는 쓰지 않는다(다른 테마와 인자를 맞춘다).
+    1. 타일 가장자리를 따라 땅(또는 수면) 높이에서 받침 윗면까지 흙벽을 세운다. 흙은 짙은 갈색에 옅은 가로 띠.
+    2. 둥근 네모 받침: 윗판(살짝 둥근 윗모서리) + 그보다 조금 넓은 아랫단. 나뭇결은 가로 띠."""
     from mathutils import noise as mn
     L = lambda h: tuple(lib.lin(h)[:3])
-    soil_c, peb_c, water_c = [L(c) for c in SOIL_COLS], [L(c) for c in PEBBLE_COLS], [L(c) for c in WATER_CUT]
-    char_c, drain_c = L(CHARCOAL), L(DRAIN_BG)
+    soil_c, water_c, wood_c = [L(c) for c in SOIL_COLS], [L(c) for c in WATER_CUT], [L(c) for c in WOOD_COLS]
 
     step = 0.2
     nx, ny = round(W / step), round(D / step)
     edge = ([(-W / 2 + W * i / nx, -D / 2) for i in range(nx)] + [(W / 2, -D / 2 + D * i / ny) for i in range(ny)]
             + [(W / 2 - W * i / nx, D / 2) for i in range(nx)] + [(-W / 2, D / 2 - D * i / ny) for i in range(ny)])
     n = len(edge)
-    jar = [_to_jar(x, y) for x, y in edge]
     hs = [hfn(x, y) for x, y in edge]
     wet = [water is not None and hs[i] < water - 0.005 for i in range(n)]
     tops = [water if wet[i] else hs[i] for i in range(n)]
-    along = [step * i for i in range(n)]
-    wave = lambda i, k, ph: math.sin(along[i] * k + ph) * 0.5 + math.sin(along[i] * k * 2.3 + ph * 1.7) * 0.25
-    bot = min(hs) - 2.0
-    # 층 경계: 흙 아래(숯 띠 위), 숯 띠 아래(배수 자갈 위). 천천히 물결치고 바닥과는 띄운다
-    soil_lo = [max(min(hs[i] - 0.75 + wave(i, 0.8, 0.3) * 0.15, hs[i] - 0.4), bot + 0.75) for i in range(n)]
-    char_lo = [soil_lo[i] - 0.1 - 0.03 * wave(i, 1.7, 1.1) for i in range(n)]
-    top_col = [(_top_color(paint(x, y, hs[i])) if paint else L('#9aae62')) for i, (x, y) in enumerate(edge)]
+    # 받침 윗면: 가장 낮은 땅보다 조금 아래(어디서나 흙이 얇게라도 보이게)
+    deck = min(hs) - 0.15
 
-    # 2. 테두리: 타일 가장자리(윗면 높이) → 유리
+    # 1. 흙벽(물 닿은 자리는 위쪽이 물 단면)
     bm = bmesh.new()
-    ring = []
+    cols, info = [], []
     for i, (x, y) in enumerate(edge):
-        jx, jy, _, _ = jar[i]
-        ring.append((bm.verts.new((x, y, tops[i] - 0.005)), bm.verts.new((jx, jy, tops[i] - 0.005))))
-    for i in range(n):
-        j = (i + 1) % n
-        bm.faces.new([ring[i][0], ring[j][0], ring[j][1], ring[i][1]])
-    rim = new_obj('case_rim', bm)
-    finish(rim, CASE_PAINT, smooth=True)
-    _paint(rim, lambda vi: water_c[0] if wet[vi // 2] else top_col[vi // 2])
-
-    # 3. 유리를 따라 세운 흙벽. 물이 닿은 자리는 수면에서 땅 높이까지 물 단면
-    rows = 30
-    bm = bmesh.new()
-    grid, info = [], []
-    for i in range(n):
-        jx, jy, ox, oy = jar[i]
-        # 물이 닿은 자리는 수면~땅 높이에 줄 몇 개, 나머지는 땅 높이~바닥에 고르게(물 단면과 흙 경계가 꼭짓점 줄에 맞게)
-        kw = max(2, round(rows * (tops[i] - hs[i]) / (tops[i] - bot))) if wet[i] else 0
-        zs = [tops[i] + (hs[i] - tops[i]) * k / kw for k in range(kw)] if kw else []
-        zs += [hs[i] + (bot - hs[i]) * k / (rows - kw) for k in range(rows - kw + 1)]
+        zs = [tops[i], hs[i], deck] if wet[i] else [tops[i], (tops[i] + deck) / 2, deck]
         col = []
-        for z in zs:
-            # 배수 자갈층은 유리에서 조금 물러나 그 틈을 돌이 채운다(뒤 벽은 돌 사이 그늘로 보인다)
-            back = 0.16 * smooth(char_lo[i] + 0.02, char_lo[i] - 0.06, z)
-            col.append(bm.verts.new((jx - ox * back, jy - oy * back, z)))
-            info.append((i, jx, jy, z))
-        grid.append(col)
+        for k, z in enumerate(zs):
+            col.append(bm.verts.new((x, y, z)))
+            info.append((i, k, z))
+        cols.append(col)
     for i in range(n):
         j = (i + 1) % n
-        for k in range(rows):
-            bm.faces.new([grid[i][k + 1], grid[j][k + 1], grid[j][k], grid[i][k]])
-    bm.faces.new([grid[i][rows] for i in range(n)][::-1])
+        for k in range(2):
+            bm.faces.new([cols[i][k + 1], cols[j][k + 1], cols[j][k], cols[i][k]])
     wall = new_obj('case_ground', bm)
-    finish(wall, CASE_PAINT, smooth=True)
+    finish(wall, CASE_PAINT, smooth=False)
 
-    def wall_color(vi):
-        i, x, y, z = info[vi]
-        p = Vector((x, y, z))
-        if wet[i] and z > hs[i] + 1e-4:
-            return _ramp(water_c, (tops[i] - z) / max(0.3, tops[i] - hs[i]))
-        depth = hs[i] - z
-        jit = 0.03 * mn.noise(p * 5.0)
-        if depth < 0.07:
-            return top_col[i] if not wet[i] else _ramp(soil_c, 0.2)
-        if z > soil_lo[i] + jit:
-            c = _ramp(soil_c, 0.5 + 0.5 * mn.noise(Vector((p.x * 0.9, p.y * 0.9, p.z * 4.0))))
-            # 윗면 바로 아래는 뿌리가 엉킨 듯 살짝 어둡게
-            return _mix(c, char_c, 0.25 * (1 - smooth(0.07, 0.25, depth)))
-        if z > char_lo[i] + jit:
-            return char_c
-        c = drain_c
-        return tuple(v * (1.0 - 0.15 * smooth(char_lo[i] - 0.3, bot, z)) for v in c)
-    _paint(wall, wall_color)
+    def soil(i, z):
+        x, y = edge[i]
+        t = 0.5 + 0.5 * math.sin(z * 7.0 + mn.noise(Vector((x * 0.5, y * 0.5, z))) * 1.5)
+        return _ramp(soil_c, t)
+    _paint(wall, lambda vi: (water_c[0] if info[vi][1] == 0 else soil(info[vi][0], info[vi][2]))
+           if wet[info[vi][0]] else soil(info[vi][0], info[vi][2]))
 
-    # 4. 배수 자갈: 유리에 눌려 바깥 면이 평평한 돌. 공용 rnd 를 쓰면 뒤에 오는 배치가 바뀌므로 따로 둔다
-    r_ = lib.random.Random(11)
+    # 2. 받침: (높이, 반 폭, 모서리 반지름) 층을 이어 옆면을 만들고 윗면·바닥을 막는다
+    levels = [
+        (deck - 1.25, PLINTH_HALF + 0.25, PLINTH_R + 0.25),
+        (deck - 0.95, PLINTH_HALF + 0.25, PLINTH_R + 0.25),
+        (deck - 0.9, PLINTH_HALF + 0.05, PLINTH_R + 0.05),
+        (deck - 0.88, PLINTH_HALF, PLINTH_R),
+        (deck - 0.08, PLINTH_HALF, PLINTH_R),
+        (deck - 0.02, PLINTH_HALF - 0.06, PLINTH_R - 0.06),
+        (deck, PLINTH_HALF - 0.14, PLINTH_R - 0.14),
+    ]
     bm = bmesh.new()
-    owner = []
-    perim = along[-1] + step
-    count = int(perim / 0.085)
-    for c_ in range(count):
-        t = (c_ + r_.uniform(-0.3, 0.3)) / count * n
-        i = int(t) % n
-        jx, jy, ox, oy = jar[i]
-        for _ in range(3):
-            z = r_.uniform(bot + 0.06, char_lo[i] - 0.05)
-            r = r_.uniform(0.08, 0.16)
-            g = bmesh.ops.create_icosphere(bm, subdivisions=1 if r > 0.09 else 0, radius=r)
-            vs = g['verts']
-            bmesh.ops.scale(bm, vec=Vector((r_.uniform(1.0, 1.4), r_.uniform(1.0, 1.4), r_.uniform(0.7, 0.95))), verts=vs)
-            # 바깥 방향으로는 납작하게 눌러 유리면 바로 안쪽에 둔다
-            ang = math.atan2(oy, ox)
-            bmesh.ops.rotate(bm, verts=vs, cent=Vector(), matrix=Matrix.Rotation(ang, 3, 'Z'))
-            for v in vs:
-                d = v.co.x * ox + v.co.y * oy
-                v.co.x -= ox * d * 0.55
-                v.co.y -= oy * d * 0.55
-            # 바깥 면이 유리 바로 안쪽(벽 기준 +0.03)에 오게
-            ext = max(v.co.x * ox + v.co.y * oy for v in vs)
-            off = ext - 0.03
-            bmesh.ops.translate(bm, vec=Vector((jx - ox * off, jy - oy * off, z)), verts=vs)
-            cc = r_.choice(peb_c)
-            k = r_.uniform(0.88, 1.06)
-            owner.extend([tuple(v * k for v in cc)] * len(vs))
-    o = new_obj('case_pebbles', bm)
-    finish(o, CASE_PAINT, smooth=True)
-    _paint(o, lambda vi: owner[vi])
+    rings = [[bm.verts.new((x, y, z)) for x, y in _rounded(h, r)] for z, h, r in levels]
+    m = len(rings[0])
+    for l in range(len(rings) - 1):
+        for i in range(m):
+            j = (i + 1) % m
+            bm.faces.new([rings[l][i], rings[l][j], rings[l + 1][j], rings[l + 1][i]])
+    bm.faces.new(rings[-1])
+    bm.faces.new(rings[0][::-1])
+    zs = [z for z, _, _ in levels for _ in range(m)]
+    xy = [p for _, h, r in levels for p in _rounded(h, r)]
+    plinth = new_obj('case_plinth', bm)
+    finish(plinth, CASE_PAINT, smooth=True)
+
+    def wood(vi):
+        x, y = xy[vi]
+        z = zs[vi]
+        t = 0.5 + 0.5 * math.sin(z * 22.0 + mn.noise(Vector((x * 0.25, y * 0.25, z * 2.0))) * 3.0)
+        c = _ramp(wood_c, t)
+        # 아랫단은 조금 어둡게(받침이 두 단으로 읽히게)
+        return tuple(v * (0.82 if z < deck - 0.92 else 1.0) for v in c)
+    _paint(plinth, wood)
 

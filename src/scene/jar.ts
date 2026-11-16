@@ -1,24 +1,19 @@
 import * as THREE from 'three';
 
 /**
- * 미니어처 모양의 유리병(테라리움). Diorama 가 모델을 불러온 뒤 풍경 둘레에 만들고, 미니어처 모양일 때만 보인다.
- * 병 안쪽 흙층(case_*)은 tools/blender/tile.py 의 case() 가 같은 둥근 네모(JAR_HALF·JAR_R)를 따라 만든다.
+ * 미니어처 모양의 유리 돔. Diorama 가 모델을 불러온 뒤 나무 받침(case_plinth, tools/blender/tile.py 의 case()) 윗면에 얹고,
+ * 미니어처 모양일 때만 보인다.
  *
- * 생김새: 곧은 몸통 → 둥글게 좁아지는 어깨 → 짧은 목 → 두툼한 입구. 마개는 없다(내려다보는 각도라 마개가 뒤쪽 풍경을 가린다).
+ * 생김새: 둥근 네모 몸통이 곧게 서다가 위에서 둥글게 닫힌다(진열장 속 미니어처를 덮는 유리 돔).
  * 유리는 빛 계산 없이 가장자리일수록 진해지는 반투명(프레넬)과 세로 반사 줄 두 개로만 그린다.
  * 뒤쪽 면(BackSide)을 먼저, 앞쪽 면을 나중에 그려 두 겹이 겹쳐 보이게 한다. 그림자는 드리우지 않는다.
  */
 
-/** 흙층이 닿는 유리 안쪽 둥근 네모(tools/blender/tile.py 와 같은 값) */
-export const JAR_HALF = 8.45;
-export const JAR_R = 1.25;
-/** 유리 두께만큼 바깥 */
-const GLASS = 0.04;
-/** 목의 반 폭·모서리 반지름, 어깨·목 높이 */
-const NECK_HALF = 3.4;
-const NECK_R = 0.9;
-const SHOULDER = 2.2;
-const NECK = 0.6;
+/** 돔 아래 둘레: 받침 윗면(반 폭 9.1 - 0.14)보다 조금 안쪽 */
+const DOME_HALF = 8.75;
+const DOME_R = 1.3;
+/** 곧은 몸통 위 둥근 지붕 높이 */
+const CAP = 5.0;
 /** 둥근 네모 둘레를 같은 개수의 점으로 나눈다(층마다 이어 붙일 수 있게) */
 const SIDE_PTS = 6;
 const ARC_PTS = 8;
@@ -53,7 +48,7 @@ function roundedSquare(half: number, r: number): [number, number][] {
   return pts;
 }
 
-/** (높이, 반 폭, 모서리 반지름) 층들을 이어 병 옆면을 만들고, 맨 아래 층은 바닥으로 막는다 */
+/** (높이, 반 폭, 모서리 반지름) 층들을 이어 돔 옆면을 만들고, 맨 위는 한 점으로 모은다(바닥은 받침이 막는다) */
 function lathe(levels: [number, number, number][]): THREE.BufferGeometry {
   const rings = levels.map(([y, half, r]) => roundedSquare(half, r).map(([x, z]) => [x, y, z] as const));
   const m = rings[0].length;
@@ -67,10 +62,11 @@ function lathe(levels: [number, number, number][]): THREE.BufferGeometry {
       idx.push(a, a + m, b, b, a + m, b + m);
     }
   }
-  // 바닥: 가운데 점에서 맨 아래 둘레로 부채꼴
-  const center = pos.length / 3;
-  pos.push(0, levels[0][0], 0);
-  for (let i = 0; i < m; i++) idx.push(center, i, (i + 1) % m);
+  // 위: 맨 위 둘레에서 가운데 점으로 부채꼴(돔 꼭대기)
+  const top = pos.length / 3;
+  const last = (rings.length - 1) * m;
+  pos.push(0, levels[levels.length - 1][0] + 0.02, 0);
+  for (let i = 0; i < m; i++) idx.push(top, last + ((i + 1) % m), last + i);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setIndex(idx);
@@ -117,29 +113,21 @@ export class Jar {
   private readonly mats: THREE.ShaderMaterial[] = [];
 
   /**
-   * bottom: 흙층 바닥 높이, top: 병 안 물체 꼭대기 높이(앱 좌표 y).
-   * 어깨는 꼭대기 조금 위에서 시작한다(높은 것이 유리를 뚫고 나오지 않게).
+   * bottom: 받침 윗면 높이, top: 돔 안 물체 꼭대기 높이(앱 좌표 y).
+   * 지붕은 꼭대기 조금 아래에서 둥글어지기 시작한다(가장자리 쪽은 낮은 것만 있어서 닿지 않는다).
    */
   constructor(bottom: number, top: number) {
-    const H = JAR_HALF + GLASS;
-    const R = JAR_R + GLASS;
-    const yS = top + 0.5;
+    const yS = top - CAP * 0.4;
     const levels: [number, number, number][] = [
-      // 두꺼운 유리 바닥: 아래 모서리를 둥글게
-      [bottom - 0.32, H - 0.22, R - 0.22],
-      [bottom - 0.24, H - 0.06, R - 0.06],
-      [bottom - 0.12, H, R],
-      [yS, H, R],
+      [bottom, DOME_HALF, DOME_R],
+      [yS, DOME_HALF, DOME_R],
     ];
-    // 어깨: 4분의 1 원을 따라 몸통에서 목으로
-    for (let i = 1; i <= 8; i++) {
-      const a = (i / 8) * (Math.PI / 2);
-      levels.push([yS + Math.sin(a) * SHOULDER, NECK_HALF + (H - NECK_HALF) * Math.cos(a), NECK_R + (R - NECK_R) * Math.cos(a)]);
+    // 지붕: 4분의 1 타원을 따라 몸통에서 꼭대기로. 모서리 반지름은 반 폭을 넘지 않게
+    for (let i = 1; i <= 10; i++) {
+      const a = (i / 10) * (Math.PI / 2);
+      const half = Math.max(0.05, DOME_HALF * Math.cos(a));
+      levels.push([yS + Math.sin(a) * CAP, half, Math.min(DOME_R, half)]);
     }
-    const yN = yS + SHOULDER + NECK;
-    levels.push([yN, NECK_HALF, NECK_R]);
-    // 입구: 바깥으로 두툼한 테
-    levels.push([yN + 0.05, NECK_HALF + 0.2, NECK_R + 0.2], [yN + 0.3, NECK_HALF + 0.2, NECK_R + 0.2], [yN + 0.36, NECK_HALF - 0.02, NECK_R - 0.02]);
     const geo = lathe(levels);
     for (const back of [1, 0]) {
       const mat = new THREE.ShaderMaterial({
