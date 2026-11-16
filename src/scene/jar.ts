@@ -96,15 +96,16 @@ const FRAGMENT = /* glsl */ `
     // 뒤쪽 면은 법선이 카메라 반대쪽이므로 뒤집어 같은 식을 쓴다
     if (back > 0.5) n = -n;
     float f = 1.0 - abs(dot(n, v));
-    float fres = pow(f, 3.0);
+    // 가장자리(윤곽)에만 진하게 남기고 정면은 거의 비친다(답답해 보이지 않게)
+    float fres = pow(f, 5.0);
     // 세로 반사 줄: 화면 기준 법선 x 가 특정 값인 곳(왼쪽 굵은 줄, 오른쪽 가는 줄)
-    float streak = smoothstep(0.07, 0.0, abs(n.x + 0.55)) + 0.6 * smoothstep(0.035, 0.0, abs(n.x - 0.42));
+    float streak = smoothstep(0.045, 0.0, abs(n.x + 0.55)) + 0.6 * smoothstep(0.02, 0.0, abs(n.x - 0.42));
     streak *= (1.0 - back) * step(0.0, n.y + 0.6);
-    float a = 0.03 + 0.5 * fres + 0.32 * streak;
-    a *= mix(1.0, 0.55, back);
-    vec3 tint = vec3(0.86, 0.95, 0.94);
+    float a = 0.008 + 0.38 * fres + 0.24 * streak;
+    a *= mix(1.0, 0.3, back);
+    vec3 tint = vec3(0.94, 0.98, 0.98);
     vec3 col = mix(tint, vec3(1.0), clamp(streak + fres * 0.5, 0.0, 1.0)) * bright;
-    gl_FragColor = vec4(col, clamp(a, 0.0, 0.85));
+    gl_FragColor = vec4(col, clamp(a, 0.0, 0.5));
   }
 `;
 
