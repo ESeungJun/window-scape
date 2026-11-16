@@ -13,7 +13,7 @@ import * as THREE from 'three';
 const DOME_HALF = 8.75;
 const DOME_R = 1.3;
 /** 곧은 몸통 위 둥근 지붕 높이 */
-const CAP = 5.0;
+const CAP = 5.5;
 /** 둥근 네모 둘레를 같은 개수의 점으로 나눈다(층마다 이어 붙일 수 있게) */
 const SIDE_PTS = 6;
 const ARC_PTS = 8;
@@ -115,10 +115,10 @@ export class Jar {
 
   /**
    * bottom: 받침 윗면 높이, top: 돔 안 물체 꼭대기 높이(앱 좌표 y).
-   * 지붕은 꼭대기 조금 아래에서 둥글어지기 시작한다(가장자리 쪽은 낮은 것만 있어서 닿지 않는다).
+   * 몸통은 꼭대기보다 넉넉히 위까지 곧게 서고, 그 위에서 둥근 지붕이 닫힌다(풍경 위로 빈 공간이 있어야 돔처럼 보인다).
    */
   constructor(bottom: number, top: number) {
-    const yS = top - CAP * 0.4;
+    const yS = top + 1.2;
     const levels: [number, number, number][] = [
       [bottom, DOME_HALF, DOME_R],
       [yS, DOME_HALF, DOME_R],

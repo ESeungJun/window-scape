@@ -51,10 +51,10 @@ const BASE_FOV = 38;
 const MINI_FOV = 15;
 /** 같은 크기로 보이게 하려면 카메라를 이만큼 멀리 둬야 한다(화각 절반의 탄젠트 비) */
 const MINI_LENS = Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2)) / Math.tan(THREE.MathUtils.degToRad(MINI_FOV / 2));
-/** 미니어처 처음 거리: 받침을 화면에 크게 담는다 */
-const MINI_FRAME = 0.88;
-/** 미니어처는 받침 아래 땅 단면까지 담으므로 보는 점을 그만큼 내린다(판이 아래쪽 예보 막대에 가리지 않게) */
-const MINI_DROP = 1.1;
+/** 미니어처 처음 거리: 받침과 그 위 유리 돔 꼭대기까지 화면에 담는다 */
+const MINI_FRAME = 1.05;
+/** 미니어처는 받침까지 담으므로 보는 점을 조금 내린다(유리 돔이 위로 높아서 많이 내리면 꼭대기가 잘린다) */
+const MINI_DROP = 0.4;
 const AUTO_ROTATE_DELAY_MS = 6000;
 /** 들어가기 모드: 카메라가 캐릭터 뒤 위쪽에서 따라가는 거리·내려다보는 각도, 들어가고 나오는 데 걸리는 시간 */
 const EXPLORE_DISTANCE = 2.6;
