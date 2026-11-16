@@ -4,14 +4,13 @@ import { softSprite, type Rng } from '../util';
 import { applyLightmap, applyOpenSky, setLamps } from './baked';
 import { loadModel, swayTrees, trackMaterials } from './props';
 import { riverMaterial } from './water';
-import { Jar } from './jar';
 import { Hops, Sway, Waterfall, ancestorNamed, disposeTree, waterBrightness, type Stage } from './kit';
 
 /**
  * 땅에 놓인 디오라마 테마(드라이브·도시·성·숲)의 공통 틀. 모양은 Blender 에서 직접 모델링한 public/models/<이름>.glb
  * (만드는 법: tools/blender/<이름>.py, 공용 바닥: tools/blender/tile.py)이고 빛은 구운 라이트맵에 하늘빛을 곱해 쓴다.
  * 가운데 네모 땅은 구운 빛, 그 둘레를 지평선까지 잇는 먼 풍경(far_*)은 탁 트인 하늘빛을 받는다.
- * 미니어처 모양(setCase)에서는 먼 풍경과 타일 밖 물체를 숨기고, 풍경을 나무 받침(case_*) 위 유리 돔(jar.ts)으로 덮는다.
+ * 미니어처 모양(setCase)에서는 먼 풍경과 타일 밖 물체를 숨기고, 풍경을 나무 받침(case_*) 위에 올린다.
  * 여기서는 그 위에 물(liquid_*), 폭포, 나무 흔들림, 계절 색, 밤 불빛을 입히고,
  * 움직이는 것(mover_*)은 테마별 하위 클래스가 onLoad/tick 에서 움직인다.
  */
@@ -73,7 +72,6 @@ export abstract class Diorama implements Stage {
   private readonly outside: THREE.Object3D[] = [];
   private readonly caseParts: THREE.Object3D[] = [];
   /** 미니어처 모양의 유리 돔(모델을 불러온 뒤 크기를 재서 만든다) */
-  private jar?: Jar;
   private readonly landDistance: number;
   /** 단면 가장자리에서 자를 재질(단면 자신은 빼고)과 그 네 평면 */
   private readonly clipped = new Set<THREE.Material>();
@@ -186,19 +184,6 @@ export abstract class Diorama implements Stage {
         }
       });
       this.group.add(root);
-      // 유리 돔: 나무 받침 윗면에 얹고, 높이는 타일 안 물체 꼭대기에 맞춘다
-      const plinth = root.getObjectByName('case_plinth');
-      if (plinth) {
-        let top = -Infinity;
-        for (const o of root.children) {
-          if (o.name.startsWith('case_') || o.name === 'layout' || this.outside.includes(o)) continue;
-          top = Math.max(top, box.setFromObject(o).max.y);
-        }
-        if (Number.isFinite(top)) {
-          this.jar = new Jar(box.setFromObject(plinth).max.y, top);
-          this.group.add(this.jar.group);
-        }
-      }
       this.onLoad(root, layout, movers);
       this.setCase(this.cased);
     });
@@ -211,7 +196,6 @@ export abstract class Diorama implements Stage {
     this.view.distance = this.landDistance * (on ? 1.4 : 1);
     for (const o of this.outside) o.visible = !on;
     for (const o of this.caseParts) o.visible = on;
-    if (this.jar) this.jar.group.visible = on;
     for (const m of this.clipped) m.clippingPlanes = on ? this.clipPlanes : null;
     this.onCase(on);
   }
@@ -247,7 +231,6 @@ export abstract class Diorama implements Stage {
     for (const [m, fn] of this.seasonal) fn(env, m.color);
     for (const m of this.glass) m.emissiveIntensity = 0.15 + env.nightLights * 3.4;
     const bright = waterBrightness(env);
-    this.jar?.update(bright);
     for (const m of [this.water, this.still]) {
       m.uniforms.time.value = t;
       m.uniforms.bright.value = bright;

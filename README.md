@@ -46,7 +46,7 @@ inspired by the idea of a moving castle, not a copy of any film's design.
 
 Apart from the sky island, every world can be shown as a *Miniature* instead of land running to the horizon (Settings → Shape).
 
-- The scene is cut into a square tile, set on a wooden base under a glass dome like a display miniature, and seen through a long lens.
+- The scene is cut into a square tile, set on a rounded wooden base like a display miniature, and seen through a long lens.
 - Flattened perspective, saturated toon colors with violet shade, and water drawn with shoreline foam and ripple lines.
   The backdrop follows the time of day (peach in the morning, blue-grey by day, pink at sunset, navy at night), with drifting dust by day and stars and fireflies at night.
 
