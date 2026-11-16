@@ -51,10 +51,10 @@ const BASE_FOV = 38;
 const MINI_FOV = 15;
 /** 같은 크기로 보이게 하려면 카메라를 이만큼 멀리 둬야 한다(화각 절반의 탄젠트 비) */
 const MINI_LENS = Math.tan(THREE.MathUtils.degToRad(BASE_FOV / 2)) / Math.tan(THREE.MathUtils.degToRad(MINI_FOV / 2));
-/** 미니어처 처음 거리: 받침을 화면에 크게 담는다 */
-const MINI_FRAME = 0.92;
+/** 미니어처 처음 거리: 오르골 상자까지 화면에 담는다 */
+const MINI_FRAME = 1.05;
 /** 미니어처는 받침까지 담으므로 보는 점을 조금 내린다(판이 아래쪽 예보 막대에 가리지 않게) */
-const MINI_DROP = 0.9;
+const MINI_DROP = 1.7;
 /** 노출: 밝은 파스텔 색감(레퍼런스: 처음 받은 항구 디오라마). 모든 모양에 쓴다 */
 const EXPOSURE = 1.15;
 const AUTO_ROTATE_DELAY_MS = 6000;
@@ -74,6 +74,10 @@ const CLEAR_RAYS: [number, number][] = [[0, 0], [0.45, 0.3], [-0.45, 0.3], [0.45
 /** 렌더러·카메라·조명과 장면 구성 요소를 묶고 매 프레임 연출 값을 반영한다. */
 export class World {
   onFrame?: (env: Env) => void;
+  /** 미니어처(오르골) 모양이 실제로 켜져 있는지(땅 테마일 때만). 오르골 소리를 켜고 끄는 데 쓴다 */
+  get miniature(): boolean {
+    return this.mini;
+  }
   /** 들어가기 모드가 켜지거나 꺼질 때 */
   onExplore?: (on: boolean) => void;
   /** 들어가기 모드에서 탈것(대관람차)에 타거나 내릴 때 */
