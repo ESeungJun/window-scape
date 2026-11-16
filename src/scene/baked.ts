@@ -110,10 +110,12 @@ const FRAGMENT_ALBEDO = /* glsl */ `
   }
   float wsWetAmt = wsWet * (1.0 - wsSnowAmt) * (0.55 + 0.45 * max(wsUp, 0.0));
   diffuseColor.rgb *= 1.0 - 0.3 * wsWetAmt;
-  // 미니어처: 장난감처럼 채도를 올린다(회색 축에서 멀어지게)
+  // 미니어처: 파스텔 색감. 채도를 조금 내리고 따뜻한 크림색 쪽으로 밝힌다(원색이 튀지 않게)
   if (wsToon > 0.003) {
     float wsLuma = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-    diffuseColor.rgb = max(mix(vec3(wsLuma), diffuseColor.rgb, 1.0 + 0.3 * wsToon), 0.0);
+    vec3 wsPastel = mix(vec3(wsLuma), diffuseColor.rgb, 1.05);
+    wsPastel = mix(wsPastel, vec3(1.0, 0.95, 0.88), 0.08);
+    diffuseColor.rgb = mix(diffuseColor.rgb, wsPastel, wsToon);
   }
 `;
 
@@ -132,9 +134,10 @@ const FRAGMENT_LIGHTS = /* glsl */ `
     float wsIrr = dot(wsInd, wsLumaW) / max(dot(BRDF_Lambert(material.diffuseColor), wsLumaW), 1e-3);
     // 어두운 틈일수록 더 차갑고 더 어둡게(트인 면은 거의 그대로)
     float wsCool = 1.0 - smoothstep(0.2, 0.95, wsIrr);
-    vec3 wsTint = mix(vec3(1.0), vec3(0.8, 0.8, 1.25), 0.3 + 0.7 * wsCool) * (1.0 - 0.22 * wsCool);
+    // 그늘은 검게 죽이지 않고 밝은 라벤더색으로(파스텔 미니어처는 그늘도 밝다)
+    vec3 wsTint = mix(vec3(1.0), vec3(0.9, 0.8, 1.18), 0.35 + 0.65 * wsCool) * (1.06 - 0.12 * wsCool);
     reflectedLight.indirectDiffuse = mix(wsInd, wsInd * wsTint, wsToon);
-    reflectedLight.directDiffuse *= mix(vec3(1.0), vec3(1.08, 1.0, 0.9), wsToon);
+    reflectedLight.directDiffuse *= mix(vec3(1.0), vec3(1.22, 1.06, 0.86), wsToon);
   }
   if (wsShade.z > 0.003) {
     float cs = wsNoise(wsPos.xz * 0.11 + wsShade.xy) * 0.65 + wsNoise(wsPos.xz * 0.27 + wsShade.xy * 1.6) * 0.35;

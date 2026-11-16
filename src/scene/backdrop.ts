@@ -71,8 +71,8 @@ const FRAGMENT = /* glsl */ `
   }
 `;
 
-const NAVY = new THREE.Color('#23253f');
-const NAVY_NIGHT = new THREE.Color('#0f1020');
+const NAVY = new THREE.Color('#2b2843');
+const NAVY_NIGHT = new THREE.Color('#13111f');
 const DUST = new THREE.Color('#fff2d6');
 const STAR = new THREE.Color('#dfe6ff');
 const FIREFLY = new THREE.Color('#ffe08a');
